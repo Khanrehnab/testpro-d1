@@ -2969,7 +2969,8 @@ function TestDetail({
         )}
       </div>
 
-      <div ref={tableRef} style={{ flex: 1, overflowY: "auto" }}>
+      <div ref={tableRef} style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
+        <div style={{ minWidth: 680 }}>
         <div
           style={{
             display: "grid",
@@ -3034,6 +3035,7 @@ function TestDetail({
             />
           )
         )}
+        </div>
       </div>
 
       {csvOpen && isAdmin && (
