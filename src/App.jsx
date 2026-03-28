@@ -114,24 +114,37 @@ const store = {
   },
 };
 
-// ── Test Lock System (Supabase-backed) ────────────────────────────────────────
-// Uses the `test_locks` table in Supabase for real cross-user shared state.
-// SQL to create the table (run once in Supabase SQL editor):
+// ── Test Lock System (Supabase-backed, TTL + Heartbeat) ───────────────────────
 //
-// CREATE TABLE IF NOT EXISTS test_locks (
-//   test_id   text PRIMARY KEY,
-//   user_id   text NOT NULL,
-//   user_name text NOT NULL,
-//   locked_at timestamptz DEFAULT now()
-// );
-// ALTER TABLE test_locks ENABLE ROW LEVEL SECURITY;
-// CREATE POLICY "allow_all" ON test_locks FOR ALL USING (true) WITH CHECK (true);
+// Strategy:
+//   - Normal close  → beforeunload fires → releaseAll() called immediately
+//   - Crash/force close → heartbeat stops → lock expires after LOCK_TTL_MS (60s)
+//   - Active user sends heartbeat every HEARTBEAT_MS (25s) to refresh locked_at
+//   - getAll() and acquire() ignore locks whose locked_at is older than LOCK_TTL_MS
 //
+// SQL to create the table (run ONCE in Supabase SQL editor):
+//
+//   CREATE TABLE IF NOT EXISTS test_locks (
+//     test_id   text PRIMARY KEY,
+//     user_id   text NOT NULL,
+//     user_name text NOT NULL,
+//     locked_at timestamptz DEFAULT now()
+//   );
+//   ALTER TABLE test_locks ENABLE ROW LEVEL SECURITY;
+//   CREATE POLICY "allow_all" ON test_locks FOR ALL USING (true) WITH CHECK (true);
+//
+const LOCK_TTL_MS = 60_000; // lock treated as dead after 60s of no heartbeat
+const HEARTBEAT_MS = 25_000; // active user refreshes every 25s
+
 const lockStore = {
-  // Returns { testId: { userId, userName, ts }, ... }
+  // Returns only LIVE locks — stale ones (locked_at > 60s ago) are ignored
   async getAll() {
     try {
-      const { data, error } = await supabase.from("test_locks").select("*");
+      const cutoff = new Date(Date.now() - LOCK_TTL_MS).toISOString();
+      const { data, error } = await supabase
+        .from("test_locks")
+        .select("*")
+        .gt("locked_at", cutoff);
       if (error) return {};
       const out = {};
       for (const row of data || []) {
@@ -150,30 +163,42 @@ const lockStore = {
   // Try to acquire lock. Returns { ok: true } or { ok: false, by: userName }
   async acquire(testId, userId, userName) {
     try {
+      const cutoff = new Date(Date.now() - LOCK_TTL_MS).toISOString();
+      // Only treat as locked if the row is still fresh (within TTL)
       const { data: existing } = await supabase
         .from("test_locks")
         .select("*")
         .eq("test_id", testId)
+        .gt("locked_at", cutoff)
         .maybeSingle();
       if (existing && existing.user_id !== userId) {
         return { ok: false, by: existing.user_name };
       }
-      const { error } = await supabase
-        .from("test_locks")
-        .upsert(
-          {
-            test_id: testId,
-            user_id: userId,
-            user_name: userName,
-            locked_at: new Date().toISOString(),
-          },
-          { onConflict: "test_id" }
-        );
+      const { error } = await supabase.from("test_locks").upsert(
+        {
+          test_id: testId,
+          user_id: userId,
+          user_name: userName,
+          locked_at: new Date().toISOString(),
+        },
+        { onConflict: "test_id" }
+      );
       if (error) return { ok: false, by: "unknown" };
       return { ok: true };
     } catch {
-      return { ok: true }; // fail-open so app stays usable if Supabase is unreachable
+      return { ok: true }; // fail-open — app stays usable if Supabase is unreachable
     }
+  },
+
+  // Refresh locked_at to prove the user is still alive (heartbeat tick)
+  async heartbeat(testId, userId) {
+    try {
+      await supabase
+        .from("test_locks")
+        .update({ locked_at: new Date().toISOString() })
+        .eq("test_id", testId)
+        .eq("user_id", userId);
+    } catch {}
   },
 
   // Release a specific lock (only if owned by userId)
@@ -187,7 +212,7 @@ const lockStore = {
     } catch {}
   },
 
-  // Release all locks held by userId (on logout / deactivation)
+  // Release ALL locks held by userId (logout / window close / deactivation)
   async releaseAll(userId) {
     try {
       await supabase.from("test_locks").delete().eq("user_id", userId);
@@ -2635,7 +2660,16 @@ function ModuleView({
   const [locks, setLocks] = useState({});
   const renRef = useRef();
 
-  // Poll locks every 2 seconds
+  // Refs to always have current values without stale closures
+  const activeTestIdRef = useRef(null); // test id currently open (for heartbeat + beforeunload)
+  const selTestIdxRef = useRef(null); // mirrors selTestIdx for use inside effects
+  const modTestsRef = useRef(mod.tests); // mirrors mod.tests for use in cleanup effects
+
+  // Keep refs in sync with state/props on every render
+  selTestIdxRef.current = selTestIdx;
+  modTestsRef.current = mod.tests;
+
+  // Poll locks every 5 seconds so all users see live lock state
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -2643,22 +2677,67 @@ function ModuleView({
       if (alive) setLocks(l);
     };
     poll();
-    const id = setInterval(poll, 2000);
+    const id = setInterval(poll, 5000);
     return () => {
       alive = false;
       clearInterval(id);
     };
   }, []);
 
-  // Reset when module changes — release any lock held in this module (testers only)
+  // Heartbeat: while a tester has a test open, refresh locked_at every 25s.
+  // Cleanup fires when selTestIdx changes (test switched or closed) — this
+  // correctly stops the beat and clears activeTestIdRef for the old test.
   useEffect(() => {
-    if (!isAdmin && selTestIdx !== null && mod.tests[selTestIdx]) {
-      lockStore.release(mod.tests[selTestIdx].id, session.id);
+    if (isAdmin || selTestIdx === null) return;
+    const test = mod.tests[selTestIdx];
+    if (!test) return;
+    activeTestIdRef.current = test.id;
+    const beat = setInterval(() => {
+      lockStore.heartbeat(test.id, session.id);
+    }, HEARTBEAT_MS);
+    return () => {
+      clearInterval(beat);
+      activeTestIdRef.current = null;
+    };
+  }, [selTestIdx, isAdmin]);
+
+  // beforeunload: best-effort release on normal tab/window close (testers only).
+  // Uses activeTestIdRef so it always sees the latest open test id.
+  useEffect(() => {
+    if (isAdmin) return;
+    const onUnload = () => {
+      const testId = activeTestIdRef.current;
+      if (!testId) return;
+      try {
+        // sendBeacon is the most reliable way to fire a request on page unload
+        const url = `${
+          supabase.supabaseUrl
+        }/rest/v1/test_locks?test_id=eq.${encodeURIComponent(
+          testId
+        )}&user_id=eq.${encodeURIComponent(session.id)}`;
+        const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
+        if (!sent) lockStore.release(testId, session.id);
+      } catch {
+        lockStore.release(testId, session.id);
+      }
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [isAdmin, session.id]);
+
+  // Module change: release lock for whatever test was open, then reset view.
+  // Uses refs so this always sees the latest selTestIdx / mod.tests values
+  // even though the effect only re-runs when mod.id changes.
+  useEffect(() => {
+    const idx = selTestIdxRef.current;
+    const tests = modTestsRef.current;
+    if (!isAdmin && idx !== null && tests[idx]) {
+      lockStore.release(tests[idx].id, session.id);
     }
     setSelTestIdx(null);
     setSearch("");
     setRenVal(mod.name);
-  }, [mod.id]);
+  }, [mod.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openTest = async (realIdx) => {
     const test = mod.tests[realIdx];
@@ -2679,6 +2758,7 @@ function ModuleView({
   };
 
   const closeTest = async () => {
+    // Release the lock for the test being closed, then go back to test list
     if (!isAdmin && selTestIdx !== null && mod.tests[selTestIdx]) {
       await lockStore.release(mod.tests[selTestIdx].id, session.id);
       setLocks(await lockStore.getAll());
@@ -3972,6 +4052,220 @@ export default function App() {
     await store.addLog(e);
   }, []);
 
+  // ── Supabase Realtime: live progress for all users ────────────────────────────
+  // Subscribes to INSERT/UPDATE/DELETE on steps, tests, and modules tables.
+  // All derived stats (progress bars, pass/fail counts, dashboard) update
+  // automatically because they read from `modules` state.
+  //
+  // Setup required (once in Supabase dashboard):
+  //   1. Go to Database → Replication → Tables
+  //   2. Enable Realtime for: steps, tests, modules
+  //   OR run in SQL editor:
+  //      ALTER PUBLICATION supabase_realtime ADD TABLE steps, tests, modules;
+  //
+  useEffect(() => {
+    // Don't subscribe until initial load is done
+    if (!modules) return;
+
+    // Use a unique suffix so Supabase never gets duplicate channel names
+    // if this effect fires more than once (e.g. in StrictMode double-invoke)
+    const uid = Date.now();
+
+    // ── steps changes ─────────────────────────────────────────────────────────
+    const stepsSub = supabase
+      .channel(`rt-steps-${uid}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "steps" },
+        (payload) => {
+          const { eventType, new: row, old: oldRow } = payload;
+          // Always use functional updater — never close over `modules` directly
+          setModules((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev };
+
+            if (eventType === "UPDATE") {
+              for (const modId in next) {
+                const mod = next[modId];
+                const testIdx = mod.tests.findIndex(
+                  (t) => t.id === row.test_id
+                );
+                if (testIdx === -1) continue;
+                const test = mod.tests[testIdx];
+                const stepIdx = test.steps.findIndex((s) => s.id === row.id);
+                if (stepIdx === -1) continue;
+                const updatedSteps = [...test.steps];
+                updatedSteps[stepIdx] = {
+                  ...updatedSteps[stepIdx],
+                  status: row.status,
+                  remarks: row.remarks,
+                  action: row.action,
+                  result: row.result,
+                  serial_no: row.serial_no,
+                };
+                const updatedTests = [...mod.tests];
+                updatedTests[testIdx] = { ...test, steps: updatedSteps };
+                next[modId] = { ...mod, tests: updatedTests };
+                break;
+              }
+            }
+
+            if (eventType === "INSERT") {
+              for (const modId in next) {
+                const mod = next[modId];
+                const testIdx = mod.tests.findIndex(
+                  (t) => t.id === row.test_id
+                );
+                if (testIdx === -1) continue;
+                const test = mod.tests[testIdx];
+                if (test.steps.some((s) => s.id === row.id)) break; // already local
+                const updatedTests = [...mod.tests];
+                updatedTests[testIdx] = {
+                  ...test,
+                  steps: [...test.steps, row].sort(
+                    (a, b) => (a.serial_no ?? 0) - (b.serial_no ?? 0)
+                  ),
+                };
+                next[modId] = { ...mod, tests: updatedTests };
+                break;
+              }
+            }
+
+            if (eventType === "DELETE") {
+              const deletedId = oldRow?.id;
+              if (!deletedId) return prev;
+              for (const modId in next) {
+                const mod = next[modId];
+                let changed = false;
+                const updatedTests = mod.tests.map((t) => {
+                  if (!t.steps.some((s) => s.id === deletedId)) return t;
+                  changed = true;
+                  return {
+                    ...t,
+                    steps: t.steps.filter((s) => s.id !== deletedId),
+                  };
+                });
+                if (changed) {
+                  next[modId] = { ...mod, tests: updatedTests };
+                  break;
+                }
+              }
+            }
+
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    // ── tests changes ─────────────────────────────────────────────────────────
+    const testsSub = supabase
+      .channel(`rt-tests-${uid}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tests" },
+        (payload) => {
+          const { eventType, new: row, old: oldRow } = payload;
+          setModules((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev };
+
+            if (eventType === "UPDATE") {
+              const mod = next[row.module_id];
+              if (!mod) return prev;
+              next[row.module_id] = {
+                ...mod,
+                tests: mod.tests.map((t) =>
+                  t.id === row.id
+                    ? {
+                        ...t,
+                        name: row.name,
+                        description: row.description,
+                        serial_no: row.serial_no,
+                      }
+                    : t
+                ),
+              };
+            }
+
+            if (eventType === "INSERT") {
+              const mod = next[row.module_id];
+              if (!mod) return prev;
+              if (mod.tests.some((t) => t.id === row.id)) return prev;
+              next[row.module_id] = {
+                ...mod,
+                tests: [...mod.tests, { ...row, steps: [] }].sort(
+                  (a, b) => (a.serial_no ?? 0) - (b.serial_no ?? 0)
+                ),
+              };
+            }
+
+            if (eventType === "DELETE") {
+              for (const modId in next) {
+                const mod = next[modId];
+                if (!mod.tests.some((t) => t.id === oldRow?.id)) continue;
+                next[modId] = {
+                  ...mod,
+                  tests: mod.tests.filter((t) => t.id !== oldRow.id),
+                };
+                break;
+              }
+            }
+
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    // ── modules changes ───────────────────────────────────────────────────────
+    const modulesSub = supabase
+      .channel(`rt-modules-${uid}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "modules" },
+        (payload) => {
+          const { eventType, new: row, old: oldRow } = payload;
+          setModules((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev };
+
+            if (eventType === "UPDATE") {
+              if (!next[row.id]) return prev;
+              next[row.id] = {
+                ...next[row.id],
+                name: row.name,
+                position: row.position,
+              };
+            }
+
+            if (eventType === "INSERT") {
+              if (next[row.id]) return prev;
+              next[row.id] = { ...row, tests: [] };
+            }
+
+            if (eventType === "DELETE") {
+              if (!next[oldRow?.id]) return prev;
+              const n2 = { ...next };
+              delete n2[oldRow.id];
+              return n2;
+            }
+
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(stepsSub);
+      supabase.removeChannel(testsSub);
+      supabase.removeChannel(modulesSub);
+    };
+    // Run once after initial data load — `!!modules` flips false→true exactly once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!modules]);
+
   // ── Session validity: if logged-in user gets deactivated/deleted, auto-logout ──
   useEffect(() => {
     if (!session || !users) return;
@@ -3993,6 +4287,16 @@ export default function App() {
     // Release locks in background only for testers
     if (u && u.role !== "admin") lockStore.releaseAll(u.id);
   }, []);
+
+  // Global beforeunload: release all locks if tester closes the window from
+  // anywhere in the app (not just from inside a test). This covers Dashboard,
+  // Report, and other views where ModuleView's own handler is not mounted.
+  useEffect(() => {
+    if (!session || session.role === "admin") return;
+    const onUnload = () => lockStore.releaseAll(session.id);
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [session]);
 
   if (!users || !modules)
     return (
