@@ -121,7 +121,7 @@ const store = {
     // ── Upsert surviving rows ────────────────────────────────────────────────
     const { error: modErr } = await supabase
       .from("modules")
-      .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })));
+      .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })), { onConflict: "id" });
     if (modErr) { console.error("Upsert modules error", modErr); return; }
 
     if (allTests.length) {
@@ -132,7 +132,8 @@ const store = {
           serial_no:   t.serial_no ?? t.serialNo ?? 0,
           name:        t.name,
           description: t.description ?? "",
-        }))
+        })),
+        { onConflict: "id" }
       );
       if (testErr) { console.error("Upsert tests error", testErr); return; }
     }
@@ -157,7 +158,7 @@ const store = {
           is_divider: s.isDivider ?? false,
         };
       });
-      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition);
+      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition, { onConflict: "id" });
       if (stepErr) console.error("Upsert steps error", stepErr);
     }
   },
@@ -4296,9 +4297,15 @@ export default function App() {
     if (fresh && fresh.length) setUsers(fresh);
   }, []);
 
-  const saveMods = useCallback(async (m) => {
+  const saveModsTimerRef = useRef(null);
+  const saveMods = useCallback((m) => {
     setModules(m);
-    await store.saveModules(m);
+    // Debounce DB writes by 400 ms — prevents rapid keystrokes from racing each
+    // other and overwriting newer data with an older in-flight request.
+    if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current);
+    saveModsTimerRef.current = setTimeout(() => {
+      store.saveModules(m);
+    }, 400);
   }, []);
 
   const addLog = useCallback(async (e) => {
