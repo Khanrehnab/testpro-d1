@@ -2649,6 +2649,9 @@ function TestDetail({
     [steps, fStat, search]
   );
 
+  const isMobile = useIsMobile();
+  const onMenuClick = useContext(MobileMenuCtx);
+
   return (
     <div
       style={{
@@ -2658,175 +2661,229 @@ function TestDetail({
         overflow: "hidden",
       }}
     >
+      {/* ── Test header: redesigned 2-row layout ─────────────────────────── */}
       <div
         style={{
-          padding: "10px 20px",
           background: C.s1,
           borderBottom: `1px solid ${C.b1}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
           flexShrink: 0,
+          boxShadow: "0 1px 4px rgba(0,0,0,.06)",
         }}
       >
-        <button style={smBtn()} onClick={onBack}>
-          <Ico n="back" s={12} /> {mod.name}
-        </button>
-        {/* Module nav arrows — shown inside TestDetail too, disabled until Finish clicked */}
-        {modIdx !== undefined && modTotal !== undefined && (
-          <>
-            <button
-              style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
-              onClick={() => !navLocked && onNav && onNav(-1)}
-              disabled={modIdx === 0 || navLocked}
-              title={navLocked ? 'Finish your test before switching modules' : undefined}
-            >
-              <Ico n="chevL" s={12} />
+        {/* Row 1 — breadcrumb + title + progress */}
+        <div
+          style={{
+            padding: isMobile ? "10px 14px 8px" : "12px 22px 10px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            borderBottom: `1px solid ${C.b1}`,
+          }}
+        >
+          {/* Hamburger on mobile */}
+          {isMobile && onMenuClick && (
+            <button onClick={onMenuClick} style={{ ...iBtn(), padding: "5px 6px", marginLeft: -6 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
             </button>
-            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>
-              {modIdx + 1}/{modTotal}
-            </span>
-            <button
-              style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
-              onClick={() => !navLocked && onNav && onNav(1)}
-              disabled={modIdx === modTotal - 1 || navLocked}
-              title={navLocked ? 'Finish your test before switching modules' : undefined}
-            >
-              <Ico n="chevR" s={12} />
-            </button>
-          </>
-        )}
-        <div style={{ width: 1, height: 20, background: C.b2 }} />
-        {renaming ? (
-          <input
-            ref={renRef}
-            value={renVal}
-            onChange={(e) => setRenVal(e.target.value)}
-            onBlur={() => {
-              commit(steps, renVal || test.name, descVal);
-              setRenaming(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                commit(steps, renVal || test.name, descVal);
-                setRenaming(false);
-              }
-              if (e.key === "Escape") setRenaming(false);
-            }}
-            autoFocus
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: `1px solid ${C.ac}`,
-              color: C.t1,
-              fontFamily: F.sans,
-              fontSize: 14,
-              fontWeight: 700,
-              padding: "0 2px",
-              outline: "none",
-              width: 220,
-            }}
-          />
-        ) : (
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            {test.name}
-            {isAdmin && (
-              <button
-                onClick={() => {
-                  setRenaming(true);
-                  setTimeout(() => renRef.current?.select(), 20);
-                }}
-                style={{ ...iBtn(), padding: 3 }}
-                title="Rename test"
-              >
-                <Ico n="edit" s={11} />
-              </button>
-            )}
-          </span>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: C.t2, fontFamily: F.mono }}>
-            {pass} pass · {fail} fail · {pending} pending · {pct}%
-          </div>
-        </div>
-        <div style={{ width: 80 }}>
-          <PBar pct={pct} fail={fail > 0} />
-        </div>
+          )}
 
-        {isAdmin ? (
-          <button style={acBtn(smBtn())} onClick={() => setCsvOpen(true)}>
-            <Ico n="upload" s={12} /> Import CSV
-          </button>
-        ) : (
-          <span
+          {/* Back breadcrumb */}
+          <button
+            onClick={onBack}
             style={{
               ...smBtn(),
-              opacity: 0.35,
-              cursor: "not-allowed",
               display: "inline-flex",
               alignItems: "center",
               gap: 5,
+              background: C.s2,
+              borderColor: C.b1,
+              color: C.t2,
+              flexShrink: 0,
             }}
           >
-            <Ico n="lock" s={12} /> Import CSV
-          </span>
-        )}
-        <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
-        {isAdmin && (
-          <button style={reBtn(smBtn())} onClick={resetAll}>
-            <Ico n="reset" s={12} /> Reset
+            <Ico n="chevL" s={11} />
+            <span style={{ maxWidth: isMobile ? 80 : 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {mod.name}
+            </span>
           </button>
-        )}
-        {!isAdmin && onFinish && (
-          <button
-            style={grBtn(smBtn())}
-            onClick={() => {
-              commit(steps);
-              addLog({ ts: Date.now(), user: session.name,
-                action: `Finished ${mod.name} › ${test.name}`, type: "info" });
-              toast("Test finished — progress saved & lock released", "success");
-              onFinish(steps);
-            }}
-            title="Save progress and release the lock so others can continue"
-          >
-            <Ico n="check" s={12} /> Finish Test
-          </button>
-        )}
-      </div>
 
-      <div
-        style={{
-          padding: "6px 20px",
+          <span style={{ color: C.t3, fontSize: 12, flexShrink: 0 }}>›</span>
+
+          {/* Test name (editable) */}
+          {renaming ? (
+            <input
+              ref={renRef}
+              value={renVal}
+              onChange={(e) => setRenVal(e.target.value)}
+              onBlur={() => { commit(steps, renVal || test.name, descVal); setRenaming(false); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { commit(steps, renVal || test.name, descVal); setRenaming(false); }
+                if (e.key === "Escape") setRenaming(false);
+              }}
+              autoFocus
+              style={{
+                background: "none", border: "none",
+                borderBottom: `2px solid ${C.ac}`,
+                color: C.t1, fontFamily: F.sans,
+                fontSize: isMobile ? 14 : 15,
+                fontWeight: 700, padding: "0 2px",
+                outline: "none", minWidth: 0, flex: 1,
+              }}
+            />
+          ) : (
+            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{
+                fontSize: isMobile ? 14 : 15,
+                fontWeight: 700,
+                color: C.t1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}>
+                {test.name}
+              </span>
+              {isAdmin && (
+                <button
+                  onClick={() => { setRenaming(true); setTimeout(() => renRef.current?.select(), 20); }}
+                  style={{ ...iBtn(), padding: 3, flexShrink: 0 }}
+                  title="Rename test"
+                >
+                  <Ico n="edit" s={11} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Progress pill — always visible */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+            background: C.s2,
+            border: `1px solid ${C.b1}`,
+            borderRadius: 20,
+            padding: "4px 12px",
+          }}>
+            {!isMobile && (
+              <>
+                <span style={{ fontSize: 10, fontFamily: F.mono, color: C.gr, fontWeight: 600 }}>{pass}✓</span>
+                {fail > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.re, fontWeight: 600 }}>{fail}✗</span>}
+                <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>{pending}…</span>
+                <div style={{ width: 1, height: 12, background: C.b2 }} />
+              </>
+            )}
+            <span style={{ fontSize: 11, fontFamily: F.mono, fontWeight: 700,
+              color: pct === 100 ? C.gr : fail > 0 ? C.re : C.ac }}>
+              {pct}%
+            </span>
+          </div>
+
+          {/* Module nav arrows */}
+          {!isMobile && modIdx !== undefined && modTotal !== undefined && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+              <button
+                style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
+                onClick={() => !navLocked && onNav && onNav(-1)}
+                disabled={modIdx === 0 || navLocked}
+                title={navLocked ? "Finish your test first" : "Previous module"}
+              >
+                <Ico n="chevL" s={12} />
+              </button>
+              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, whiteSpace: "nowrap" }}>
+                {modIdx + 1}/{modTotal}
+              </span>
+              <button
+                style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
+                onClick={() => !navLocked && onNav && onNav(1)}
+                disabled={modIdx === modTotal - 1 || navLocked}
+                title={navLocked ? "Finish your test first" : "Next module"}
+              >
+                <Ico n="chevR" s={12} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Row 2 — description + progress bar */}
+        <div style={{
+          padding: isMobile ? "6px 14px" : "6px 22px",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
           background: C.s2,
           borderBottom: `1px solid ${C.b1}`,
-          flexShrink: 0,
-        }}
-      >
-        <input
-          value={descVal}
-          onChange={(e) => {
-            setDescVal(e.target.value);
-            commit(steps, renVal, e.target.value);
-          }}
-          placeholder="Description…"
-          style={{
-            width: "100%",
-            background: "transparent",
-            border: "none",
-            color: C.t2,
-            fontFamily: F.sans,
-            fontSize: 12,
-            outline: "none",
-          }}
-        />
+        }}>
+          <input
+            value={descVal}
+            onChange={(e) => { setDescVal(e.target.value); commit(steps, renVal, e.target.value); }}
+            placeholder="Add a description…"
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              color: C.t2,
+              fontFamily: F.sans,
+              fontSize: 12,
+              outline: "none",
+            }}
+          />
+          <div style={{ width: isMobile ? 80 : 120, flexShrink: 0 }}>
+            <PBar pct={pct} fail={fail > 0} />
+          </div>
+        </div>
+
+        {/* Row 3 — action buttons */}
+        <div style={{
+          padding: isMobile ? "8px 14px" : "8px 22px",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          flexWrap: "wrap",
+        }}>
+          {isAdmin ? (
+            <button style={acBtn(smBtn())} onClick={() => setCsvOpen(true)}>
+              <Ico n="upload" s={12} /> {isMobile ? "Import" : "Import CSV"}
+            </button>
+          ) : (
+            <span style={{ ...smBtn(), opacity: 0.3, cursor: "not-allowed", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Ico n="lock" s={12} /> {isMobile ? "Import" : "Import CSV"}
+            </span>
+          )}
+          <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
+          {isAdmin && (
+            <button style={reBtn(smBtn())} onClick={resetAll}>
+              <Ico n="reset" s={12} /> Reset
+            </button>
+          )}
+          {/* Finish test button — prominent for testers */}
+          {!isAdmin && onFinish && (
+            <button
+              style={{
+                ...grBtn(smBtn()),
+                marginLeft: "auto",
+                padding: isMobile ? "7px 16px" : "6px 14px",
+                fontSize: isMobile ? 13 : 12,
+                fontWeight: 600,
+                boxShadow: "0 2px 8px rgba(22,163,74,.25)",
+              }}
+              onClick={() => {
+                commit(steps);
+                addLog({ ts: Date.now(), user: session.name,
+                  action: `Finished ${mod.name} › ${test.name}`, type: "info" });
+                toast("Test finished — progress saved & lock released", "success");
+                onFinish(steps);
+              }}
+              title="Save progress and release the lock so others can continue"
+            >
+              <Ico n="check" s={12} /> Finish Test
+            </button>
+          )}
+          {/* Spacer if admin (no Finish button) */}
+          {isAdmin && <div style={{ flex: 1 }} />}
+        </div>
       </div>
 
       <div
@@ -4919,6 +4976,34 @@ export default function App() {
               </button>
             );
           })}
+          {/* Logout at end of bottom nav */}
+          <button
+            onClick={() => {
+              addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
+              handleLogout(session);
+            }}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 3,
+              border: "none",
+              borderLeft: `1px solid ${C.b1}`,
+              background: "transparent",
+              color: C.re,
+              fontFamily: F.sans,
+              fontSize: 9,
+              fontWeight: 400,
+              cursor: "pointer",
+              padding: "4px 0",
+              height: "100%",
+            }}
+          >
+            <Ico n="logout" s={18} />
+            Logout
+          </button>
         </div>
       )}
       <ToastHost />
