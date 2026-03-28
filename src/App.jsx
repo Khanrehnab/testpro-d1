@@ -58,6 +58,19 @@ const store = {
     const toInsert = users.filter(u => !uuidRe.test(u.id));
     const toUpsert = users.filter(u =>  uuidRe.test(u.id));
 
+    // Delete users that have been removed from local state but still exist in DB.
+    // Only attempt if there are surviving UUID users to use as the exclusion list.
+    const liveUUIDs = toUpsert.map(u => u.id);
+    if (liveUUIDs.length) {
+      await supabase
+        .from("users")
+        .delete()
+        .not("id", "in", `(${liveUUIDs.join(",")})`);
+    } else if (!toInsert.length) {
+      // No live users at all — wipe the table (edge case: all users deleted)
+      await supabase.from("users").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    }
+
     if (toInsert.length) {
       // Let Supabase generate the UUID — omit the client-side id entirely
       const rows = toInsert.map(({ id: _skip, ...rest }) => rest);
@@ -76,7 +89,8 @@ const store = {
       const { error } = await supabase.from("users").upsert(
         toUpsert.map(({ id, username, password, name, email, role, active }) =>
           ({ id, username, password, name, email, role, active })
-        )
+        ),
+        { onConflict: "id" }
       );
       if (error) console.error("Upsert users error", error);
     }
@@ -97,33 +111,39 @@ const store = {
 
     // ── Delete removed rows BEFORE upserting ────────────────────────────────
     // Steps first (FK child), then tests (FK parent).
+    // NOTE: Supabase PostgREST requires .not("id","in","(id1,id2)") as a
+    // parenthesised string — passing a raw JS array silently no-ops the filter.
 
     // 1. Delete steps that belong to live tests but are no longer in local state
-    if (liveTestIds.length && liveStepIds.length) {
-      await supabase
-        .from("steps")
-        .delete()
-        .in("test_id", liveTestIds)
-        .not("id", "in", liveStepIds);        // ← correct: pass array directly
-    } else if (liveTestIds.length) {
-      await supabase.from("steps").delete().in("test_id", liveTestIds);
+    if (liveTestIds.length) {
+      const stepDel = liveStepIds.length
+        ? supabase.from("steps").delete().in("test_id", liveTestIds)
+            .not("id", "in", `(${liveStepIds.join(",")})`)
+        : supabase.from("steps").delete().in("test_id", liveTestIds);
+      await stepDel;
     }
 
     // 2. Delete tests that belong to live modules but are no longer in local state
-    if (liveModuleIds.length && liveTestIds.length) {
+    if (liveModuleIds.length) {
+      const testDel = liveTestIds.length
+        ? supabase.from("tests").delete().in("module_id", liveModuleIds)
+            .not("id", "in", `(${liveTestIds.join(",")})`)
+        : supabase.from("tests").delete().in("module_id", liveModuleIds);
+      await testDel;
+    }
+
+    // 3. Delete module rows that no longer exist in local state
+    if (liveModuleIds.length) {
       await supabase
-        .from("tests")
+        .from("modules")
         .delete()
-        .in("module_id", liveModuleIds)
-        .not("id", "in", liveTestIds);        // ← correct: pass array directly
-    } else if (liveModuleIds.length) {
-      await supabase.from("tests").delete().in("module_id", liveModuleIds);
+        .not("id", "in", `(${liveModuleIds.join(",")})`);
     }
 
     // ── Upsert surviving rows ────────────────────────────────────────────────
     const { error: modErr } = await supabase
       .from("modules")
-      .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })));
+      .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })), { onConflict: "id" });
     if (modErr) { console.error("Upsert modules error", modErr); return; }
 
     if (allTests.length) {
@@ -134,7 +154,8 @@ const store = {
           serial_no:   t.serial_no ?? t.serialNo ?? 0,
           name:        t.name,
           description: t.description ?? "",
-        }))
+        })),
+        { onConflict: "id" }
       );
       if (testErr) { console.error("Upsert tests error", testErr); return; }
     }
@@ -152,14 +173,14 @@ const store = {
           test_id:    s.test_id,
           position,
           serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
-          action:     s.action,
-          result:     s.result,
-          remarks:    s.remarks,
-          status:     s.status,
+          action:     s.action   ?? "",
+          result:     s.result   ?? "",
+          remarks:    s.remarks  ?? "",
+          status:     s.status   ?? "pending",
           is_divider: s.isDivider ?? false,
         };
       });
-      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition);
+      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition, { onConflict: "id" });
       if (stepErr) console.error("Upsert steps error", stepErr);
     }
   },
@@ -3030,7 +3051,7 @@ function ModuleView({
       ...mod,
       tests: mod.tests
         .filter((_, i) => i !== idx)
-        .map((t, i) => ({ ...t, serialNo: i + 1, name: `Test ${i + 1}` })),
+        .map((t, i) => ({ ...t, serialNo: i + 1, serial_no: i + 1, name: `Test ${i + 1}` })),
     };
     saveMods({ ...allModules, [mod.id]: updated });
     toast("Test deleted", "info");
@@ -4298,9 +4319,19 @@ export default function App() {
     if (fresh && fresh.length) setUsers(fresh);
   }, []);
 
-  const saveMods = useCallback(async (m) => {
+  // Always keep a ref to the latest modules so the debounced DB write
+  // never uses a stale snapshot captured in an old closure.
+  const latestModulesRef = useRef(null);
+  const saveModsTimerRef = useRef(null);
+  const saveMods = useCallback((m) => {
     setModules(m);
-    await store.saveModules(m);
+    latestModulesRef.current = m; // always track the very latest value
+    // Debounce DB writes — cancels previous timer so only the final state
+    // in a burst of rapid calls (e.g. keystrokes) is persisted.
+    if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current);
+    saveModsTimerRef.current = setTimeout(() => {
+      store.saveModules(latestModulesRef.current); // use ref, never stale closure
+    }, 400);
   }, []);
 
   const addLog = useCallback(async (e) => {
