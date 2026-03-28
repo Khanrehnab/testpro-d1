@@ -51,7 +51,51 @@ const store = {
   },
 
   async saveUsers(users) {
-    await supabase.from("users").upsert(users);
+    // Split into new vs existing — new users have no valid UUID yet
+    // We identify "new" rows as those whose id is NOT a UUID (e.g. temp Date.now() ids)
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const toInsert = users.filter((u) => !uuidRe.test(u.id));
+    const toUpsert = users.filter((u) => uuidRe.test(u.id));
+
+    if (toInsert.length) {
+      // Let Supabase generate the UUID — omit the client-side id entirely
+      const rows = toInsert.map(({ id: _skip, ...rest }) => rest);
+      const { data: inserted, error } = await supabase
+        .from("users")
+        .insert(rows)
+        .select();
+      if (error) {
+        console.error("Insert users error", error);
+        return;
+      }
+      // Patch local state ids back to the real UUIDs Supabase assigned
+      if (inserted) {
+        for (const row of inserted) {
+          const u = toInsert.find((x) => x.username === row.username);
+          if (u) u.id = row.id;
+        }
+      }
+    }
+
+    if (toUpsert.length) {
+      const { error } = await supabase
+        .from("users")
+        .upsert(
+          toUpsert.map(
+            ({ id, username, password, name, email, role, active }) => ({
+              id,
+              username,
+              password,
+              name,
+              email,
+              role,
+              active,
+            })
+          )
+        );
+      if (error) console.error("Upsert users error", error);
+    }
   },
 
   async saveModules(modulesMap) {
@@ -3924,7 +3968,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
     }
     const updated =
       modal === "add"
-        ? [...users, { ...form, id: Date.now().toString() }]
+        ? [...users, { ...form, id: `new_${Date.now()}` }] // temp id — replaced by Supabase UUID in saveUsers
         : users.map((u) => (u.id === form.id ? { ...form } : u));
     saveUsers(updated);
     setModal(null);
@@ -4207,6 +4251,9 @@ export default function App() {
   const saveUsers = useCallback(async (u) => {
     setUsers(u);
     await store.saveUsers(u);
+    // Reload from Supabase so new users get their real UUID (replaces temp new_XXXX id)
+    const { data: fresh } = await supabase.from("users").select("*");
+    if (fresh && fresh.length) setUsers(fresh);
   }, []);
 
   const saveMods = useCallback(async (m) => {
@@ -4531,6 +4578,16 @@ export default function App() {
         modules={modules}
         selMod={selMod}
         setSelMod={(id) => {
+          // Sidebar already blocks clicks via the `locked` prop, but guard here
+          // too so no other code path can switch modules mid-test
+          if (
+            session.role !== "admin" &&
+            hasLock &&
+            !(selMod === id && view === "mod")
+          ) {
+            toast("Finish the current test first", "error");
+            return;
+          }
           setSelMod(id);
           setView("mod");
         }}
@@ -4561,6 +4618,10 @@ export default function App() {
             modules={modules}
             session={session}
             onSelect={(id) => {
+              if (session.role !== "admin" && hasLock) {
+                toast("Finish the current test first", "error");
+                return;
+              }
               setSelMod(id);
               setView("mod");
             }}
@@ -4606,4 +4667,3 @@ export default function App() {
     </div>
   );
 }
-///sdufdwfhhfdufd//
