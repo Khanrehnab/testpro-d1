@@ -4297,14 +4297,18 @@ export default function App() {
     if (fresh && fresh.length) setUsers(fresh);
   }, []);
 
+  // Always keep a ref to the latest modules so the debounced DB write
+  // never uses a stale snapshot captured in an old closure.
+  const latestModulesRef = useRef(null);
   const saveModsTimerRef = useRef(null);
   const saveMods = useCallback((m) => {
     setModules(m);
-    // Debounce DB writes by 400 ms — prevents rapid keystrokes from racing each
-    // other and overwriting newer data with an older in-flight request.
+    latestModulesRef.current = m; // always track the very latest value
+    // Debounce DB writes — cancels previous timer so only the final state
+    // in a burst of rapid calls (e.g. keystrokes) is persisted.
     if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current);
     saveModsTimerRef.current = setTimeout(() => {
-      store.saveModules(m);
+      store.saveModules(latestModulesRef.current); // use ref, never stale closure
     }, 400);
   }, []);
 
