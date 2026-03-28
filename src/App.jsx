@@ -12,10 +12,10 @@ const store = {
         { data: tests },
         { data: steps },
       ] = await Promise.all([
-        supabase.from("users").select("*"),
-        supabase.from("modules").select("*").order("position"),
-        supabase.from("tests").select("*").order("serial_no"),
-        supabase.from("steps").select("*").order("position"),
+        supabase.from("users").select("*").limit(10_000),
+        supabase.from("modules").select("*").order("position").limit(10_000),
+        supabase.from("tests").select("*").order("serial_no").limit(100_000),
+        supabase.from("steps").select("*").order("position").limit(10_000_000),
       ]);
 
       // Rebuild nested structure: modules → tests → steps
@@ -111,50 +111,56 @@ const store = {
 
     // ── Delete removed rows BEFORE upserting ────────────────────────────────
     // Steps first (FK child), then tests (FK parent).
-    // NOTE: Supabase PostgREST requires .not("id","in","(id1,id2)") as a
-    // parenthesised string — passing a raw JS array silently no-ops the filter.
+    // For large step counts the .not("id","in","(...)") string exceeds URL limits.
+    // Strategy: fetch all existing IDs for live tests, then delete any not in
+    // the current live set using chunked .in() calls instead of .not().
 
-    // 0. Purge orphaned dividers: rows with is_divider=true that belong to live
-    //    tests but are NOT in the current live step list. These accumulate when
-    //    a CSV is re-imported because old divider IDs (previously Date.now()-based)
-    //    were never matched and never deleted. Now that divider IDs are stable this
-    //    pass also cleans up any pre-existing orphans on the first save after upgrade.
+    const CHUNK = 500;
+
+    // Helper: delete rows whose id IS in a list, in chunks
+    const deleteInChunks = async (table, ids) => {
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        await supabase.from(table).delete().in("id", ids.slice(i, i + CHUNK));
+      }
+    };
+
+    // 0 & 1. For steps: fetch existing step IDs under live tests, find stale ones, delete
     if (liveTestIds.length) {
-      const divDel = liveStepIds.length
-        ? supabase.from("steps").delete()
-            .in("test_id", liveTestIds)
-            .eq("is_divider", true)
-            .not("id", "in", `(${liveStepIds.join(",")})`)
-        : supabase.from("steps").delete()
-            .in("test_id", liveTestIds)
-            .eq("is_divider", true);
-      await divDel;
+      // Fetch in chunks to avoid URL-length issues on the IN filter too
+      const existingStepIds = [];
+      for (let i = 0; i < liveTestIds.length; i += CHUNK) {
+        const { data } = await supabase
+          .from("steps")
+          .select("id")
+          .in("test_id", liveTestIds.slice(i, i + CHUNK));
+        if (data) existingStepIds.push(...data.map((r) => r.id));
+      }
+      const liveStepSet = new Set(liveStepIds);
+      const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
+      if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
     }
 
-    // 1. Delete steps that belong to live tests but are no longer in local state
-    if (liveTestIds.length) {
-      const stepDel = liveStepIds.length
-        ? supabase.from("steps").delete().in("test_id", liveTestIds)
-            .not("id", "in", `(${liveStepIds.join(",")})`)
-        : supabase.from("steps").delete().in("test_id", liveTestIds);
-      await stepDel;
-    }
-
-    // 2. Delete tests that belong to live modules but are no longer in local state
+    // 2. For tests: fetch existing test IDs under live modules, find stale ones, delete
     if (liveModuleIds.length) {
-      const testDel = liveTestIds.length
-        ? supabase.from("tests").delete().in("module_id", liveModuleIds)
-            .not("id", "in", `(${liveTestIds.join(",")})`)
-        : supabase.from("tests").delete().in("module_id", liveModuleIds);
-      await testDel;
+      const existingTestIds = [];
+      for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
+        const { data } = await supabase
+          .from("tests")
+          .select("id")
+          .in("module_id", liveModuleIds.slice(i, i + CHUNK));
+        if (data) existingTestIds.push(...data.map((r) => r.id));
+      }
+      const liveTestSet = new Set(liveTestIds);
+      const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
+      if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
     }
 
     // 3. Delete module rows that no longer exist in local state
     if (liveModuleIds.length) {
-      await supabase
-        .from("modules")
-        .delete()
-        .not("id", "in", `(${liveModuleIds.join(",")})`);
+      const { data: existingMods } = await supabase.from("modules").select("id");
+      const liveModSet = new Set(liveModuleIds);
+      const staleMods = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
+      if (staleMods.length) await deleteInChunks("modules", staleMods);
     }
 
     // ── Upsert surviving rows ────────────────────────────────────────────────
@@ -164,17 +170,19 @@ const store = {
     if (modErr) { console.error("Upsert modules error", modErr); return; }
 
     if (allTests.length) {
-      const { error: testErr } = await supabase.from("tests").upsert(
-        allTests.map((t) => ({
-          id:          t.id,
-          module_id:   t.module_id,
-          serial_no:   t.serial_no ?? t.serialNo ?? 0,
-          name:        t.name,
-          description: t.description ?? "",
-        })),
-        { onConflict: "id" }
-      );
-      if (testErr) { console.error("Upsert tests error", testErr); return; }
+      const testRows = allTests.map((t) => ({
+        id:          t.id,
+        module_id:   t.module_id,
+        serial_no:   t.serial_no ?? t.serialNo ?? 0,
+        name:        t.name,
+        description: t.description ?? "",
+      }));
+      for (let i = 0; i < testRows.length; i += CHUNK) {
+        const { error: testErr } = await supabase
+          .from("tests")
+          .upsert(testRows.slice(i, i + CHUNK), { onConflict: "id" });
+        if (testErr) { console.error("Upsert tests error", testErr); return; }
+      }
     }
 
     if (allSteps.length) {
@@ -197,8 +205,14 @@ const store = {
           is_divider: s.isDivider ?? false,
         };
       });
-      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition, { onConflict: "id" });
-      if (stepErr) console.error("Upsert steps error", stepErr);
+      // Chunk into batches of 500 so any number of steps persists correctly.
+      for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
+        const chunk = stepsWithPosition.slice(i, i + CHUNK);
+        const { error: stepErr } = await supabase
+          .from("steps")
+          .upsert(chunk, { onConflict: "id" });
+        if (stepErr) { console.error("Upsert steps error", stepErr); break; }
+      }
     }
   },
 
@@ -2307,9 +2321,14 @@ function TestDetail({
 
   // Re-sync steps when a remote RT update arrives (different user changed a step).
   // Skips if we just committed locally (to avoid overwriting in-progress remarks).
-  const testStepsFingerprint = test.steps
-    .map((s) => s.id + ":" + s.status + ":" + (s.remarks || ""))
-    .join("|");
+  const testStepsFingerprint = useMemo(
+    () =>
+      test.steps
+        .map((s) => s.id + ":" + s.status + ":" + (s.remarks || ""))
+        .join("|"),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [test.steps]
+  );
   useEffect(() => {
     if (localCommitRef.current) {
       localCommitRef.current = false;
@@ -2457,7 +2476,12 @@ function TestDetail({
   const importCSV = (text) => {
     const lines = text.trim().split("\n");
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
-    const dataLines = lines.slice(start).slice(0, 100_000);
+    const MAX_CSV_LINES = 1000;
+    const rawDataLines = lines.slice(start);
+    if (rawDataLines.length > MAX_CSV_LINES) {
+      toast(`CSV truncated to ${MAX_CSV_LINES} lines (file had ${rawDataLines.length})`, "info");
+    }
+    const dataLines = rawDataLines.slice(0, MAX_CSV_LINES);
 
     // Helper: build a steps array for a given target test, using the parsed
     // CSV rows but preserving any existing remarks/status from that test.
@@ -2522,38 +2546,41 @@ function TestDetail({
     // Build steps for the current test (to update local state immediately)
     const ns = buildStepsForTest(test, test.id);
     setSteps(ns);
-
-    // Now propagate to ALL modules at the same test-index (testIdx)
-    localCommitRef.current = true;
-    const updatedModules = {};
-    for (const [modId, m] of Object.entries(allModules)) {
-      const targetTest = m.tests[testIdx];
-      if (!targetTest) {
-        // Module doesn't have a test at this index — leave it unchanged
-        updatedModules[modId] = m;
-        continue;
-      }
-      const targetSteps = buildStepsForTest(targetTest, targetTest.id);
-      const updTests = m.tests.map((t, i) =>
-        i === testIdx ? { ...t, steps: targetSteps } : t
-      );
-      updatedModules[modId] = { ...m, tests: updTests };
-    }
-
-    saveMods(updatedModules);
     setCsvOpen(false);
 
-    const modCount = Object.values(allModules).filter((m) => m.tests[testIdx]).length;
-    toast(
-      `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""} → synced to ${modCount} module${modCount !== 1 ? "s" : ""}`,
-      "success"
-    );
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `CSV imported into Test ${testIdx + 1} across ${modCount} modules (${dataLines.length} rows each)`,
-      type: "info",
-    });
+    // Now propagate to ALL modules at the same test-index (testIdx).
+    // Deferred via setTimeout so the UI updates (modal close + steps render)
+    // paint first — prevents the browser from freezing on large module counts.
+    setTimeout(() => {
+      localCommitRef.current = true;
+      const updatedModules = {};
+      for (const [modId, m] of Object.entries(allModules)) {
+        const targetTest = m.tests[testIdx];
+        if (!targetTest) {
+          updatedModules[modId] = m;
+          continue;
+        }
+        const targetSteps = buildStepsForTest(targetTest, targetTest.id);
+        const updTests = m.tests.map((t, i) =>
+          i === testIdx ? { ...t, steps: targetSteps } : t
+        );
+        updatedModules[modId] = { ...m, tests: updTests };
+      }
+
+      saveMods(updatedModules);
+
+      const modCount = Object.values(allModules).filter((m) => m.tests[testIdx]).length;
+      toast(
+        `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""} → synced to ${modCount} module${modCount !== 1 ? "s" : ""}`,
+        "success"
+      );
+      addLog({
+        ts: Date.now(),
+        user: session.name,
+        action: `CSV imported into Test ${testIdx + 1} across ${modCount} modules (${dataLines.length} rows each)`,
+        type: "info",
+      });
+    }, 0);
   };
 
   const exportCSV = () => {
