@@ -7,16 +7,27 @@ const store = {
   async loadAll() {
     try {
       const [
-        { data: users },
-        { data: modules },
-        { data: tests },
-        { data: steps },
+        { data: users,   error: usersErr },
+        { data: modules, error: modsErr  },
+        { data: tests,   error: testsErr },
+        { data: steps,   error: stepsErr },
       ] = await Promise.all([
         supabase.from("users").select("*").limit(10_000),
         supabase.from("modules").select("*").order("position").limit(10_000),
         supabase.from("tests").select("*").order("serial_no").limit(100_000),
         supabase.from("steps").select("*").order("position").limit(10_000_000),
       ]);
+
+      // Surface Supabase errors so they are not silently swallowed
+      if (usersErr)  console.error("Load users error",   usersErr);
+      if (modsErr)   console.error("Load modules error", modsErr);
+      if (testsErr)  console.error("Load tests error",   testsErr);
+      if (stepsErr)  console.error("Load steps error",   stepsErr);
+
+      // If any critical table fails, return empty so App falls back to seed
+      if (modsErr || testsErr || stepsErr) {
+        return { users: users || [], modules: {} };
+      }
 
       // Rebuild nested structure: modules → tests → steps
       const stepsByTest = {};
@@ -47,7 +58,7 @@ const store = {
       return { users: users || [], modules: modulesMap };
     } catch (e) {
       console.error("Load error", e);
-      return { users: SEED_USERS, modules: buildModules() };
+      return { users: [], modules: {} };
     }
   },
 
@@ -109,66 +120,29 @@ const store = {
     const liveTestIds   = allTests.map((t) => t.id);
     const liveStepIds   = allSteps.map((s) => s.id);
 
-    // ── Delete removed rows BEFORE upserting ────────────────────────────────
-    // Steps first (FK child), then tests (FK parent).
-    // For large step counts the .not("id","in","(...)") string exceeds URL limits.
-    // Strategy: fetch all existing IDs for live tests, then delete any not in
-    // the current live set using chunked .in() calls instead of .not().
-
     const CHUNK = 500;
 
     // Helper: delete rows whose id IS in a list, in chunks
     const deleteInChunks = async (table, ids) => {
       for (let i = 0; i < ids.length; i += CHUNK) {
-        await supabase.from(table).delete().in("id", ids.slice(i, i + CHUNK));
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .in("id", ids.slice(i, i + CHUNK));
+        if (error) console.error(`Delete ${table} error`, error);
       }
     };
 
-    // 0 & 1. For steps: fetch existing step IDs under live tests, find stale ones, delete
-    if (liveTestIds.length) {
-      // Fetch in chunks to avoid URL-length issues on the IN filter too
-      const existingStepIds = [];
-      for (let i = 0; i < liveTestIds.length; i += CHUNK) {
-        const { data } = await supabase
-          .from("steps")
-          .select("id")
-          .in("test_id", liveTestIds.slice(i, i + CHUNK));
-        if (data) existingStepIds.push(...data.map((r) => r.id));
-      }
-      const liveStepSet = new Set(liveStepIds);
-      const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
-      if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
+    // ── 1. Upsert modules first ──────────────────────────────────────────────
+    const moduleRows = modules.map(({ id, name }, i) => ({ id, name, position: i }));
+    for (let i = 0; i < moduleRows.length; i += CHUNK) {
+      const { error } = await supabase
+        .from("modules")
+        .upsert(moduleRows.slice(i, i + CHUNK), { onConflict: "id" });
+      if (error) { console.error("Upsert modules error", error); return; }
     }
 
-    // 2. For tests: fetch existing test IDs under live modules, find stale ones, delete
-    if (liveModuleIds.length) {
-      const existingTestIds = [];
-      for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
-        const { data } = await supabase
-          .from("tests")
-          .select("id")
-          .in("module_id", liveModuleIds.slice(i, i + CHUNK));
-        if (data) existingTestIds.push(...data.map((r) => r.id));
-      }
-      const liveTestSet = new Set(liveTestIds);
-      const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
-      if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
-    }
-
-    // 3. Delete module rows that no longer exist in local state
-    if (liveModuleIds.length) {
-      const { data: existingMods } = await supabase.from("modules").select("id");
-      const liveModSet = new Set(liveModuleIds);
-      const staleMods = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
-      if (staleMods.length) await deleteInChunks("modules", staleMods);
-    }
-
-    // ── Upsert surviving rows ────────────────────────────────────────────────
-    const { error: modErr } = await supabase
-      .from("modules")
-      .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })), { onConflict: "id" });
-    if (modErr) { console.error("Upsert modules error", modErr); return; }
-
+    // ── 2. Upsert tests ──────────────────────────────────────────────────────
     if (allTests.length) {
       const testRows = allTests.map((t) => ({
         id:          t.id,
@@ -178,17 +152,15 @@ const store = {
         description: t.description ?? "",
       }));
       for (let i = 0; i < testRows.length; i += CHUNK) {
-        const { error: testErr } = await supabase
+        const { error } = await supabase
           .from("tests")
           .upsert(testRows.slice(i, i + CHUNK), { onConflict: "id" });
-        if (testErr) { console.error("Upsert tests error", testErr); return; }
+        if (error) { console.error("Upsert tests error", error); return; }
       }
     }
 
+    // ── 3. Upsert steps ──────────────────────────────────────────────────────
     if (allSteps.length) {
-      // Track per-test position counters so each step gets its correct array
-      // index within its own test. This is stored in `position` and used for
-      // DB ordering on reload — keeps dividers in their correct slots.
       const testPositionCounters = {};
       const stepsWithPosition = allSteps.map((s) => {
         if (testPositionCounters[s.test_id] === undefined) testPositionCounters[s.test_id] = 0;
@@ -205,14 +177,56 @@ const store = {
           is_divider: s.isDivider ?? false,
         };
       });
-      // Chunk into batches of 500 so any number of steps persists correctly.
       for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
-        const chunk = stepsWithPosition.slice(i, i + CHUNK);
-        const { error: stepErr } = await supabase
+        const { error } = await supabase
           .from("steps")
-          .upsert(chunk, { onConflict: "id" });
-        if (stepErr) { console.error("Upsert steps error", stepErr); break; }
+          .upsert(stepsWithPosition.slice(i, i + CHUNK), { onConflict: "id" });
+        if (error) { console.error("Upsert steps error", error); return; }
       }
+    }
+
+    // ── 4. Delete stale rows AFTER upserts succeed ───────────────────────────
+    // Fetch existing IDs and remove ones no longer in local state.
+    // Done AFTER upserts so a partial failure doesn't orphan data.
+    try {
+      // Stale steps
+      if (liveTestIds.length) {
+        const existingStepIds = [];
+        for (let i = 0; i < liveTestIds.length; i += CHUNK) {
+          const { data } = await supabase
+            .from("steps")
+            .select("id")
+            .in("test_id", liveTestIds.slice(i, i + CHUNK));
+          if (data) existingStepIds.push(...data.map((r) => r.id));
+        }
+        const liveStepSet  = new Set(liveStepIds);
+        const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
+        if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
+      }
+
+      // Stale tests
+      if (liveModuleIds.length) {
+        const existingTestIds = [];
+        for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
+          const { data } = await supabase
+            .from("tests")
+            .select("id")
+            .in("module_id", liveModuleIds.slice(i, i + CHUNK));
+          if (data) existingTestIds.push(...data.map((r) => r.id));
+        }
+        const liveTestSet  = new Set(liveTestIds);
+        const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
+        if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
+      }
+
+      // Stale modules
+      const { data: existingMods } = await supabase.from("modules").select("id");
+      const liveModSet = new Set(liveModuleIds);
+      const staleMods  = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
+      if (staleMods.length) await deleteInChunks("modules", staleMods);
+    } catch (e) {
+      console.error("Cleanup stale rows error", e);
+      // Non-fatal — upserts already succeeded
     }
   },
 
@@ -4516,12 +4530,42 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const { users, modules } = await store.loadAll();
+      const { users: dbUsers, modules: dbModules } = await store.loadAll();
       const log = await store.loadLog();
-      setUsers(users.length ? users : SEED_USERS);
-      setModules(Object.keys(modules).length ? modules : buildModules());
+
+      // ── Users: seed DB if empty ──────────────────────────────────────────
+      let finalUsers = dbUsers;
+      if (!dbUsers.length) {
+        // Insert seed users and reload so we get real UUIDs back
+        const { data: inserted, error: seedErr } = await supabase
+          .from("users")
+          .insert(SEED_USERS.map(({ id: _skip, ...rest }) => rest))
+          .select();
+        if (seedErr) {
+          console.error("Seed users error:", seedErr);
+          toast(`DB connection error: ${seedErr.message}`, "error");
+          finalUsers = SEED_USERS; // fall back to local only
+        } else {
+          finalUsers = inserted || SEED_USERS;
+        }
+      }
+
+      // ── Modules: seed DB if empty ────────────────────────────────────────
+      let finalModules = dbModules;
+      if (!Object.keys(dbModules).length) {
+        const seedModules = buildModules();
+        finalModules = seedModules;
+        // Save seed modules to DB in background (don't block render)
+        store.saveModules(seedModules).catch((e) =>
+          console.error("Seed modules error:", e)
+        );
+      }
+
+      setUsers(finalUsers);
+      setModules(finalModules);
       setLog(log);
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveUsers = useCallback(async (u) => {
