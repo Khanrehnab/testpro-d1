@@ -2489,7 +2489,7 @@ function TestDetail({
               style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
               onClick={() => !navLocked && onNav && onNav(-1)}
               disabled={modIdx === 0 || navLocked}
-              title={navLocked ? "Click "Finish Test" before switching modules" : undefined}
+              title={navLocked ? 'Finish your test before switching modules' : undefined}
             >
               <Ico n="chevL" s={12} />
             </button>
@@ -2500,7 +2500,7 @@ function TestDetail({
               style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
               onClick={() => !navLocked && onNav && onNav(1)}
               disabled={modIdx === modTotal - 1 || navLocked}
-              title={navLocked ? "Click "Finish Test" before switching modules" : undefined}
+              title={navLocked ? 'Finish your test before switching modules' : undefined}
             >
               <Ico n="chevR" s={12} />
             </button>
