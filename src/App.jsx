@@ -96,29 +96,26 @@ const store = {
     const liveStepIds   = allSteps.map((s) => s.id);
 
     // ── Delete removed rows BEFORE upserting ────────────────────────────────
-    // Upsert-only never removes anything from the DB, so deleted tests reappear
-    // on refresh and orphaned steps accumulate at the bottom.
-    // Delete in FK child→parent order: steps first, then tests.
+    // Steps first (FK child), then tests (FK parent).
 
-    // 1. Delete steps that are no longer in local state for any live test
+    // 1. Delete steps that belong to live tests but are no longer in local state
     if (liveTestIds.length && liveStepIds.length) {
       await supabase
         .from("steps")
         .delete()
         .in("test_id", liveTestIds)
-        .not("id", "in", `(${liveStepIds.map((id) => `"${id}"`).join(",")})`);
+        .not("id", "in", liveStepIds);        // ← correct: pass array directly
     } else if (liveTestIds.length) {
-      // All steps removed for these tests
       await supabase.from("steps").delete().in("test_id", liveTestIds);
     }
 
-    // 2. Delete tests that no longer exist in local state for any live module
+    // 2. Delete tests that belong to live modules but are no longer in local state
     if (liveModuleIds.length && liveTestIds.length) {
       await supabase
         .from("tests")
         .delete()
         .in("module_id", liveModuleIds)
-        .not("id", "in", `(${liveTestIds.map((id) => `"${id}"`).join(",")})`);
+        .not("id", "in", liveTestIds);        // ← correct: pass array directly
     } else if (liveModuleIds.length) {
       await supabase.from("tests").delete().in("module_id", liveModuleIds);
     }
@@ -143,17 +140,17 @@ const store = {
     }
 
     if (allSteps.length) {
-      // Each step gets its array index within its test as `position`.
-      // This is used for DB ordering on reload — serial_no alone cannot order
-      // dividers correctly because they have no SN (previously stored as null,
-      // which Postgres sorts last, pushing all dividers to the bottom).
+      // Track per-test position counters so each step gets its correct array
+      // index within its own test. This is stored in `position` and used for
+      // DB ordering on reload — keeps dividers in their correct slots.
+      const testPositionCounters = {};
       const stepsWithPosition = allSteps.map((s) => {
-        const testSteps = allTests.find((t) => t.id === s.test_id)?.steps || [];
-        const position  = testSteps.findIndex((ts) => ts.id === s.id);
+        if (testPositionCounters[s.test_id] === undefined) testPositionCounters[s.test_id] = 0;
+        const position = testPositionCounters[s.test_id]++;
         return {
           id:         s.id,
           test_id:    s.test_id,
-          position:   position >= 0 ? position : 0,
+          position,
           serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
           action:     s.action,
           result:     s.result,
