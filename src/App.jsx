@@ -93,12 +93,13 @@ const store = {
       (t.steps || []).map((s) => ({ ...s, test_id: t.id }))
     );
 
-    // Upsert everything
-    await supabase
+    const { error: modErr } = await supabase
       .from("modules")
       .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })));
+    if (modErr) { console.error("Upsert modules error", modErr); return; }
+
     if (allTests.length) {
-      await supabase.from("tests").upsert(
+      const { error: testErr } = await supabase.from("tests").upsert(
         allTests.map((t) => ({
           id:          t.id,
           module_id:   t.module_id,
@@ -108,13 +109,16 @@ const store = {
           description: t.description ?? "",
         }))
       );
+      if (testErr) { console.error("Upsert tests error", testErr); return; }
     }
+
     if (allSteps.length) {
-      await supabase.from("steps").upsert(
+      const { error: stepErr } = await supabase.from("steps").upsert(
         allSteps.map((s) => ({
           id:         s.id,
           test_id:    s.test_id,
-          serial_no:  s.serialNo ?? s.serial_no,
+          // Dividers have serialNo "" — coerce to null so integer column accepts it
+          serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
           action:     s.action,
           result:     s.result,
           remarks:    s.remarks,
@@ -122,6 +126,7 @@ const store = {
           is_divider: s.isDivider ?? false,
         }))
       );
+      if (stepErr) console.error("Upsert steps error", stepErr);
     }
   },
 
@@ -2293,22 +2298,37 @@ function TestDetail({
 
   // CSV import — SN col[0], Action col[1], Result col[2]
   // Rows whose first column starts with $$$ become section dividers.
+  // IDs are matched by serialNo so they stay stable across re-imports,
+  // preserving tester remarks/status and preventing duplicate DB rows.
   const importCSV = (text) => {
     const lines = text.trim().split("\n");
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
     const dataLines = lines.slice(start).slice(0, 1000);
+
+    // Build a lookup of existing real steps by serialNo so we can reuse their IDs
+    const existingBySN = {};
+    steps.forEach((s) => {
+      if (!s.isDivider && s.serialNo !== "" && s.serialNo != null) {
+        existingBySN[String(s.serialNo)] = s;
+      }
+    });
+
+    let stepCounter = 0; // counts only real steps (not dividers) for auto-SN
     const ns = [];
+
     dataLines.forEach((line, i) => {
       const cols = csvParse(line);
       const rawFirst = (cols[0] || "").trim();
+
       if (rawFirst.startsWith("$$$")) {
         // Section divider: label is everything after $$$
-        const label = rawFirst.slice(3).trim() ||
-          cols.slice(1).map(c => c.trim()).filter(Boolean).join(" ") ||
+        const label =
+          rawFirst.slice(3).trim() ||
+          cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
           "Section";
         ns.push({
           id: `${test.id}_div_${Date.now()}_${i}`,
-          serialNo: "",
+          serialNo: null,       // null not "" — safe for integer DB column
           action: label,
           result: "",
           remarks: "",
@@ -2316,20 +2336,31 @@ function TestDetail({
           isDivider: true,
         });
       } else {
-        const existing = steps[i] || makeStep(test.id, ns.length + 1);
+        stepCounter++;
+        // Determine SN from CSV col[0], else auto-assign
+        const csvSN =
+          rawFirst !== ""
+            ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
+            : stepCounter;
+
+        // Reuse existing step by SN so the ID is stable across re-imports
+        const existing = existingBySN[String(csvSN)];
+        const stableId = existing?.id || `${test.id}_s${csvSN}`;
+
         ns.push({
-          ...existing,
-          id: existing.id || `${test.id}_s${ns.length + 1}`,
+          ...(existing || {}),
+          id: stableId,
           isDivider: false,
-          serialNo:
-            rawFirst !== ""
-              ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
-              : existing.serialNo,
-          action: cols[1] !== undefined ? cols[1] : existing.action,
-          result: cols[2] !== undefined ? cols[2] : existing.result,
+          serialNo: csvSN,
+          action: cols[1] !== undefined ? cols[1] : (existing?.action ?? ""),
+          result: cols[2] !== undefined ? cols[2] : (existing?.result ?? ""),
+          // Always preserve tester's existing remarks + status — never overwrite on re-import
+          remarks: existing?.remarks ?? "",
+          status:  existing?.status  ?? "pending",
         });
       }
     });
+
     setSteps(ns);
     commit(ns);
     setCsvOpen(false);
