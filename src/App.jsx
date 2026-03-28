@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from "react";
 
 // ── Storage ────────────────────────────────────────────────────────────────────
 
@@ -434,6 +434,20 @@ const F = {
   sans: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
   mono: "'SF Mono','Fira Code','Fira Mono',monospace",
 };
+// ── Mobile detection ───────────────────────────────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [mobile, setMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const handler = () => setMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [breakpoint]);
+  return mobile;
+}
+
+// ── Mobile menu context — avoids prop-drilling onMenuClick to every Topbar ──────
+const MobileMenuCtx = React.createContext(null);
+
 const btn = (x = {}) => ({
   display: "inline-flex",
   alignItems: "center",
@@ -772,7 +786,7 @@ function ExportMenu({ onCSV, onPDF }) {
 
 function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) {
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", width }}>
       <div
         style={{
           position: "absolute",
@@ -798,7 +812,7 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) 
           fontFamily: F.sans,
           fontSize: 13,
           outline: "none",
-          width,
+          width: "100%",
           boxShadow: "inset 0 1px 2px rgba(0,0,0,.04)",
         }}
       />
@@ -807,6 +821,8 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) 
 }
 
 function Topbar({ title, sub, children }) {
+  const isMobile = useIsMobile();
+  const onMenuClick = useContext(MobileMenuCtx);
   return (
     <div
       style={{
@@ -821,6 +837,19 @@ function Topbar({ title, sub, children }) {
         boxShadow: "0 1px 3px rgba(0,0,0,.06)",
       }}
     >
+      {isMobile && onMenuClick && (
+        <button
+          onClick={onMenuClick}
+          style={{ ...iBtn(), padding: "6px 8px", marginLeft: -8 }}
+          title="Menu"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
@@ -866,6 +895,7 @@ const inputSty = {
 };
 
 function Modal({ title, sub, onClose, children, width = 460 }) {
+  const isMobile = useIsMobile();
   return (
     <div
       onClick={onClose}
@@ -875,7 +905,7 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
         background: "rgba(15,23,42,.35)",
         backdropFilter: "blur(2px)",
         display: "flex",
-        alignItems: "center",
+        alignItems: isMobile ? "flex-end" : "center",
         justifyContent: "center",
         zIndex: 200,
       }}
@@ -883,13 +913,13 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width,
+          width: isMobile ? "100%" : width,
           background: C.s1,
           border: `1px solid ${C.b1}`,
-          borderRadius: 14,
-          padding: "28px 30px",
+          borderRadius: isMobile ? "14px 14px 0 0" : 14,
+          padding: isMobile ? "24px 20px" : "28px 30px",
           boxShadow: "0 16px 48px rgba(0,0,0,.12)",
-          maxHeight: "90vh",
+          maxHeight: isMobile ? "90vh" : "90vh",
           overflowY: "auto",
         }}
       >
@@ -1017,6 +1047,7 @@ function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
+  const isMobile = useIsMobile();
   const go = () => {
     const found = users.find(
       (x) => x.username === u.trim() && x.password === p && x.active
@@ -1028,15 +1059,18 @@ function LoginPage({ users, onLogin }) {
       style={{
         height: "100vh",
         display: "flex",
-        alignItems: "center",
+        alignItems: isMobile ? "flex-start" : "center",
         justifyContent: "center",
         background: `linear-gradient(160deg,#e8f0fe 0%,#f0f2f5 60%)`,
+        padding: isMobile ? "40px 16px" : 0,
+        overflowY: "auto",
       }}
     >
       <div
         style={{
-          width: 390,
-          padding: "48px 40px",
+          width: isMobile ? "100%" : 390,
+          maxWidth: 420,
+          padding: isMobile ? "36px 24px" : "48px 40px",
           background: C.s1,
           border: `1px solid ${C.b1}`,
           borderRadius: 16,
@@ -1151,7 +1185,10 @@ function Sidebar({
   setCollapsed,
   onLogout,
   locked,        // true while a tester holds an unreleased lock
+  mobileOpen,    // mobile drawer open state
+  onMobileClose, // close mobile drawer
 }) {
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const modList = useMemo(() => Object.values(modules), [modules]);
   const filtered = useMemo(
@@ -1185,6 +1222,7 @@ function Sidebar({
         onClick={() => {
           if (isLocked) return;
           setView(id);
+          if (onMobileClose) onMobileClose();
         }}
         title={isLocked ? "Finish the current test first to navigate away" : undefined}
         style={{
@@ -1212,16 +1250,39 @@ function Sidebar({
   };
 
   return (
+    <>
+      {/* Mobile overlay backdrop */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={onMobileClose}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,.35)",
+            backdropFilter: "blur(2px)",
+            zIndex: 300,
+          }}
+        />
+      )}
     <div
       style={{
-        width: collapsed ? 54 : 250,
+        width: isMobile ? 280 : (collapsed ? 54 : 250),
         flexShrink: 0,
         background: C.s1,
         borderRight: `1px solid ${C.b1}`,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
-        transition: "width .2s",
+        transition: isMobile ? "transform .25s" : "width .2s",
+        // Mobile: slide in/out as a drawer
+        ...(isMobile ? {
+          position: "fixed",
+          top: 0,
+          left: 0,
+          height: "100%",
+          zIndex: 301,
+          transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
+        } : {}),
       }}
     >
       <div
@@ -1347,6 +1408,7 @@ function Sidebar({
                     if (locked && !(selMod === m.id && view === "mod")) return;
                     setSelMod(m.id);
                     setView("mod");
+                    if (onMobileClose) onMobileClose();
                   }}
                   title={locked && !(selMod === m.id && view === "mod") ? "Finish the current test first" : undefined}
                   style={{
@@ -1464,12 +1526,14 @@ function Sidebar({
         </button>
       </div>
     </div>
+    </>
   );
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   const isAdmin = session.role === "admin";
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [confirmDel, setConfirmDel] = useState(null); // module id to delete
@@ -1601,25 +1665,37 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
           month: "short",
         })}`}
       >
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder="Search modules…"
-          width={200}
-        />
+        {!isMobile && (
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            placeholder="Search modules…"
+            width={200}
+          />
+        )}
         {isAdmin && (
           <button style={acBtn(smBtn())} onClick={addModule}>
-            <Ico n="plus" s={12} /> Add Module
+            <Ico n="plus" s={12} /> {isMobile ? "" : "Add Module"}
           </button>
         )}
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 20 }}>
+        {isMobile && (
+          <div style={{ marginBottom: 12 }}>
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder="Search modules…"
+              width="100%"
+            />
+          </div>
+        )}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4,1fr)",
-            gap: 14,
-            marginBottom: 20,
+            gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)",
+            gap: isMobile ? 10 : 14,
+            marginBottom: isMobile ? 14 : 20,
           }}
         >
           {sc("Total Steps", total, C.ac, `Across ${modList.length} modules`)}
@@ -1649,9 +1725,11 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: isMobile ? "flex-start" : "center",
+            flexDirection: isMobile ? "column" : "row",
             justifyContent: "space-between",
             marginBottom: 14,
+            gap: isMobile ? 8 : 0,
           }}
         >
           <div style={{ fontSize: 14, fontWeight: 600 }}>
@@ -1667,7 +1745,7 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
               ({filtered.length})
             </span>
           </div>
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {[
               ["all", "All"],
               ["active", "In Progress"],
@@ -4324,7 +4402,9 @@ export default function App() {
   const [view, setView] = useState("dash");
   const [selMod, setSelMod] = useState(null);
   const [sideColl, setSideColl] = useState(false);
-  const [hasLock, setHasLock] = useState(false); // true while current tester holds an unreleased test lock
+  const [hasLock, setHasLock] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const isMobile = useIsMobile();
   const { push: toast, Host: ToastHost } = useToast();
 
   useEffect(() => {
@@ -4641,7 +4721,19 @@ export default function App() {
   const modKeys = Object.keys(modules);
   const modIdx = selMod ? modKeys.indexOf(selMod) : -1;
 
+  // Mobile bottom nav items
+  const mobileNavItems = [
+    { id: "dash", icon: "dash", label: "Dashboard" },
+    { id: "report", icon: "report", label: "Report" },
+    ...(session.role === "admin" ? [
+      { id: "users", icon: "users", label: "Users" },
+      { id: "audit", icon: "log", label: "Audit" },
+    ] : []),
+    { id: "_modules", icon: "layers", label: "Modules" },
+  ];
+
   return (
+    <MobileMenuCtx.Provider value={() => setMobileDrawerOpen(true)}>
     <div
       style={{
         display: "flex",
@@ -4655,35 +4747,59 @@ export default function App() {
       }}
     >
       <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}`}</style>
-      <Sidebar
-        session={session}
-        view={view}
-        setView={setView}
-        modules={modules}
-        selMod={selMod}
-        setSelMod={(id) => {
-          // Sidebar already blocks clicks via the `locked` prop, but guard here
-          // too so no other code path can switch modules mid-test
-          if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
-            toast("Finish the current test first", "error");
-            return;
-          }
-          setSelMod(id);
-          setView("mod");
-        }}
-        collapsed={sideColl}
-        setCollapsed={setSideColl}
-        locked={session.role !== "admin" && hasLock}
-        onLogout={() => {
-          addLog({
-            ts: Date.now(),
-            user: session.name,
-            action: "Logged out",
-            type: "info",
-          });
-          handleLogout(session);
-        }}
-      />
+      {/* Desktop sidebar — hidden on mobile (drawer handles it) */}
+      {!isMobile && (
+        <Sidebar
+          session={session}
+          view={view}
+          setView={setView}
+          modules={modules}
+          selMod={selMod}
+          setSelMod={(id) => {
+            if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
+              toast("Finish the current test first", "error");
+              return;
+            }
+            setSelMod(id);
+            setView("mod");
+          }}
+          collapsed={sideColl}
+          setCollapsed={setSideColl}
+          locked={session.role !== "admin" && hasLock}
+          onLogout={() => {
+            addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
+            handleLogout(session);
+          }}
+        />
+      )}
+      {/* Mobile drawer sidebar */}
+      {isMobile && (
+        <Sidebar
+          session={session}
+          view={view}
+          setView={(v) => { setView(v); setMobileDrawerOpen(false); }}
+          modules={modules}
+          selMod={selMod}
+          setSelMod={(id) => {
+            if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
+              toast("Finish the current test first", "error");
+              return;
+            }
+            setSelMod(id);
+            setView("mod");
+            setMobileDrawerOpen(false);
+          }}
+          collapsed={false}
+          setCollapsed={() => {}}
+          locked={session.role !== "admin" && hasLock}
+          mobileOpen={mobileDrawerOpen}
+          onMobileClose={() => setMobileDrawerOpen(false)}
+          onLogout={() => {
+            addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
+            handleLogout(session);
+          }}
+        />
+      )}
       <div
         style={{
           flex: 1,
@@ -4691,6 +4807,8 @@ export default function App() {
           flexDirection: "column",
           overflow: "hidden",
           minWidth: 0,
+          // On mobile, add bottom padding for the nav bar
+          paddingBottom: isMobile ? 56 : 0,
         }}
       >
         {view === "dash" && (
@@ -4721,7 +4839,7 @@ export default function App() {
             toast={toast}
             onLockChange={(locked) => setHasLock(locked)}
             onNav={(dir) => {
-              if (hasLock) return; // can't switch modules while lock is held
+              if (hasLock) return;
               const nk = modKeys[modIdx + dir];
               if (nk) setSelMod(nk);
             }}
@@ -4743,7 +4861,68 @@ export default function App() {
           <AuditView log={log} />
         )}
       </div>
+      {/* Mobile bottom navigation bar */}
+      {isMobile && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 56,
+            background: C.s1,
+            borderTop: `1px solid ${C.b1}`,
+            display: "flex",
+            alignItems: "center",
+            zIndex: 200,
+            boxShadow: "0 -2px 10px rgba(0,0,0,.07)",
+          }}
+        >
+          {mobileNavItems.map(({ id, icon, label }) => {
+            const isActive = id === "_modules"
+              ? view === "mod"
+              : view === id;
+            return (
+              <button
+                key={id}
+                onClick={() => {
+                  if (id === "_modules") {
+                    setMobileDrawerOpen(true);
+                  } else {
+                    if (session.role !== "admin" && hasLock && id !== view) {
+                      toast("Finish the current test first", "error");
+                      return;
+                    }
+                    setView(id);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 3,
+                  border: "none",
+                  background: "transparent",
+                  color: isActive ? C.ac : C.t3,
+                  fontFamily: F.sans,
+                  fontSize: 9,
+                  fontWeight: isActive ? 600 : 400,
+                  cursor: "pointer",
+                  padding: "4px 0",
+                  height: "100%",
+                }}
+              >
+                <Ico n={icon} s={18} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <ToastHost />
     </div>
+    </MobileMenuCtx.Provider>
   );
 }
