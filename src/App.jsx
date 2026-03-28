@@ -355,7 +355,7 @@ const SEED_USERS = [
 
 // ── Data Model ─────────────────────────────────────────────────────────────────
 // Module → Tests[] → Steps[]
-// Each Test is a sub-module with its own name, description, and up to 1000 steps.
+// Each Test is a sub-module with its own name, description, and up to 100,000 steps per test.
 // Each Step has: id, serialNo, action, result, remarks, status
 
 function makeStep(testId, n) {
@@ -2414,11 +2414,11 @@ function TestDetail({
   };
 
   const addSteps = () => {
-    if (steps.length >= 1000) {
-      toast("Maximum 1000 steps per test", "error");
+    if (steps.length >= 100_000) {
+      toast("Maximum 100,000 steps per test", "error");
       return;
     }
-    const n = Math.min(addCount, 1000 - steps.length);
+    const n = Math.min(addCount, 100_000 - steps.length);
     const start = steps.length + 1;
     const ns = [
       ...steps,
@@ -2428,7 +2428,7 @@ function TestDetail({
     commit(ns);
     toast(
       `Added ${n} step${n > 1 ? "s" : ""}`,
-      steps.length + n >= 1000 ? "info" : "success"
+      steps.length + n >= 100_000 ? "info" : "success"
     );
   };
 
@@ -2457,7 +2457,7 @@ function TestDetail({
   const importCSV = (text) => {
     const lines = text.trim().split("\n");
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
-    const dataLines = lines.slice(start).slice(0, 1000);
+    const dataLines = lines.slice(start).slice(0, 100_000);
 
     // Helper: build a steps array for a given target test, using the parsed
     // CSV rows but preserving any existing remarks/status from that test.
@@ -2973,7 +2973,7 @@ function TestDetail({
                 outline: "none",
               }}
             >
-              {[1, 5, 10, 25, 50, 100, 250, 500].map((n) => (
+              {[1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000].map((n) => (
                 <option key={n} value={n}>
                   +{n}
                 </option>
@@ -2982,7 +2982,7 @@ function TestDetail({
             <button
               style={grBtn(smBtn())}
               onClick={addSteps}
-              disabled={steps.length >= 1000}
+              disabled={steps.length >= 100_000}
             >
               <Ico n="plus" s={11} /> Add Steps
             </button>
