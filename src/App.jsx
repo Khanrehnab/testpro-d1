@@ -107,6 +107,68 @@ const store = {
     }
   },
 
+  // ── saveSteps: surgical save for a single test's steps ─────────────────────
+  // Called by commit() in TestDetail — only touches the one test that changed.
+  // Much faster than saveModules which would rebuild all 120 modules.
+  async saveSteps(testId, moduleId, steps) {
+    const CHUNK = 500;
+
+    // 1. Upsert parent module + test first (FK constraints require them to exist)
+    // We pass minimal data — just enough to satisfy NOT NULL + FK.
+    // The full module/test row will already be in DB from the initial seed.
+    // These upserts are no-ops if nothing changed.
+
+    // 2. Build step rows
+    const stepsWithPosition = steps.map((s, position) => ({
+      id:         s.id,
+      test_id:    testId,
+      position,
+      serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
+      action:     s.action   ?? "",
+      result:     s.result   ?? "",
+      remarks:    s.remarks  ?? "",
+      status:     s.status   ?? "pending",
+      is_divider: s.isDivider ?? false,
+    }));
+
+    // 3. Upsert all steps for this test
+    for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
+      const { error } = await supabase
+        .from("steps")
+        .upsert(stepsWithPosition.slice(i, i + CHUNK), { onConflict: "id" });
+      if (error) {
+        console.error("Upsert steps error:", error);
+        return;
+      }
+    }
+
+    // 4. Delete steps that are no longer in the current list (e.g. after reset/reimport)
+    if (stepsWithPosition.length > 0) {
+      const liveIds = new Set(stepsWithPosition.map((s) => s.id));
+      const { data: existing, error: fetchErr } = await supabase
+        .from("steps")
+        .select("id")
+        .eq("test_id", testId);
+      if (fetchErr) { console.error("Fetch steps for cleanup error:", fetchErr); return; }
+      const stale = (existing || []).map((r) => r.id).filter((id) => !liveIds.has(id));
+      for (let i = 0; i < stale.length; i += CHUNK) {
+        const { error } = await supabase
+          .from("steps")
+          .delete()
+          .in("id", stale.slice(i, i + CHUNK));
+        if (error) console.error("Delete stale steps error:", error);
+      }
+    } else {
+      // All steps removed — wipe the test's steps entirely
+      const { error } = await supabase
+        .from("steps")
+        .delete()
+        .eq("test_id", testId);
+      if (error) console.error("Delete all steps error:", error);
+    }
+  },
+
+  // ── saveModules: full save used for structural changes (add/delete/rename module or test) ──
   async saveModules(modulesMap) {
     const modules = Object.values(modulesMap);
     const allTests = modules.flatMap((m) =>
@@ -122,18 +184,15 @@ const store = {
 
     const CHUNK = 500;
 
-    // Helper: delete rows whose id IS in a list, in chunks
     const deleteInChunks = async (table, ids) => {
       for (let i = 0; i < ids.length; i += CHUNK) {
         const { error } = await supabase
-          .from(table)
-          .delete()
-          .in("id", ids.slice(i, i + CHUNK));
+          .from(table).delete().in("id", ids.slice(i, i + CHUNK));
         if (error) console.error(`Delete ${table} error`, error);
       }
     };
 
-    // ── 1. Upsert modules first ──────────────────────────────────────────────
+    // ── 1. Upsert modules ────────────────────────────────────────────────────
     const moduleRows = modules.map(({ id, name }, i) => ({ id, name, position: i }));
     for (let i = 0; i < moduleRows.length; i += CHUNK) {
       const { error } = await supabase
@@ -185,17 +244,13 @@ const store = {
       }
     }
 
-    // ── 4. Delete stale rows AFTER upserts succeed ───────────────────────────
-    // Fetch existing IDs and remove ones no longer in local state.
-    // Done AFTER upserts so a partial failure doesn't orphan data.
+    // ── 4. Delete stale rows after upserts succeed ───────────────────────────
     try {
-      // Stale steps
       if (liveTestIds.length) {
         const existingStepIds = [];
         for (let i = 0; i < liveTestIds.length; i += CHUNK) {
           const { data } = await supabase
-            .from("steps")
-            .select("id")
+            .from("steps").select("id")
             .in("test_id", liveTestIds.slice(i, i + CHUNK));
           if (data) existingStepIds.push(...data.map((r) => r.id));
         }
@@ -203,14 +258,11 @@ const store = {
         const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
         if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
       }
-
-      // Stale tests
       if (liveModuleIds.length) {
         const existingTestIds = [];
         for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
           const { data } = await supabase
-            .from("tests")
-            .select("id")
+            .from("tests").select("id")
             .in("module_id", liveModuleIds.slice(i, i + CHUNK));
           if (data) existingTestIds.push(...data.map((r) => r.id));
         }
@@ -218,15 +270,12 @@ const store = {
         const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
         if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
       }
-
-      // Stale modules
       const { data: existingMods } = await supabase.from("modules").select("id");
       const liveModSet = new Set(liveModuleIds);
       const staleMods  = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
       if (staleMods.length) await deleteInChunks("modules", staleMods);
     } catch (e) {
       console.error("Cleanup stale rows error", e);
-      // Non-fatal — upserts already succeeded
     }
   },
 
@@ -2371,6 +2420,10 @@ function TestDetail({
     return () => clearTimeout(t);
   }, [activeIdx]);
 
+  // Debounce ref for step saves — keeps DB write rate sane during rapid changes
+  const stepsTimerRef = useRef(null);
+  const latestStepsRef = useRef(test.steps);
+
   const commit = useCallback(
     (newSteps, newName, newDesc) => {
       localCommitRef.current = true; // suppress next RT echo (it's our own save)
@@ -2382,7 +2435,19 @@ function TestDetail({
       };
       const updTests = mod.tests.map((t, i) => (i === testIdx ? updTest : t));
       const updMod = { ...mod, tests: updTests };
+
+      // Update React state immediately (always)
       saveMods({ ...allModules, [mod.id]: updMod });
+
+      // ── Surgical step save: only write steps for THIS test ──────────────
+      // Debounced so rapid keystrokes / status toggles don't flood Supabase.
+      latestStepsRef.current = newSteps;
+      if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
+      stepsTimerRef.current = setTimeout(() => {
+        store.saveSteps(test.id, mod.id, latestStepsRef.current).catch((e) =>
+          console.error("saveSteps error:", e)
+        );
+      }, 400);
     },
     [mod, test, testIdx, allModules, saveMods]
   );
@@ -2565,9 +2630,11 @@ function TestDetail({
     // Now propagate to ALL modules at the same test-index (testIdx).
     // Deferred via setTimeout so the UI updates (modal close + steps render)
     // paint first — prevents the browser from freezing on large module counts.
-    setTimeout(() => {
+    setTimeout(async () => {
       localCommitRef.current = true;
       const updatedModules = {};
+      const savePromises = [];
+
       for (const [modId, m] of Object.entries(allModules)) {
         const targetTest = m.tests[testIdx];
         if (!targetTest) {
@@ -2579,9 +2646,17 @@ function TestDetail({
           i === testIdx ? { ...t, steps: targetSteps } : t
         );
         updatedModules[modId] = { ...m, tests: updTests };
+
+        // Save each test's steps surgically to DB
+        savePromises.push(
+          store.saveSteps(targetTest.id, modId, targetSteps).catch((e) =>
+            console.error(`saveSteps error for ${modId}/${targetTest.id}:`, e)
+          )
+        );
       }
 
       saveMods(updatedModules);
+      await Promise.all(savePromises);
 
       const modCount = Object.values(allModules).filter((m) => m.tests[testIdx]).length;
       toast(
