@@ -12,10 +12,10 @@ const store = {
         { data: tests },
         { data: steps },
       ] = await Promise.all([
-        supabase.from("users").select("*").limit(10_000),
-        supabase.from("modules").select("*").order("position").limit(10_000),
-        supabase.from("tests").select("*").order("serial_no").limit(100_000),
-        supabase.from("steps").select("*").order("position").limit(10_000_000),
+        supabase.from("users").select("*"),
+        supabase.from("modules").select("*").order("position"),
+        supabase.from("tests").select("*").order("serial_no"),
+        supabase.from("steps").select("*").order("position"),
       ]);
 
       // Rebuild nested structure: modules → tests → steps
@@ -111,79 +111,70 @@ const store = {
 
     // ── Delete removed rows BEFORE upserting ────────────────────────────────
     // Steps first (FK child), then tests (FK parent).
-    // For large step counts the .not("id","in","(...)") string exceeds URL limits.
-    // Strategy: fetch all existing IDs for live tests, then delete any not in
-    // the current live set using chunked .in() calls instead of .not().
+    // NOTE: Supabase PostgREST requires .not("id","in","(id1,id2)") as a
+    // parenthesised string — passing a raw JS array silently no-ops the filter.
 
-    const CHUNK = 500;
-
-    // Helper: delete rows whose id IS in a list, in chunks
-    const deleteInChunks = async (table, ids) => {
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        await supabase.from(table).delete().in("id", ids.slice(i, i + CHUNK));
-      }
-    };
-
-    // 0 & 1. For steps: fetch existing step IDs under live tests, find stale ones, delete
+    // 0. Purge orphaned dividers: rows with is_divider=true that belong to live
+    //    tests but are NOT in the current live step list. These accumulate when
+    //    a CSV is re-imported because old divider IDs (previously Date.now()-based)
+    //    were never matched and never deleted. Now that divider IDs are stable this
+    //    pass also cleans up any pre-existing orphans on the first save after upgrade.
     if (liveTestIds.length) {
-      // Fetch in chunks to avoid URL-length issues on the IN filter too
-      const existingStepIds = [];
-      for (let i = 0; i < liveTestIds.length; i += CHUNK) {
-        const { data } = await supabase
-          .from("steps")
-          .select("id")
-          .in("test_id", liveTestIds.slice(i, i + CHUNK));
-        if (data) existingStepIds.push(...data.map((r) => r.id));
-      }
-      const liveStepSet = new Set(liveStepIds);
-      const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
-      if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
+      const divDel = liveStepIds.length
+        ? supabase.from("steps").delete()
+            .in("test_id", liveTestIds)
+            .eq("is_divider", true)
+            .not("id", "in", `(${liveStepIds.join(",")})`)
+        : supabase.from("steps").delete()
+            .in("test_id", liveTestIds)
+            .eq("is_divider", true);
+      await divDel;
     }
 
-    // 2. For tests: fetch existing test IDs under live modules, find stale ones, delete
+    // 1. Delete steps that belong to live tests but are no longer in local state
+    if (liveTestIds.length) {
+      const stepDel = liveStepIds.length
+        ? supabase.from("steps").delete().in("test_id", liveTestIds)
+            .not("id", "in", `(${liveStepIds.join(",")})`)
+        : supabase.from("steps").delete().in("test_id", liveTestIds);
+      await stepDel;
+    }
+
+    // 2. Delete tests that belong to live modules but are no longer in local state
     if (liveModuleIds.length) {
-      const existingTestIds = [];
-      for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
-        const { data } = await supabase
-          .from("tests")
-          .select("id")
-          .in("module_id", liveModuleIds.slice(i, i + CHUNK));
-        if (data) existingTestIds.push(...data.map((r) => r.id));
-      }
-      const liveTestSet = new Set(liveTestIds);
-      const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
-      if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
+      const testDel = liveTestIds.length
+        ? supabase.from("tests").delete().in("module_id", liveModuleIds)
+            .not("id", "in", `(${liveTestIds.join(",")})`)
+        : supabase.from("tests").delete().in("module_id", liveModuleIds);
+      await testDel;
     }
 
     // 3. Delete module rows that no longer exist in local state
     if (liveModuleIds.length) {
-      const { data: existingMods } = await supabase.from("modules").select("id");
-      const liveModSet = new Set(liveModuleIds);
-      const staleMods = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
-      if (staleMods.length) await deleteInChunks("modules", staleMods);
+      await supabase
+        .from("modules")
+        .delete()
+        .not("id", "in", `(${liveModuleIds.join(",")})`);
     }
 
     // ── Upsert surviving rows ────────────────────────────────────────────────
-    const CHUNK = 500; // Supabase PostgREST row limit per request
     const { error: modErr } = await supabase
       .from("modules")
       .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })), { onConflict: "id" });
     if (modErr) { console.error("Upsert modules error", modErr); return; }
 
     if (allTests.length) {
-      const testRows = allTests.map((t) => ({
-        id:          t.id,
-        module_id:   t.module_id,
-        serial_no:   t.serial_no ?? t.serialNo ?? 0,
-        name:        t.name,
-        description: t.description ?? "",
-      }));
-      for (let i = 0; i < testRows.length; i += CHUNK) {
-        const { error: testErr } = await supabase
-          .from("tests")
-          .upsert(testRows.slice(i, i + CHUNK), { onConflict: "id" });
-        if (testErr) { console.error("Upsert tests error", testErr); return; }
-      }
+      const { error: testErr } = await supabase.from("tests").upsert(
+        allTests.map((t) => ({
+          id:          t.id,
+          module_id:   t.module_id,
+          serial_no:   t.serial_no ?? t.serialNo ?? 0,
+          name:        t.name,
+          description: t.description ?? "",
+        })),
+        { onConflict: "id" }
+      );
+      if (testErr) { console.error("Upsert tests error", testErr); return; }
     }
 
     if (allSteps.length) {
@@ -206,14 +197,8 @@ const store = {
           is_divider: s.isDivider ?? false,
         };
       });
-      // Chunk into batches of 500 so any number of steps persists correctly.
-      for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
-        const chunk = stepsWithPosition.slice(i, i + CHUNK);
-        const { error: stepErr } = await supabase
-          .from("steps")
-          .upsert(chunk, { onConflict: "id" });
-        if (stepErr) { console.error("Upsert steps error", stepErr); break; }
-      }
+      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition, { onConflict: "id" });
+      if (stepErr) console.error("Upsert steps error", stepErr);
     }
   },
 
