@@ -15,7 +15,7 @@ const store = {
         supabase.from("users").select("*"),
         supabase.from("modules").select("*").order("position"),
         supabase.from("tests").select("*").order("serial_no"),
-        supabase.from("steps").select("*").order("serial_no"),
+        supabase.from("steps").select("*").order("position"),
       ]);
 
       // Rebuild nested structure: modules → tests → steps
@@ -87,12 +87,43 @@ const store = {
     const allTests = modules.flatMap((m) =>
       m.tests.map((t) => ({ ...t, module_id: m.id }))
     );
-    // Derive steps from the same enriched test objects (with module_id set)
-    // Use t.id as the authoritative test_id — never rely on s.test_id being set
     const allSteps = allTests.flatMap((t) =>
       (t.steps || []).map((s) => ({ ...s, test_id: t.id }))
     );
 
+    const liveModuleIds = modules.map((m) => m.id);
+    const liveTestIds   = allTests.map((t) => t.id);
+    const liveStepIds   = allSteps.map((s) => s.id);
+
+    // ── Delete removed rows BEFORE upserting ────────────────────────────────
+    // Upsert-only never removes anything from the DB, so deleted tests reappear
+    // on refresh and orphaned steps accumulate at the bottom.
+    // Delete in FK child→parent order: steps first, then tests.
+
+    // 1. Delete steps that are no longer in local state for any live test
+    if (liveTestIds.length && liveStepIds.length) {
+      await supabase
+        .from("steps")
+        .delete()
+        .in("test_id", liveTestIds)
+        .not("id", "in", `(${liveStepIds.map((id) => `"${id}"`).join(",")})`);
+    } else if (liveTestIds.length) {
+      // All steps removed for these tests
+      await supabase.from("steps").delete().in("test_id", liveTestIds);
+    }
+
+    // 2. Delete tests that no longer exist in local state for any live module
+    if (liveModuleIds.length && liveTestIds.length) {
+      await supabase
+        .from("tests")
+        .delete()
+        .in("module_id", liveModuleIds)
+        .not("id", "in", `(${liveTestIds.map((id) => `"${id}"`).join(",")})`);
+    } else if (liveModuleIds.length) {
+      await supabase.from("tests").delete().in("module_id", liveModuleIds);
+    }
+
+    // ── Upsert surviving rows ────────────────────────────────────────────────
     const { error: modErr } = await supabase
       .from("modules")
       .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })));
@@ -103,7 +134,6 @@ const store = {
         allTests.map((t) => ({
           id:          t.id,
           module_id:   t.module_id,
-          // local objects use camelCase serialNo; DB column is serial_no
           serial_no:   t.serial_no ?? t.serialNo ?? 0,
           name:        t.name,
           description: t.description ?? "",
@@ -113,19 +143,26 @@ const store = {
     }
 
     if (allSteps.length) {
-      const { error: stepErr } = await supabase.from("steps").upsert(
-        allSteps.map((s) => ({
+      // Each step gets its array index within its test as `position`.
+      // This is used for DB ordering on reload — serial_no alone cannot order
+      // dividers correctly because they have no SN (previously stored as null,
+      // which Postgres sorts last, pushing all dividers to the bottom).
+      const stepsWithPosition = allSteps.map((s) => {
+        const testSteps = allTests.find((t) => t.id === s.test_id)?.steps || [];
+        const position  = testSteps.findIndex((ts) => ts.id === s.id);
+        return {
           id:         s.id,
           test_id:    s.test_id,
-          // Dividers have serialNo "" — coerce to null so integer column accepts it
+          position:   position >= 0 ? position : 0,
           serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
           action:     s.action,
           result:     s.result,
           remarks:    s.remarks,
           status:     s.status,
           is_divider: s.isDivider ?? false,
-        }))
-      );
+        };
+      });
+      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition);
       if (stepErr) console.error("Upsert steps error", stepErr);
     }
   },
