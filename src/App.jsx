@@ -24,7 +24,7 @@ const store = {
         if (!stepsByTest[s.test_id]) stepsByTest[s.test_id] = [];
         stepsByTest[s.test_id].push({
           ...s,
-          serialNo: s.serial_no,
+          serialNo:  s.serial_no,
           isDivider: s.is_divider ?? false,
         });
       }
@@ -34,6 +34,7 @@ const store = {
         if (!testsByModule[t.module_id]) testsByModule[t.module_id] = [];
         testsByModule[t.module_id].push({
           ...t,
+          serialNo: t.serial_no,  // normalise snake_case → camelCase for local usage
           steps: stepsByTest[t.id] || [],
         });
       }
@@ -53,47 +54,30 @@ const store = {
   async saveUsers(users) {
     // Split into new vs existing — new users have no valid UUID yet
     // We identify "new" rows as those whose id is NOT a UUID (e.g. temp Date.now() ids)
-    const uuidRe =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const toInsert = users.filter((u) => !uuidRe.test(u.id));
-    const toUpsert = users.filter((u) => uuidRe.test(u.id));
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const toInsert = users.filter(u => !uuidRe.test(u.id));
+    const toUpsert = users.filter(u =>  uuidRe.test(u.id));
 
     if (toInsert.length) {
       // Let Supabase generate the UUID — omit the client-side id entirely
       const rows = toInsert.map(({ id: _skip, ...rest }) => rest);
-      const { data: inserted, error } = await supabase
-        .from("users")
-        .insert(rows)
-        .select();
-      if (error) {
-        console.error("Insert users error", error);
-        return;
-      }
+      const { data: inserted, error } = await supabase.from("users").insert(rows).select();
+      if (error) { console.error("Insert users error", error); return; }
       // Patch local state ids back to the real UUIDs Supabase assigned
       if (inserted) {
         for (const row of inserted) {
-          const u = toInsert.find((x) => x.username === row.username);
+          const u = toInsert.find(x => x.username === row.username);
           if (u) u.id = row.id;
         }
       }
     }
 
     if (toUpsert.length) {
-      const { error } = await supabase
-        .from("users")
-        .upsert(
-          toUpsert.map(
-            ({ id, username, password, name, email, role, active }) => ({
-              id,
-              username,
-              password,
-              name,
-              email,
-              role,
-              active,
-            })
-          )
-        );
+      const { error } = await supabase.from("users").upsert(
+        toUpsert.map(({ id, username, password, name, email, role, active }) =>
+          ({ id, username, password, name, email, role, active })
+        )
+      );
       if (error) console.error("Upsert users error", error);
     }
   },
@@ -103,8 +87,10 @@ const store = {
     const allTests = modules.flatMap((m) =>
       m.tests.map((t) => ({ ...t, module_id: m.id }))
     );
+    // Derive steps from the same enriched test objects (with module_id set)
+    // Use t.id as the authoritative test_id — never rely on s.test_id being set
     const allSteps = allTests.flatMap((t) =>
-      t.steps.map((s) => ({ ...s, test_id: t.id }))
+      (t.steps || []).map((s) => ({ ...s, test_id: t.id }))
     );
 
     // Upsert everything
@@ -113,25 +99,26 @@ const store = {
       .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })));
     if (allTests.length) {
       await supabase.from("tests").upsert(
-        allTests.map(({ id, module_id, serial_no, name, description }) => ({
-          id,
-          module_id,
-          serial_no,
-          name,
-          description,
+        allTests.map((t) => ({
+          id:          t.id,
+          module_id:   t.module_id,
+          // local objects use camelCase serialNo; DB column is serial_no
+          serial_no:   t.serial_no ?? t.serialNo ?? 0,
+          name:        t.name,
+          description: t.description ?? "",
         }))
       );
     }
     if (allSteps.length) {
       await supabase.from("steps").upsert(
         allSteps.map((s) => ({
-          id: s.id,
-          test_id: s.test_id,
-          serial_no: s.serialNo ?? s.serial_no,
-          action: s.action,
-          result: s.result,
-          remarks: s.remarks,
-          status: s.status,
+          id:         s.id,
+          test_id:    s.test_id,
+          serial_no:  s.serialNo ?? s.serial_no,
+          action:     s.action,
+          result:     s.result,
+          remarks:    s.remarks,
+          status:     s.status,
           is_divider: s.isDivider ?? false,
         }))
       );
@@ -180,7 +167,7 @@ const store = {
 //   ALTER TABLE test_locks ENABLE ROW LEVEL SECURITY;
 //   CREATE POLICY "allow_all" ON test_locks FOR ALL USING (true) WITH CHECK (true);
 //
-const LOCK_TTL_MS = 60_000; // lock treated as dead after 60s of no heartbeat
+const LOCK_TTL_MS  = 60_000; // lock treated as dead after 60s of no heartbeat
 const HEARTBEAT_MS = 25_000; // active user refreshes every 25s
 
 const lockStore = {
@@ -196,9 +183,9 @@ const lockStore = {
       const out = {};
       for (const row of data || []) {
         out[row.test_id] = {
-          userId: row.user_id,
+          userId:   row.user_id,
           userName: row.user_name,
-          ts: new Date(row.locked_at).getTime(),
+          ts:       new Date(row.locked_at).getTime(),
         };
       }
       return out;
@@ -223,8 +210,8 @@ const lockStore = {
       }
       const { error } = await supabase.from("test_locks").upsert(
         {
-          test_id: testId,
-          user_id: userId,
+          test_id:   testId,
+          user_id:   userId,
           user_name: userName,
           locked_at: new Date().toISOString(),
         },
@@ -1086,7 +1073,7 @@ function Sidebar({
   collapsed,
   setCollapsed,
   onLogout,
-  locked, // true while a tester holds an unreleased lock
+  locked,        // true while a tester holds an unreleased lock
 }) {
   const [search, setSearch] = useState("");
   const modList = useMemo(() => Object.values(modules), [modules]);
@@ -1122,11 +1109,7 @@ function Sidebar({
           if (isLocked) return;
           setView(id);
         }}
-        title={
-          isLocked
-            ? "Finish the current test first to navigate away"
-            : undefined
-        }
+        title={isLocked ? "Finish the current test first to navigate away" : undefined}
         style={{
           display: "flex",
           alignItems: "center",
@@ -1144,7 +1127,9 @@ function Sidebar({
       >
         <Ico n={icon} s={15} />
         {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
-        {isLocked && !collapsed && <Ico n="lock" s={10} />}
+        {isLocked && !collapsed && (
+          <Ico n="lock" s={10} />
+        )}
       </div>
     );
   };
@@ -1286,28 +1271,16 @@ function Sidebar({
                     setSelMod(m.id);
                     setView("mod");
                   }}
-                  title={
-                    locked && !(selMod === m.id && view === "mod")
-                      ? "Finish the current test first"
-                      : undefined
-                  }
+                  title={locked && !(selMod === m.id && view === "mod") ? "Finish the current test first" : undefined}
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
                     padding: "7px 16px",
-                    cursor:
-                      locked && !(selMod === m.id && view === "mod")
-                        ? "not-allowed"
-                        : "pointer",
+                    cursor: locked && !(selMod === m.id && view === "mod") ? "not-allowed" : "pointer",
                     fontSize: 13,
-                    color: active
-                      ? C.ac
-                      : locked && !(selMod === m.id && view === "mod")
-                      ? C.t3
-                      : C.t2,
-                    opacity:
-                      locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
+                    color: active ? C.ac : locked && !(selMod === m.id && view === "mod") ? C.t3 : C.t2,
+                    opacity: locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
                     background: active ? "#eff6ff" : "transparent",
                     borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
                     transition: "all .12s",
@@ -1898,9 +1871,7 @@ function CsvImportModal({ onImport, onClose }) {
         <div>1,Navigate to login page,Login page loads correctly</div>
         <div>2,Enter valid credentials,Fields accept input</div>
         <div>3,Click Submit,User is redirected to dashboard</div>
-        <div style={{ color: "#9ca3af", marginTop: 4 }}>
-          $$$Section Title — creates a divider row
-        </div>
+        <div style={{color:"#9ca3af",marginTop:4}}>$$$Section Title — creates a divider row</div>
       </div>
       <ModalActions>
         <button style={btn()} onClick={onClose}>
@@ -1911,34 +1882,29 @@ function CsvImportModal({ onImport, onClose }) {
   );
 }
 
+
 // ── Divider Row — full-width section separator ($$$ CSV rows) ─────────────────
 function DividerRow({ label }) {
   return (
-    <div
-      style={{
-        gridColumn: "1 / -1",
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "6px 14px",
-        background: "linear-gradient(90deg,#eff6ff,#f8faff)",
-        borderBottom: `1px solid ${C.b1}`,
-      }}
-    >
+    <div style={{
+      gridColumn: "1 / -1",
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "6px 14px",
+      background: "linear-gradient(90deg,#eff6ff,#f8faff)",
+      borderBottom: `1px solid ${C.b1}`,
+    }}>
       <div style={{ height: 1, width: 10, background: C.b2, flexShrink: 0 }} />
-      <span
-        style={{
-          fontSize: 10,
-          fontFamily: F.mono,
-          fontWeight: 700,
-          color: C.ac,
-          textTransform: "uppercase",
-          letterSpacing: "1.2px",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {label}
-      </span>
+      <span style={{
+        fontSize: 10,
+        fontFamily: F.mono,
+        fontWeight: 700,
+        color: C.ac,
+        textTransform: "uppercase",
+        letterSpacing: "1.2px",
+        whiteSpace: "nowrap",
+      }}>{label}</span>
       <div style={{ flex: 1, height: 1, background: C.b2 }} />
     </div>
   );
@@ -2150,6 +2116,10 @@ function TestDetail({
   toast,
   onBack,
   onFinish,
+  modIdx,
+  modTotal,
+  onNav,
+  navLocked,  // true when tester holds lock and must click Finish before navigating
 }) {
   const isAdmin = session.role === "admin";
   const [steps, setSteps] = useState(test.steps);
@@ -2174,12 +2144,10 @@ function TestDetail({
     setSteps(test.steps);
     setRenVal(test.name);
     setDescVal(test.description || "");
-    const firstPending = test.steps.findIndex(
-      (s) => !s.isDivider && s.status === "pending"
-    );
+    const firstPending = test.steps.findIndex((s) => !s.isDivider && s.status === "pending");
     setActiveIdx(firstPending >= 0 ? firstPending : 0);
     localCommitRef.current = false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [test.id]);
 
   // Re-sync steps when a remote RT update arrives (different user changed a step).
@@ -2193,7 +2161,7 @@ function TestDetail({
       return;
     }
     setSteps(test.steps);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testStepsFingerprint]);
 
   // When activeIdx changes, bring that row into prominent view at top of container
@@ -2310,9 +2278,7 @@ function TestDetail({
   };
 
   const resetAll = () => {
-    const ns = steps.map((s) =>
-      s.isDivider ? s : { ...s, status: "pending" }
-    );
+    const ns = steps.map((s) => s.isDivider ? s : { ...s, status: "pending" });
     setSteps(ns);
     commit(ns);
     setActiveIdx(0);
@@ -2337,13 +2303,8 @@ function TestDetail({
       const rawFirst = (cols[0] || "").trim();
       if (rawFirst.startsWith("$$$")) {
         // Section divider: label is everything after $$$
-        const label =
-          rawFirst.slice(3).trim() ||
-          cols
-            .slice(1)
-            .map((c) => c.trim())
-            .filter(Boolean)
-            .join(" ") ||
+        const label = rawFirst.slice(3).trim() ||
+          cols.slice(1).map(c => c.trim()).filter(Boolean).join(" ") ||
           "Section";
         ns.push({
           id: `${test.id}_div_${Date.now()}_${i}`,
@@ -2362,9 +2323,7 @@ function TestDetail({
           isDivider: false,
           serialNo:
             rawFirst !== ""
-              ? isNaN(Number(rawFirst))
-                ? rawFirst
-                : Number(rawFirst)
+              ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
               : existing.serialNo,
           action: cols[1] !== undefined ? cols[1] : existing.action,
           result: cols[2] !== undefined ? cols[2] : existing.result,
@@ -2392,13 +2351,7 @@ function TestDetail({
       if (s.isDivider) {
         rows.push([`"$$$${s.action}"`, "", "", "", ""]);
       } else {
-        rows.push([
-          s.serialNo,
-          `"${s.action}"`,
-          `"${s.result}"`,
-          `"${s.remarks}"`,
-          s.status,
-        ]);
+        rows.push([s.serialNo, `"${s.action}"`, `"${s.result}"`, `"${s.remarks}"`, s.status]);
       }
     });
     const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
@@ -2480,10 +2433,10 @@ function TestDetail({
   };
 
   const realSteps = useMemo(() => steps.filter((s) => !s.isDivider), [steps]);
-  const pass = realSteps.filter((s) => s.status === "pass").length;
-  const fail = realSteps.filter((s) => s.status === "fail").length;
+  const pass    = realSteps.filter((s) => s.status === "pass").length;
+  const fail    = realSteps.filter((s) => s.status === "fail").length;
   const pending = realSteps.length - pass - fail;
-  const pct = Math.round((pass / Math.max(realSteps.length, 1)) * 100);
+  const pct     = Math.round((pass / Math.max(realSteps.length, 1)) * 100);
 
   const visible = useMemo(
     () =>
@@ -2529,6 +2482,30 @@ function TestDetail({
         <button style={smBtn()} onClick={onBack}>
           <Ico n="back" s={12} /> {mod.name}
         </button>
+        {/* Module nav arrows — shown inside TestDetail too, disabled until Finish clicked */}
+        {modIdx !== undefined && modTotal !== undefined && (
+          <>
+            <button
+              style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
+              onClick={() => !navLocked && onNav && onNav(-1)}
+              disabled={modIdx === 0 || navLocked}
+              title={navLocked ? "Click "Finish Test" before switching modules" : undefined}
+            >
+              <Ico n="chevL" s={12} />
+            </button>
+            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>
+              {modIdx + 1}/{modTotal}
+            </span>
+            <button
+              style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
+              onClick={() => !navLocked && onNav && onNav(1)}
+              disabled={modIdx === modTotal - 1 || navLocked}
+              title={navLocked ? "Click "Finish Test" before switching modules" : undefined}
+            >
+              <Ico n="chevR" s={12} />
+            </button>
+          </>
+        )}
         <div style={{ width: 1, height: 20, background: C.b2 }} />
         {renaming ? (
           <input
@@ -2623,16 +2600,9 @@ function TestDetail({
             style={grBtn(smBtn())}
             onClick={() => {
               commit(steps);
-              addLog({
-                ts: Date.now(),
-                user: session.name,
-                action: `Finished ${mod.name} › ${test.name}`,
-                type: "info",
-              });
-              toast(
-                "Test finished — progress saved & lock released",
-                "success"
-              );
+              addLog({ ts: Date.now(), user: session.name,
+                action: `Finished ${mod.name} › ${test.name}`, type: "info" });
+              toast("Test finished — progress saved & lock released", "success");
               onFinish(steps);
             }}
             title="Save progress and release the lock so others can continue"
@@ -2813,9 +2783,7 @@ function TestDetail({
               onStatusToggle={setStatusToggle}
               isActive={activeIdx === s._i}
               onActivate={() => setActiveIdx(s._i)}
-              rowRef={(el) => {
-                rowRefs.current[s._i] = el;
-              }}
+              rowRef={(el) => { rowRefs.current[s._i] = el; }}
             />
           )
         )}
@@ -2840,7 +2808,7 @@ function ModuleView({
   addLog,
   toast,
   onNav,
-  onLockChange, // callback(bool) — tells root App when a lock is acquired/released
+  onLockChange,  // callback(bool) — tells root App when a lock is acquired/released
   modIdx,
   modTotal,
 }) {
@@ -2853,13 +2821,13 @@ function ModuleView({
   const renRef = useRef();
 
   // Refs to always have current values without stale closures
-  const activeTestIdRef = useRef(null); // test id currently open (for heartbeat + beforeunload)
-  const selTestIdxRef = useRef(null); // mirrors selTestIdx for use inside effects
-  const modTestsRef = useRef(mod.tests); // mirrors mod.tests for use in cleanup effects
+  const activeTestIdRef  = useRef(null);  // test id currently open (for heartbeat + beforeunload)
+  const selTestIdxRef    = useRef(null);  // mirrors selTestIdx for use inside effects
+  const modTestsRef      = useRef(mod.tests); // mirrors mod.tests for use in cleanup effects
 
   // Keep refs in sync with state/props on every render
   selTestIdxRef.current = selTestIdx;
-  modTestsRef.current = mod.tests;
+  modTestsRef.current   = mod.tests;
 
   // UI convenience: true while this tester holds an unreleased lock on any test in this module
   const [uiLocked, setUiLocked] = useState(false);
@@ -2873,10 +2841,7 @@ function ModuleView({
     };
     poll();
     const id = setInterval(poll, 5000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
   // Heartbeat: while a tester has a test open, refresh locked_at every 25s.
@@ -2902,11 +2867,7 @@ function ModuleView({
       if (!testId) return;
       try {
         // sendBeacon is the most reliable way to fire a request on page unload
-        const url = `${
-          supabase.supabaseUrl
-        }/rest/v1/test_locks?test_id=eq.${encodeURIComponent(
-          testId
-        )}&user_id=eq.${encodeURIComponent(session.id)}`;
+        const url = `${supabase.supabaseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
         const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
         if (!sent) lockStore.release(testId, session.id);
       } catch {
@@ -2939,10 +2900,7 @@ function ModuleView({
     if (!isAdmin) {
       const result = await lockStore.acquire(test.id, session.id, session.name);
       if (!result.ok) {
-        toast(
-          `🔒 Locked by ${result.by} — they must click "Finish Test" first`,
-          "error"
-        );
+        toast(`🔒 Locked by ${result.by} — they must click "Finish Test" first`, "error");
         return;
       }
       setLocks(await lockStore.getAll());
@@ -3033,6 +2991,10 @@ function ModuleView({
         toast={toast}
         onBack={goBack}
         onFinish={finishTest}
+        modIdx={modIdx}
+        modTotal={modTotal}
+        onNav={!isAdmin ? null : onNav}
+        navLocked={!isAdmin && uiLocked}
       />
     );
   }
@@ -3148,30 +3110,38 @@ function ModuleView({
             const pct = Math.round((pass / Math.max(t.steps.length, 1)) * 100);
             const pending = t.steps.length - pass - fail;
             const lock = locks[t.id];
-            const lockedByOther =
-              !isAdmin && lock && lock.userId !== session.id;
-            const lockInfo = lock && lock.userId !== session.id ? lock : null; // for info badge (admin can see too)
+            const lockedByOther = !isAdmin && lock && lock.userId !== session.id;
+            // This tester went Back from their own test — still holds the lock on it.
+            // Every OTHER test card is blocked until they Finish their test.
+            const myLockedTestId = !isAdmin && uiLocked ? activeTestIdRef.current : null;
+            const blockedByMyLock = !isAdmin && uiLocked && t.id !== myLockedTestId;
+            const isMyLockedTest  = !isAdmin && uiLocked && t.id === myLockedTestId;
+            const lockInfo = lock && lock.userId !== session.id ? lock : null;
+
+            const cardBlocked = lockedByOther || blockedByMyLock;
             return (
               <div
                 key={t.id}
                 style={{
-                  background: lockedByOther ? "#fefce8" : C.s1,
+                  background: lockedByOther ? "#fefce8"
+                    : isMyLockedTest ? "#f0fdf4"
+                    : blockedByMyLock ? "#f8fafc"
+                    : C.s1,
                   border: `1px solid ${
-                    lockedByOther
-                      ? "#fde68a"
-                      : fail > 0
-                      ? "#fca5a5"
-                      : pass === t.steps.length && t.steps.length > 0
-                      ? "#bbf7d0"
+                    lockedByOther ? "#fde68a"
+                      : isMyLockedTest ? "#86efac"
+                      : blockedByMyLock ? C.b1
+                      : fail > 0 ? "#fca5a5"
+                      : pass === t.steps.length && t.steps.length > 0 ? "#bbf7d0"
                       : C.b1
                   }`,
                   borderRadius: 10,
                   overflow: "hidden",
-                  cursor: lockedByOther ? "not-allowed" : "pointer",
+                  cursor: cardBlocked ? "not-allowed" : "pointer",
                   transition: "border-color .15s",
-                  opacity: lockedByOther ? 0.85 : 1,
+                  opacity: lockedByOther ? 0.85 : blockedByMyLock ? 0.5 : 1,
                 }}
-                onClick={() => !lockedByOther && openTest(realIdx)}
+                onClick={() => !cardBlocked && openTest(realIdx)}
               >
                 {/* Test header */}
                 <div
@@ -3188,19 +3158,21 @@ function ModuleView({
                       width: 40,
                       height: 40,
                       borderRadius: 9,
-                      background: lockedByOther ? "#fef3c7" : C.s3,
-                      border: `1px solid ${lockedByOther ? "#fcd34d" : C.b2}`,
+                      background: lockedByOther ? "#fef3c7" : isMyLockedTest ? "#dcfce7" : C.s3,
+                      border: `1px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       fontFamily: F.mono,
                       fontSize: 14,
                       fontWeight: 700,
-                      color: lockedByOther ? C.am : C.t2,
+                      color: lockedByOther ? C.am : isMyLockedTest ? C.gr : C.t2,
                       flexShrink: 0,
                     }}
                   >
-                    {lockedByOther ? <Ico n="lock" s={16} /> : t.serialNo}
+                    {lockedByOther ? <Ico n="lock" s={16} />
+                      : isMyLockedTest ? <Ico n="check" s={16} />
+                      : t.serialNo}
                   </div>
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -3216,19 +3188,21 @@ function ModuleView({
                     >
                       {t.name}
                       {lockInfo && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontFamily: F.mono,
-                            background: "#fef3c7",
-                            color: C.am,
-                            padding: "2px 8px",
-                            borderRadius: 10,
-                            border: `1px solid #fcd34d`,
-                            fontWeight: 700,
-                          }}
-                        >
+                        <span style={{
+                          fontSize: 10, fontFamily: F.mono, background: "#fef3c7",
+                          color: C.am, padding: "2px 8px", borderRadius: 10,
+                          border: `1px solid #fcd34d`, fontWeight: 700,
+                        }}>
                           🔒 In use by {lockInfo.userName}
+                        </span>
+                      )}
+                      {isMyLockedTest && (
+                        <span style={{
+                          fontSize: 10, fontFamily: F.mono, background: "#dcfce7",
+                          color: C.gr, padding: "2px 8px", borderRadius: 10,
+                          border: `1px solid #86efac`, fontWeight: 700,
+                        }}>
+                          ▶ Your active test
                         </span>
                       )}
                     </div>
@@ -3299,20 +3273,23 @@ function ModuleView({
                         <Ico n="trash" s={11} />
                       </button>
                     )}
-                    {!lockedByOther ? (
-                      <button
-                        style={acBtn(smBtn())}
-                        onClick={() => openTest(realIdx)}
-                      >
-                        <Ico n="chevR" s={11} /> Open
+                    {lockedByOther ? (
+                      <button style={amBtn(smBtn())} disabled title={`Locked by ${lock.userName}`}>
+                        <Ico n="lock" s={11} /> Locked
+                      </button>
+                    ) : isMyLockedTest ? (
+                      <button style={grBtn(smBtn())} onClick={() => openTest(realIdx)}
+                        title="Return to your test">
+                        <Ico n="back" s={11} /> Return
+                      </button>
+                    ) : blockedByMyLock ? (
+                      <button style={smBtn({ opacity: 0.4, cursor: "not-allowed" })} disabled
+                        title="Finish your current test first">
+                        <Ico n="lock" s={11} /> Finish first
                       </button>
                     ) : (
-                      <button
-                        style={amBtn(smBtn())}
-                        disabled
-                        title={`Locked by ${lock.userName}`}
-                      >
-                        <Ico n="lock" s={11} /> Locked
+                      <button style={acBtn(smBtn())} onClick={() => openTest(realIdx)}>
+                        <Ico n="chevR" s={11} /> Open
                       </button>
                     )}
                   </div>
@@ -3968,7 +3945,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
     }
     const updated =
       modal === "add"
-        ? [...users, { ...form, id: `new_${Date.now()}` }] // temp id — replaced by Supabase UUID in saveUsers
+        ? [...users, { ...form, id: `new_${Date.now()}` }]  // temp id — replaced by Supabase UUID in saveUsers
         : users.map((u) => (u.id === form.id ? { ...form } : u));
     saveUsers(updated);
     setModal(null);
@@ -4301,9 +4278,7 @@ export default function App() {
             if (eventType === "UPDATE") {
               for (const modId in next) {
                 const mod = next[modId];
-                const testIdx = mod.tests.findIndex(
-                  (t) => t.id === row.test_id
-                );
+                const testIdx = mod.tests.findIndex((t) => t.id === row.test_id);
                 if (testIdx === -1) continue;
                 const test = mod.tests[testIdx];
                 const stepIdx = test.steps.findIndex((s) => s.id === row.id);
@@ -4311,11 +4286,11 @@ export default function App() {
                 const updatedSteps = [...test.steps];
                 updatedSteps[stepIdx] = {
                   ...updatedSteps[stepIdx],
-                  status: row.status,
-                  remarks: row.remarks,
-                  action: row.action,
-                  result: row.result,
-                  serialNo: row.serial_no,
+                  status:    row.status,
+                  remarks:   row.remarks,
+                  action:    row.action,
+                  result:    row.result,
+                  serialNo:  row.serial_no,
                   isDivider: row.is_divider ?? false,
                 };
                 const updatedTests = [...mod.tests];
@@ -4328,18 +4303,12 @@ export default function App() {
             if (eventType === "INSERT") {
               for (const modId in next) {
                 const mod = next[modId];
-                const testIdx = mod.tests.findIndex(
-                  (t) => t.id === row.test_id
-                );
+                const testIdx = mod.tests.findIndex((t) => t.id === row.test_id);
                 if (testIdx === -1) continue;
                 const test = mod.tests[testIdx];
                 if (test.steps.some((s) => s.id === row.id)) break; // already local
                 const updatedTests = [...mod.tests];
-                const normRow = {
-                  ...row,
-                  serialNo: row.serial_no,
-                  isDivider: row.is_divider ?? false,
-                };
+                const normRow = { ...row, serialNo: row.serial_no, isDivider: row.is_divider ?? false };
                 updatedTests[testIdx] = {
                   ...test,
                   steps: [...test.steps, normRow].sort(
@@ -4360,15 +4329,9 @@ export default function App() {
                 const updatedTests = mod.tests.map((t) => {
                   if (!t.steps.some((s) => s.id === deletedId)) return t;
                   changed = true;
-                  return {
-                    ...t,
-                    steps: t.steps.filter((s) => s.id !== deletedId),
-                  };
+                  return { ...t, steps: t.steps.filter((s) => s.id !== deletedId) };
                 });
-                if (changed) {
-                  next[modId] = { ...mod, tests: updatedTests };
-                  break;
-                }
+                if (changed) { next[modId] = { ...mod, tests: updatedTests }; break; }
               }
             }
 
@@ -4399,9 +4362,10 @@ export default function App() {
                   t.id === row.id
                     ? {
                         ...t,
-                        name: row.name,
+                        name:        row.name,
                         description: row.description,
-                        serial_no: row.serial_no,
+                        serial_no:   row.serial_no,
+                        serialNo:    row.serial_no, // keep camelCase in sync
                       }
                     : t
                 ),
@@ -4412,9 +4376,14 @@ export default function App() {
               const mod = next[row.module_id];
               if (!mod) return prev;
               if (mod.tests.some((t) => t.id === row.id)) return prev;
+              const normTest = {
+                ...row,
+                serialNo: row.serial_no, // normalise for local usage
+                steps: [],
+              };
               next[row.module_id] = {
                 ...mod,
-                tests: [...mod.tests, { ...row, steps: [] }].sort(
+                tests: [...mod.tests, normTest].sort(
                   (a, b) => (a.serial_no ?? 0) - (b.serial_no ?? 0)
                 ),
               };
@@ -4424,10 +4393,7 @@ export default function App() {
               for (const modId in next) {
                 const mod = next[modId];
                 if (!mod.tests.some((t) => t.id === oldRow?.id)) continue;
-                next[modId] = {
-                  ...mod,
-                  tests: mod.tests.filter((t) => t.id !== oldRow.id),
-                };
+                next[modId] = { ...mod, tests: mod.tests.filter((t) => t.id !== oldRow.id) };
                 break;
               }
             }
@@ -4452,11 +4418,7 @@ export default function App() {
 
             if (eventType === "UPDATE") {
               if (!next[row.id]) return prev;
-              next[row.id] = {
-                ...next[row.id],
-                name: row.name,
-                position: row.position,
-              };
+              next[row.id] = { ...next[row.id], name: row.name, position: row.position };
             }
 
             if (eventType === "INSERT") {
@@ -4482,8 +4444,8 @@ export default function App() {
       supabase.removeChannel(testsSub);
       supabase.removeChannel(modulesSub);
     };
-    // Run once after initial data load — `!!modules` flips false→true exactly once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Run once after initial data load — `!!modules` flips false→true exactly once
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!modules]);
 
   // ── Session validity: if logged-in user gets deactivated/deleted, auto-logout ──
@@ -4580,11 +4542,7 @@ export default function App() {
         setSelMod={(id) => {
           // Sidebar already blocks clicks via the `locked` prop, but guard here
           // too so no other code path can switch modules mid-test
-          if (
-            session.role !== "admin" &&
-            hasLock &&
-            !(selMod === id && view === "mod")
-          ) {
+          if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
             toast("Finish the current test first", "error");
             return;
           }
