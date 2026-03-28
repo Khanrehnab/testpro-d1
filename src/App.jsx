@@ -1,17 +1,6 @@
 import { supabase } from "./supabase";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
-// ── Mobile detection hook ──────────────────────────────────────────────────────
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= breakpoint);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, [breakpoint]);
-  return isMobile;
-}
-
 // ── Storage ────────────────────────────────────────────────────────────────────
 
 const store = {
@@ -124,6 +113,23 @@ const store = {
     // Steps first (FK child), then tests (FK parent).
     // NOTE: Supabase PostgREST requires .not("id","in","(id1,id2)") as a
     // parenthesised string — passing a raw JS array silently no-ops the filter.
+
+    // 0. Purge orphaned dividers: rows with is_divider=true that belong to live
+    //    tests but are NOT in the current live step list. These accumulate when
+    //    a CSV is re-imported because old divider IDs (previously Date.now()-based)
+    //    were never matched and never deleted. Now that divider IDs are stable this
+    //    pass also cleans up any pre-existing orphans on the first save after upgrade.
+    if (liveTestIds.length) {
+      const divDel = liveStepIds.length
+        ? supabase.from("steps").delete()
+            .in("test_id", liveTestIds)
+            .eq("is_divider", true)
+            .not("id", "in", `(${liveStepIds.join(",")})`)
+        : supabase.from("steps").delete()
+            .in("test_id", liveTestIds)
+            .eq("is_divider", true);
+      await divDel;
+    }
 
     // 1. Delete steps that belong to live tests but are no longer in local state
     if (liveTestIds.length) {
@@ -765,9 +771,8 @@ function ExportMenu({ onCSV, onPDF }) {
 }
 
 function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) {
-  const isMobile = useIsMobile();
   return (
-    <div style={{ position: "relative", flex: isMobile ? 1 : "none", minWidth: 0 }}>
+    <div style={{ position: "relative" }}>
       <div
         style={{
           position: "absolute",
@@ -793,7 +798,7 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) 
           fontFamily: F.sans,
           fontSize: 13,
           outline: "none",
-          width: isMobile ? "100%" : width,
+          width,
           boxShadow: "inset 0 1px 2px rgba(0,0,0,.04)",
         }}
       />
@@ -802,26 +807,24 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) 
 }
 
 function Topbar({ title, sub, children }) {
-  const isMobile = useIsMobile();
   return (
     <div
       style={{
-        padding: isMobile ? "8px 14px" : "0 22px",
-        minHeight: isMobile ? "auto" : 58,
+        height: 58,
+        padding: "0 22px",
         flexShrink: 0,
         background: C.s1,
         borderBottom: `1px solid ${C.b1}`,
         display: "flex",
-        flexDirection: isMobile ? "column" : "row",
-        alignItems: isMobile ? "stretch" : "center",
-        gap: isMobile ? 8 : 10,
+        alignItems: "center",
+        gap: 10,
         boxShadow: "0 1px 3px rgba(0,0,0,.06)",
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: isMobile ? 15 : 16,
+            fontSize: 16,
             fontWeight: 700,
             color: C.t1,
             overflow: "hidden",
@@ -834,7 +837,7 @@ function Topbar({ title, sub, children }) {
         {sub && (
           <div
             style={{
-              fontSize: 11,
+              fontSize: 12,
               color: C.t3,
               marginTop: 1,
               fontFamily: F.mono,
@@ -844,16 +847,7 @@ function Topbar({ title, sub, children }) {
           </div>
         )}
       </div>
-      {children && (
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-        }}>
-          {children}
-        </div>
-      )}
+      {children}
     </div>
   );
 }
@@ -872,7 +866,6 @@ const inputSty = {
 };
 
 function Modal({ title, sub, onClose, children, width = 460 }) {
-  const isMobile = useIsMobile();
   return (
     <div
       onClick={onClose}
@@ -882,7 +875,7 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
         background: "rgba(15,23,42,.35)",
         backdropFilter: "blur(2px)",
         display: "flex",
-        alignItems: isMobile ? "flex-end" : "center",
+        alignItems: "center",
         justifyContent: "center",
         zIndex: 200,
       }}
@@ -890,13 +883,13 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: isMobile ? "100%" : width,
+          width,
           background: C.s1,
           border: `1px solid ${C.b1}`,
-          borderRadius: isMobile ? "14px 14px 0 0" : 14,
-          padding: isMobile ? "24px 20px" : "28px 30px",
+          borderRadius: 14,
+          padding: "28px 30px",
           boxShadow: "0 16px 48px rgba(0,0,0,.12)",
-          maxHeight: isMobile ? "85vh" : "90vh",
+          maxHeight: "90vh",
           overflowY: "auto",
         }}
       >
@@ -968,22 +961,17 @@ function useToast() {
     error: { bg: "#fef2f2", border: "rgba(220,38,38,.4)", color: C.re },
     info: { bg: "#eff6ff", border: "rgba(0,112,243,.4)", color: C.ac },
   };
-  const Host = () => {
-    const isMobile = useIsMobile();
-    return (
+  const Host = () => (
     <div
       style={{
         position: "fixed",
-        bottom: isMobile ? 70 : 20,
-        right: isMobile ? "50%" : 20,
-        transform: isMobile ? "translateX(50%)" : "none",
+        bottom: 20,
+        right: 20,
         zIndex: 999,
         display: "flex",
         flexDirection: "column",
         gap: 8,
         pointerEvents: "none",
-        width: isMobile ? "calc(100vw - 32px)" : "auto",
-        maxWidth: isMobile ? 400 : "none",
       }}
     >
       {list.map((t) => {
@@ -1021,13 +1009,11 @@ function useToast() {
       })}
     </div>
   );
-  };
   return { push, Host };
 }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
 function LoginPage({ users, onLogin }) {
-  const isMobile = useIsMobile();
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
@@ -1045,14 +1031,12 @@ function LoginPage({ users, onLogin }) {
         alignItems: "center",
         justifyContent: "center",
         background: `linear-gradient(160deg,#e8f0fe 0%,#f0f2f5 60%)`,
-        padding: isMobile ? 20 : 0,
       }}
     >
       <div
         style={{
-          width: isMobile ? "100%" : 390,
-          maxWidth: 390,
-          padding: isMobile ? "36px 24px" : "48px 40px",
+          width: 390,
+          padding: "48px 40px",
           background: C.s1,
           border: `1px solid ${C.b1}`,
           borderRadius: 16,
@@ -1168,9 +1152,7 @@ function Sidebar({
   onLogout,
   locked,        // true while a tester holds an unreleased lock
 }) {
-  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const modList = useMemo(() => Object.values(modules), [modules]);
   const filtered = useMemo(
     () =>
@@ -1196,14 +1178,13 @@ function Sidebar({
 
   const navRow = (id, icon, label) => {
     const active = view === id;
-    const isLocked = locked && !active;
+    const isLocked = locked && !active; // locked & trying to leave current view
     return (
       <div
         key={id}
         onClick={() => {
           if (isLocked) return;
           setView(id);
-          if (isMobile) setDrawerOpen(false);
         }}
         title={isLocked ? "Finish the current test first to navigate away" : undefined}
         style={{
@@ -1222,184 +1203,14 @@ function Sidebar({
         }}
       >
         <Ico n={icon} s={15} />
-        <span style={{ flex: 1 }}>{label}</span>
-        {isLocked && <Ico n="lock" s={10} />}
+        {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
+        {isLocked && !collapsed && (
+          <Ico n="lock" s={10} />
+        )}
       </div>
     );
   };
 
-  // ── Mobile: bottom tab bar + slide-up module drawer ────────────────────────
-  if (isMobile) {
-    const tabs = [
-      { id: "dash", icon: "dash", label: "Dashboard" },
-      { id: "mod", icon: "layers", label: "Modules" },
-      { id: "report", icon: "report", label: "Report" },
-      ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }] : []),
-    ];
-
-    return (
-      <>
-        {/* Module drawer overlay */}
-        {drawerOpen && (
-          <div
-            onClick={() => setDrawerOpen(false)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.3)", zIndex: 80 }}
-          />
-        )}
-        {/* Module drawer */}
-        <div style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 56,
-          top: drawerOpen ? "30%" : "100%",
-          background: C.s1,
-          borderTop: `1px solid ${C.b1}`,
-          borderRadius: "16px 16px 0 0",
-          zIndex: 90,
-          display: "flex",
-          flexDirection: "column",
-          transition: "top .3s ease",
-          overflow: "hidden",
-        }}>
-          <div style={{ padding: "12px 16px 8px", borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: C.b2, margin: "0 auto 0" }} />
-          </div>
-          <div style={{ padding: "6px 10px 6px", borderBottom: `1px solid ${C.b1}`, position: "relative" }}>
-            <div style={{ position: "absolute", left: 20, top: "50%", transform: "translateY(-50%)", color: C.t3, pointerEvents: "none" }}>
-              <Ico n="search" s={12} />
-            </div>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search modules…"
-              style={{
-                width: "100%",
-                padding: "7px 8px 7px 28px",
-                background: C.s2,
-                border: `1px solid ${C.b1}`,
-                borderRadius: 6,
-                color: C.t1,
-                fontFamily: F.mono,
-                fontSize: 12,
-                outline: "none",
-              }}
-            />
-          </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            {filtered.map((m) => {
-              const st = modStats[m.id] || {};
-              const active = selMod === m.id && view === "mod";
-              return (
-                <div
-                  key={m.id}
-                  onClick={() => {
-                    if (locked && !(selMod === m.id && view === "mod")) return;
-                    setSelMod(m.id);
-                    setView("mod");
-                    setDrawerOpen(false);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "12px 16px",
-                    cursor: locked && !(selMod === m.id && view === "mod") ? "not-allowed" : "pointer",
-                    fontSize: 14,
-                    color: active ? C.ac : locked && !(selMod === m.id && view === "mod") ? C.t3 : C.t1,
-                    background: active ? "#eff6ff" : "transparent",
-                    borderBottom: `1px solid ${C.b1}`,
-                    opacity: locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
-                  }}
-                >
-                  <Ico n="layers" s={14} />
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
-                  {st.fail > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, background: C.red, color: C.re, padding: "1px 6px", borderRadius: 8 }}>✗{st.fail}</span>}
-                  {st.fail === 0 && st.pass === st.total && st.pass > 0 && <span style={{ fontSize: 10, background: C.grd, color: C.gr, padding: "1px 6px", borderRadius: 8, fontFamily: F.mono }}>✓</span>}
-                  <Ico n="chevR" s={12} />
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{session.name}</div>
-            <Badge type={session.role} />
-            <button onClick={onLogout} style={{ ...iBtn(), padding: 6 }} title="Logout"><Ico n="logout" s={15} /></button>
-          </div>
-        </div>
-
-        {/* Bottom tab bar */}
-        <div style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 56,
-          background: C.s1,
-          borderTop: `1px solid ${C.b1}`,
-          display: "flex",
-          zIndex: 100,
-          boxShadow: "0 -2px 8px rgba(0,0,0,.06)",
-        }}>
-          {tabs.map((t) => {
-            const active = t.id === "mod" ? (view === "mod" || drawerOpen) : view === t.id;
-            const isLocked = locked && !active;
-            return (
-              <div
-                key={t.id}
-                onClick={() => {
-                  if (isLocked) return;
-                  if (t.id === "mod") { setDrawerOpen((o) => !o); }
-                  else { setView(t.id); setDrawerOpen(false); }
-                }}
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 3,
-                  cursor: isLocked ? "not-allowed" : "pointer",
-                  color: active ? C.ac : isLocked ? C.t3 : C.t2,
-                  opacity: isLocked ? 0.4 : 1,
-                  fontSize: 10,
-                  fontFamily: F.mono,
-                  background: active && t.id !== "mod" ? "#eff6ff" : "transparent",
-                  transition: "all .12s",
-                  WebkitTapHighlightColor: "transparent",
-                }}
-              >
-                <Ico n={t.icon} s={18} />
-                {t.label}
-              </div>
-            );
-          })}
-          {/* Logout tab */}
-          <div
-            onClick={onLogout}
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 3,
-              cursor: "pointer",
-              color: C.t2,
-              fontSize: 10,
-              fontFamily: F.mono,
-              WebkitTapHighlightColor: "transparent",
-            }}
-          >
-            <Ico n="logout" s={18} />
-            Logout
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  // ── Desktop sidebar ────────────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -1802,11 +1613,11 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
           </button>
         )}
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20, paddingBottom: 80 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gridTemplateColumns: "repeat(4,1fr)",
             gap: 14,
             marginBottom: 20,
           }}
@@ -1841,8 +1652,6 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
             alignItems: "center",
             justifyContent: "space-between",
             marginBottom: 14,
-            flexWrap: "wrap",
-            gap: 8,
           }}
         >
           <div style={{ fontSize: 14, fontWeight: 600 }}>
@@ -1858,7 +1667,7 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
               ({filtered.length})
             </span>
           </div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 4 }}>
             {[
               ["all", "All"],
               ["active", "In Progress"],
@@ -2187,103 +1996,6 @@ function StepRow({
   onActivate,
   rowRef,
 }) {
-  const isMobile = useIsMobile();
-
-  const rowBg =
-    step.status === "fail"
-      ? "#fff5f5"
-      : step.status === "pass"
-      ? "#f0fdf4"
-      : isActive
-      ? "#eff6ff"
-      : "transparent";
-
-  if (isMobile) {
-    return (
-      <div
-        ref={rowRef}
-        onClick={onActivate}
-        style={{
-          borderBottom: `1px solid ${C.b1}`,
-          background: rowBg,
-          outline: isActive ? `2px solid ${C.ac}` : "none",
-          outlineOffset: -2,
-          padding: "10px 12px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}
-      >
-        {/* Header row: serial no + status buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {isActive && <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.ac, flexShrink: 0 }} />}
-          <span style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: C.t3, minWidth: 28 }}>
-            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
-          </span>
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 3,
-              padding: "5px 12px", borderRadius: 20,
-              border: `1px solid ${step.status === "pass" ? "#86efac" : C.b2}`,
-              background: step.status === "pass" ? C.grd : "transparent",
-              color: step.status === "pass" ? C.gr : C.t3,
-              fontFamily: F.mono, fontSize: 11, fontWeight: 700, cursor: "pointer",
-            }}
-          >
-            <Ico n="check" s={11} /> PASS
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 3,
-              padding: "5px 12px", borderRadius: 20,
-              border: `1px solid ${step.status === "fail" ? "#fca5a5" : C.b2}`,
-              background: step.status === "fail" ? C.red : "transparent",
-              color: step.status === "fail" ? C.re : C.t3,
-              fontFamily: F.mono, fontSize: 11, fontWeight: 700, cursor: "pointer",
-            }}
-          >
-            <Ico n="x" s={11} /> FAIL
-          </button>
-        </div>
-        {/* Action */}
-        {step.action ? (
-          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{step.action}</div>
-        ) : (
-          <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", fontFamily: F.mono }}>No action</div>
-        )}
-        {/* Expected result */}
-        {step.result && (
-          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", paddingLeft: 8, borderLeft: `2px solid ${C.b2}` }}>{step.result}</div>
-        )}
-        {/* Remarks */}
-        <textarea
-          value={step.remarks}
-          onChange={(e) => onChange(idx, "remarks", e.target.value)}
-          placeholder="Add remarks…"
-          rows={2}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: "100%",
-            background: "rgba(0,0,0,.03)",
-            border: `1px solid ${C.b1}`,
-            borderRadius: 6,
-            color: C.t2,
-            fontFamily: F.sans,
-            fontSize: 12,
-            resize: "vertical",
-            outline: "none",
-            lineHeight: 1.5,
-            padding: "6px 8px",
-            minHeight: 40,
-          }}
-        />
-      </div>
-    );
-  }
-
   const readonlyCell = (text, color) => (
     <div
       style={{
@@ -2320,6 +2032,15 @@ function StepRow({
       )}
     </div>
   );
+
+  const rowBg =
+    step.status === "fail"
+      ? "#fff5f5"
+      : step.status === "pass"
+      ? "#f0fdf4"
+      : isActive
+      ? "#eff6ff"
+      : "transparent";
 
   return (
     <div
@@ -2677,8 +2398,17 @@ function TestDetail({
           rawFirst.slice(3).trim() ||
           cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
           "Section";
+        // Stable, deterministic ID based on label + line index so re-importing
+        // the same CSV reuses the existing DB row instead of creating a new orphan.
+        // Using Date.now() here was the bug — it created a new ID every import,
+        // leaving the old divider row orphaned in the DB (never deleted because
+        // the delete pass only targets steps whose id is NOT in the current live list,
+        // but the old divider still referenced the same test_id so it survived and
+        // accumulated at position 0 on reload since serial_no is null for dividers).
+        const stableLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 40);
+        const divId = `${test.id}_div_${stableLabel}_${i}`;
         ns.push({
-          id: `${test.id}_div_${Date.now()}_${i}`,
+          id: divId,
           serialNo: null,       // null not "" — safe for integer DB column
           action: label,
           result: "",
@@ -2852,15 +2582,13 @@ function TestDetail({
     >
       <div
         style={{
-          padding: "10px 14px",
+          padding: "10px 20px",
           background: C.s1,
           borderBottom: `1px solid ${C.b1}`,
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 10,
           flexShrink: 0,
-          overflowX: "auto",
-          WebkitOverflowScrolling: "touch",
         }}
       >
         <button style={smBtn()} onClick={onBack}>
@@ -3106,7 +2834,7 @@ function TestDetail({
         )}
       </div>
 
-      <div ref={tableRef} style={{ flex: 1, overflowY: "auto", paddingBottom: 64 }}>
+      <div ref={tableRef} style={{ flex: 1, overflowY: "auto" }}>
         <div
           style={{
             display: "grid",
@@ -3117,7 +2845,6 @@ function TestDetail({
             top: 0,
             zIndex: 2,
           }}
-          className="desktop-table-header"
         >
           {["S.No", "Action", "Expected Result", "Remarks", "Status"].map(
             (h, i) => (
@@ -3486,7 +3213,7 @@ function ModuleView({
         )}
       </Topbar>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: 16, paddingBottom: 80 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map((t, visIdx) => {
             const realIdx = mod.tests.indexOf(t);
@@ -3924,7 +3651,7 @@ function ReportView({ modules, toast }) {
         </div>
         <ExportMenu onCSV={exportAllCSV} onPDF={exportAllPDF} />
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20, paddingBottom: 80 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
         <div
           style={{
             display: "flex",
@@ -4205,7 +3932,7 @@ function AuditView({ log }) {
   return (
     <>
       <Topbar title="Audit Log" sub={`${log.length} events recorded`} />
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px", paddingBottom: 80 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px" }}>
         <div
           style={{
             background: C.s1,
@@ -4394,7 +4121,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
           <Ico n="plus" s={13} /> Add User
         </button>
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20, paddingBottom: 80 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
         <div style={{ display: "grid", gap: 10 }}>
           {filtered.map((u) => (
             <div
@@ -4913,7 +4640,6 @@ export default function App() {
 
   const modKeys = Object.keys(modules);
   const modIdx = selMod ? modKeys.indexOf(selMod) : -1;
-  const isMobileLayout = window.innerWidth <= 768;
 
   return (
     <div
@@ -4928,7 +4654,7 @@ export default function App() {
         lineHeight: 1.5,
       }}
     >
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}.desktop-table-header{display:grid}@media(max-width:768px){.desktop-table-header{display:none!important}}`}</style>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}`}</style>
       <Sidebar
         session={session}
         view={view}
@@ -4936,6 +4662,8 @@ export default function App() {
         modules={modules}
         selMod={selMod}
         setSelMod={(id) => {
+          // Sidebar already blocks clicks via the `locked` prop, but guard here
+          // too so no other code path can switch modules mid-test
           if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
             toast("Finish the current test first", "error");
             return;
