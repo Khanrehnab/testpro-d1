@@ -2450,87 +2450,108 @@ function TestDetail({
   // Rows whose first column starts with $$$ become section dividers.
   // IDs are matched by serialNo so they stay stable across re-imports,
   // preserving tester remarks/status and preventing duplicate DB rows.
+  //
+  // Cross-module sync: after importing, the same Action/Result/divider
+  // structure is pushed to the same test-index in every other module,
+  // preserving each module's own existing remarks and status values.
   const importCSV = (text) => {
     const lines = text.trim().split("\n");
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
     const dataLines = lines.slice(start).slice(0, 1000);
 
-    // Build a lookup of existing real steps by serialNo so we can reuse their IDs
-    const existingBySN = {};
-    steps.forEach((s) => {
-      if (!s.isDivider && s.serialNo !== "" && s.serialNo != null) {
-        existingBySN[String(s.serialNo)] = s;
-      }
-    });
+    // Helper: build a steps array for a given target test, using the parsed
+    // CSV rows but preserving any existing remarks/status from that test.
+    const buildStepsForTest = (targetTest, targetTestId) => {
+      const existingBySN = {};
+      (targetTest.steps || []).forEach((s) => {
+        if (!s.isDivider && s.serialNo !== "" && s.serialNo != null) {
+          existingBySN[String(s.serialNo)] = s;
+        }
+      });
 
-    let stepCounter = 0; // counts only real steps (not dividers) for auto-SN
-    const ns = [];
+      let stepCounter = 0;
+      const result = [];
 
-    dataLines.forEach((line, i) => {
-      const cols = csvParse(line);
-      const rawFirst = (cols[0] || "").trim();
+      dataLines.forEach((line, i) => {
+        const cols = csvParse(line);
+        const rawFirst = (cols[0] || "").trim();
 
-      if (rawFirst.startsWith("$$$")) {
-        // Section divider: label is everything after $$$
-        const label =
-          rawFirst.slice(3).trim() ||
-          cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
-          "Section";
-        // Stable, deterministic ID based on label + line index so re-importing
-        // the same CSV reuses the existing DB row instead of creating a new orphan.
-        // Using Date.now() here was the bug — it created a new ID every import,
-        // leaving the old divider row orphaned in the DB (never deleted because
-        // the delete pass only targets steps whose id is NOT in the current live list,
-        // but the old divider still referenced the same test_id so it survived and
-        // accumulated at position 0 on reload since serial_no is null for dividers).
-        const stableLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 40);
-        const divId = `${test.id}_div_${stableLabel}_${i}`;
-        ns.push({
-          id: divId,
-          serialNo: null,       // null not "" — safe for integer DB column
-          action: label,
-          result: "",
-          remarks: "",
-          status: "pending",
-          isDivider: true,
-        });
-      } else {
-        stepCounter++;
-        // Determine SN from CSV col[0], else auto-assign
-        const csvSN =
-          rawFirst !== ""
-            ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
-            : stepCounter;
+        if (rawFirst.startsWith("$$$")) {
+          const label =
+            rawFirst.slice(3).trim() ||
+            cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
+            "Section";
+          const stableLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 40);
+          const divId = `${targetTestId}_div_${stableLabel}_${i}`;
+          result.push({
+            id: divId,
+            serialNo: null,
+            action: label,
+            result: "",
+            remarks: "",
+            status: "pending",
+            isDivider: true,
+          });
+        } else {
+          stepCounter++;
+          const csvSN =
+            rawFirst !== ""
+              ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
+              : stepCounter;
 
-        // Reuse existing step by SN so the ID is stable across re-imports
-        const existing = existingBySN[String(csvSN)];
-        const stableId = existing?.id || `${test.id}_s${csvSN}`;
+          const existing = existingBySN[String(csvSN)];
+          const stableId = existing?.id || `${targetTestId}_s${csvSN}`;
 
-        ns.push({
-          ...(existing || {}),
-          id: stableId,
-          isDivider: false,
-          serialNo: csvSN,
-          action: cols[1] !== undefined ? cols[1] : (existing?.action ?? ""),
-          result: cols[2] !== undefined ? cols[2] : (existing?.result ?? ""),
-          // Always preserve tester's existing remarks + status — never overwrite on re-import
-          remarks: existing?.remarks ?? "",
-          status:  existing?.status  ?? "pending",
-        });
-      }
-    });
+          result.push({
+            ...(existing || {}),
+            id: stableId,
+            isDivider: false,
+            serialNo: csvSN,
+            action: cols[1] !== undefined ? cols[1] : (existing?.action ?? ""),
+            result: cols[2] !== undefined ? cols[2] : (existing?.result ?? ""),
+            // Preserve each module's tester remarks + status — never overwrite
+            remarks: existing?.remarks ?? "",
+            status:  existing?.status  ?? "pending",
+          });
+        }
+      });
 
+      return result;
+    };
+
+    // Build steps for the current test (to update local state immediately)
+    const ns = buildStepsForTest(test, test.id);
     setSteps(ns);
-    commit(ns);
+
+    // Now propagate to ALL modules at the same test-index (testIdx)
+    localCommitRef.current = true;
+    const updatedModules = {};
+    for (const [modId, m] of Object.entries(allModules)) {
+      const targetTest = m.tests[testIdx];
+      if (!targetTest) {
+        // Module doesn't have a test at this index — leave it unchanged
+        updatedModules[modId] = m;
+        continue;
+      }
+      const targetSteps = buildStepsForTest(targetTest, targetTest.id);
+      const updTests = m.tests.map((t, i) =>
+        i === testIdx ? { ...t, steps: targetSteps } : t
+      );
+      updatedModules[modId] = { ...m, tests: updTests };
+    }
+
+    saveMods(updatedModules);
     setCsvOpen(false);
+
+    const modCount = Object.values(allModules).filter((m) => m.tests[testIdx]).length;
     toast(
-      `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""}`,
+      `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""} → synced to ${modCount} module${modCount !== 1 ? "s" : ""}`,
       "success"
     );
     addLog({
       ts: Date.now(),
       user: session.name,
-      action: `CSV imported into ${mod.name} › ${test.name} (${dataLines.length} rows)`,
+      action: `CSV imported into Test ${testIdx + 1} across ${modCount} modules (${dataLines.length} rows each)`,
       type: "info",
     });
   };
