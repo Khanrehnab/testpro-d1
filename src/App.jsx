@@ -22,7 +22,11 @@ const store = {
       const stepsByTest = {};
       for (const s of steps || []) {
         if (!stepsByTest[s.test_id]) stepsByTest[s.test_id] = [];
-        stepsByTest[s.test_id].push(s);
+        stepsByTest[s.test_id].push({
+          ...s,
+          serialNo: s.serial_no,
+          isDivider: s.is_divider ?? false,
+        });
       }
 
       const testsByModule = {};
@@ -76,17 +80,16 @@ const store = {
     }
     if (allSteps.length) {
       await supabase.from("steps").upsert(
-        allSteps.map(
-          ({ id, test_id, serial_no, action, result, remarks, status }) => ({
-            id,
-            test_id,
-            serial_no,
-            action,
-            result,
-            remarks,
-            status,
-          })
-        )
+        allSteps.map((s) => ({
+          id: s.id,
+          test_id: s.test_id,
+          serial_no: s.serialNo ?? s.serial_no,
+          action: s.action,
+          result: s.result,
+          remarks: s.remarks,
+          status: s.status,
+          is_divider: s.isDivider ?? false,
+        }))
       );
     }
   },
@@ -255,6 +258,7 @@ function makeStep(testId, n) {
     result: "",
     remarks: "",
     status: "pending",
+    isDivider: false,
   };
 }
 
@@ -1038,6 +1042,7 @@ function Sidebar({
   collapsed,
   setCollapsed,
   onLogout,
+  locked, // true while a tester holds an unreleased lock
 }) {
   const [search, setSearch] = useState("");
   const modList = useMemo(() => Object.values(modules), [modules]);
@@ -1065,26 +1070,37 @@ function Sidebar({
 
   const navRow = (id, icon, label) => {
     const active = view === id;
+    const isLocked = locked && !active; // locked & trying to leave current view
     return (
       <div
         key={id}
-        onClick={() => setView(id)}
+        onClick={() => {
+          if (isLocked) return;
+          setView(id);
+        }}
+        title={
+          isLocked
+            ? "Finish the current test first to navigate away"
+            : undefined
+        }
         style={{
           display: "flex",
           alignItems: "center",
           gap: 10,
           padding: "8px 16px",
-          cursor: "pointer",
+          cursor: isLocked ? "not-allowed" : "pointer",
           fontSize: 13,
           fontWeight: 500,
-          color: active ? C.ac : C.t2,
+          color: active ? C.ac : isLocked ? C.t3 : C.t2,
           background: active ? "#eff6ff" : "transparent",
           borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
+          opacity: isLocked ? 0.45 : 1,
           transition: "all .15s",
         }}
       >
         <Ico n={icon} s={15} />
         {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
+        {isLocked && !collapsed && <Ico n="lock" s={10} />}
       </div>
     );
   };
@@ -1222,17 +1238,32 @@ function Sidebar({
                 <div
                   key={m.id}
                   onClick={() => {
+                    if (locked && !(selMod === m.id && view === "mod")) return;
                     setSelMod(m.id);
                     setView("mod");
                   }}
+                  title={
+                    locked && !(selMod === m.id && view === "mod")
+                      ? "Finish the current test first"
+                      : undefined
+                  }
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
                     padding: "7px 16px",
-                    cursor: "pointer",
+                    cursor:
+                      locked && !(selMod === m.id && view === "mod")
+                        ? "not-allowed"
+                        : "pointer",
                     fontSize: 13,
-                    color: active ? C.ac : C.t2,
+                    color: active
+                      ? C.ac
+                      : locked && !(selMod === m.id && view === "mod")
+                      ? C.t3
+                      : C.t2,
+                    opacity:
+                      locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
                     background: active ? "#eff6ff" : "transparent",
                     borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
                     transition: "all .12s",
@@ -1823,6 +1854,9 @@ function CsvImportModal({ onImport, onClose }) {
         <div>1,Navigate to login page,Login page loads correctly</div>
         <div>2,Enter valid credentials,Fields accept input</div>
         <div>3,Click Submit,User is redirected to dashboard</div>
+        <div style={{ color: "#9ca3af", marginTop: 4 }}>
+          $$$Section Title — creates a divider row
+        </div>
       </div>
       <ModalActions>
         <button style={btn()} onClick={onClose}>
@@ -1830,6 +1864,39 @@ function CsvImportModal({ onImport, onClose }) {
         </button>
       </ModalActions>
     </Modal>
+  );
+}
+
+// ── Divider Row — full-width section separator ($$$ CSV rows) ─────────────────
+function DividerRow({ label }) {
+  return (
+    <div
+      style={{
+        gridColumn: "1 / -1",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "6px 14px",
+        background: "linear-gradient(90deg,#eff6ff,#f8faff)",
+        borderBottom: `1px solid ${C.b1}`,
+      }}
+    >
+      <div style={{ height: 1, width: 10, background: C.b2, flexShrink: 0 }} />
+      <span
+        style={{
+          fontSize: 10,
+          fontFamily: F.mono,
+          fontWeight: 700,
+          color: C.ac,
+          textTransform: "uppercase",
+          letterSpacing: "1.2px",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, background: C.b2 }} />
+    </div>
   );
 }
 
@@ -2038,6 +2105,7 @@ function TestDetail({
   addLog,
   toast,
   onBack,
+  onFinish,
 }) {
   const isAdmin = session.role === "admin";
   const [steps, setSteps] = useState(test.steps);
@@ -2053,14 +2121,36 @@ function TestDetail({
   const rowRefs = useRef({}); // keyed by original step index
   const tableRef = useRef();
 
-  // Keep local steps in sync if parent changes; reset active to first pending
+  // Track whether the last setSteps came from a local commit (vs RT push).
+  // When it's local we skip the sync-from-parent echo a few ms later.
+  const localCommitRef = useRef(false);
+
+  // Re-sync steps when the parent test identity changes (new test opened).
   useEffect(() => {
     setSteps(test.steps);
     setRenVal(test.name);
     setDescVal(test.description || "");
-    const firstPending = test.steps.findIndex((s) => s.status === "pending");
+    const firstPending = test.steps.findIndex(
+      (s) => !s.isDivider && s.status === "pending"
+    );
     setActiveIdx(firstPending >= 0 ? firstPending : 0);
+    localCommitRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [test.id]);
+
+  // Re-sync steps when a remote RT update arrives (different user changed a step).
+  // Skips if we just committed locally (to avoid overwriting in-progress remarks).
+  const testStepsFingerprint = test.steps
+    .map((s) => s.id + ":" + s.status + ":" + (s.remarks || ""))
+    .join("|");
+  useEffect(() => {
+    if (localCommitRef.current) {
+      localCommitRef.current = false;
+      return;
+    }
+    setSteps(test.steps);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testStepsFingerprint]);
 
   // When activeIdx changes, bring that row into prominent view at top of container
   useEffect(() => {
@@ -2083,6 +2173,7 @@ function TestDetail({
 
   const commit = useCallback(
     (newSteps, newName, newDesc) => {
+      localCommitRef.current = true; // suppress next RT echo (it's our own save)
       const updTest = {
         ...test,
         steps: newSteps,
@@ -2125,13 +2216,14 @@ function TestDetail({
       const updVisible = ns
         .map((s, idx) => ({ ...s, _i: idx }))
         .filter((s) => {
+          if (s.isDivider) return false;
           if (fStat !== "all" && s.status !== fStat) return false;
           if (search) {
             const q = search.toLowerCase();
             return (
-              s.action.toLowerCase().includes(q) ||
-              s.result.toLowerCase().includes(q) ||
-              s.remarks.toLowerCase().includes(q) ||
+              (s.action || "").toLowerCase().includes(q) ||
+              (s.result || "").toLowerCase().includes(q) ||
+              (s.remarks || "").toLowerCase().includes(q) ||
               String(s.serialNo).includes(q)
             );
           }
@@ -2174,7 +2266,9 @@ function TestDetail({
   };
 
   const resetAll = () => {
-    const ns = steps.map((s) => ({ ...s, status: "pending" }));
+    const ns = steps.map((s) =>
+      s.isDivider ? s : { ...s, status: "pending" }
+    );
     setSteps(ns);
     commit(ns);
     setActiveIdx(0);
@@ -2187,30 +2281,51 @@ function TestDetail({
     });
   };
 
-  // CSV import — SN from col[0], Action from col[1], Result from col[2]
+  // CSV import — SN col[0], Action col[1], Result col[2]
+  // Rows whose first column starts with $$$ become section dividers.
   const importCSV = (text) => {
     const lines = text.trim().split("\n");
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
     const dataLines = lines.slice(start).slice(0, 1000);
-    const ns = [...steps];
-    // Grow steps array if CSV has more rows than current steps
-    const needed = dataLines.length - ns.length;
-    if (needed > 0)
-      for (let i = 0; i < needed; i++)
-        ns.push(makeStep(test.id, ns.length + 1));
+    const ns = [];
     dataLines.forEach((line, i) => {
       const cols = csvParse(line);
-      ns[i] = {
-        ...ns[i],
-        serialNo:
-          cols[0] !== undefined && cols[0] !== ""
-            ? isNaN(Number(cols[0]))
-              ? cols[0]
-              : Number(cols[0])
-            : ns[i].serialNo,
-        action: cols[1] !== undefined ? cols[1] : ns[i].action,
-        result: cols[2] !== undefined ? cols[2] : ns[i].result,
-      };
+      const rawFirst = (cols[0] || "").trim();
+      if (rawFirst.startsWith("$$$")) {
+        // Section divider: label is everything after $$$
+        const label =
+          rawFirst.slice(3).trim() ||
+          cols
+            .slice(1)
+            .map((c) => c.trim())
+            .filter(Boolean)
+            .join(" ") ||
+          "Section";
+        ns.push({
+          id: `${test.id}_div_${Date.now()}_${i}`,
+          serialNo: "",
+          action: label,
+          result: "",
+          remarks: "",
+          status: "pending",
+          isDivider: true,
+        });
+      } else {
+        const existing = steps[i] || makeStep(test.id, ns.length + 1);
+        ns.push({
+          ...existing,
+          id: existing.id || `${test.id}_s${ns.length + 1}`,
+          isDivider: false,
+          serialNo:
+            rawFirst !== ""
+              ? isNaN(Number(rawFirst))
+                ? rawFirst
+                : Number(rawFirst)
+              : existing.serialNo,
+          action: cols[1] !== undefined ? cols[1] : existing.action,
+          result: cols[2] !== undefined ? cols[2] : existing.result,
+        });
+      }
     });
     setSteps(ns);
     commit(ns);
@@ -2229,15 +2344,19 @@ function TestDetail({
 
   const exportCSV = () => {
     const rows = [["Serial No", "Action", "Result", "Remarks", "Status"]];
-    steps.forEach((s) =>
-      rows.push([
-        s.serialNo,
-        `"${s.action}"`,
-        `"${s.result}"`,
-        `"${s.remarks}"`,
-        s.status,
-      ])
-    );
+    steps.forEach((s) => {
+      if (s.isDivider) {
+        rows.push([`"$$$${s.action}"`, "", "", "", ""]);
+      } else {
+        rows.push([
+          s.serialNo,
+          `"${s.action}"`,
+          `"${s.result}"`,
+          `"${s.remarks}"`,
+          s.status,
+        ]);
+      }
+    });
     const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
       type: "text/csv",
     });
@@ -2316,23 +2435,25 @@ function TestDetail({
     toast("PDF ready — use browser print dialog", "info");
   };
 
-  const pass = steps.filter((s) => s.status === "pass").length;
-  const fail = steps.filter((s) => s.status === "fail").length;
-  const pending = steps.length - pass - fail;
-  const pct = Math.round((pass / Math.max(steps.length, 1)) * 100);
+  const realSteps = useMemo(() => steps.filter((s) => !s.isDivider), [steps]);
+  const pass = realSteps.filter((s) => s.status === "pass").length;
+  const fail = realSteps.filter((s) => s.status === "fail").length;
+  const pending = realSteps.length - pass - fail;
+  const pct = Math.round((pass / Math.max(realSteps.length, 1)) * 100);
 
   const visible = useMemo(
     () =>
       steps
         .map((s, i) => ({ ...s, _i: i }))
         .filter((s) => {
+          if (s.isDivider) return true; // always show dividers
           if (fStat !== "all" && s.status !== fStat) return false;
           if (search) {
             const q = search.toLowerCase();
             return (
-              s.action.toLowerCase().includes(q) ||
-              s.result.toLowerCase().includes(q) ||
-              s.remarks.toLowerCase().includes(q) ||
+              (s.action || "").toLowerCase().includes(q) ||
+              (s.result || "").toLowerCase().includes(q) ||
+              (s.remarks || "").toLowerCase().includes(q) ||
               String(s.serialNo).includes(q)
             );
           }
@@ -2453,6 +2574,28 @@ function TestDetail({
             <Ico n="reset" s={12} /> Reset
           </button>
         )}
+        {!isAdmin && onFinish && (
+          <button
+            style={grBtn(smBtn())}
+            onClick={() => {
+              commit(steps);
+              addLog({
+                ts: Date.now(),
+                user: session.name,
+                action: `Finished ${mod.name} › ${test.name}`,
+                type: "info",
+              });
+              toast(
+                "Test finished — progress saved & lock released",
+                "success"
+              );
+              onFinish(steps);
+            }}
+            title="Save progress and release the lock so others can continue"
+          >
+            <Ico n="check" s={12} /> Finish Test
+          </button>
+        )}
       </div>
 
       <div
@@ -2496,7 +2639,7 @@ function TestDetail({
       >
         <div style={{ display: "flex", gap: 4 }}>
           {[
-            ["all", "All", steps.length],
+            ["all", "All", realSteps.length],
             ["pass", "Pass", pass],
             ["fail", "Fail", fail],
             ["pending", "Pending", pending],
@@ -2614,20 +2757,24 @@ function TestDetail({
               : "No steps match."}
           </div>
         )}
-        {visible.map((s) => (
-          <StepRow
-            key={s.id}
-            step={s}
-            idx={s._i}
-            onChange={setField}
-            onStatusToggle={setStatusToggle}
-            isActive={activeIdx === s._i}
-            onActivate={() => setActiveIdx(s._i)}
-            rowRef={(el) => {
-              rowRefs.current[s._i] = el;
-            }}
-          />
-        ))}
+        {visible.map((s) =>
+          s.isDivider ? (
+            <DividerRow key={s.id} label={s.action} />
+          ) : (
+            <StepRow
+              key={s.id}
+              step={s}
+              idx={s._i}
+              onChange={setField}
+              onStatusToggle={setStatusToggle}
+              isActive={activeIdx === s._i}
+              onActivate={() => setActiveIdx(s._i)}
+              rowRef={(el) => {
+                rowRefs.current[s._i] = el;
+              }}
+            />
+          )
+        )}
       </div>
 
       {csvOpen && isAdmin && (
@@ -2649,6 +2796,7 @@ function ModuleView({
   addLog,
   toast,
   onNav,
+  onLockChange, // callback(bool) — tells root App when a lock is acquired/released
   modIdx,
   modTotal,
 }) {
@@ -2669,6 +2817,9 @@ function ModuleView({
   selTestIdxRef.current = selTestIdx;
   modTestsRef.current = mod.tests;
 
+  // UI convenience: true while this tester holds an unreleased lock on any test in this module
+  const [uiLocked, setUiLocked] = useState(false);
+
   // Poll locks every 5 seconds so all users see live lock state
   useEffect(() => {
     let alive = true;
@@ -2685,20 +2836,17 @@ function ModuleView({
   }, []);
 
   // Heartbeat: while a tester has a test open, refresh locked_at every 25s.
-  // Cleanup fires when selTestIdx changes (test switched or closed) — this
-  // correctly stops the beat and clears activeTestIdRef for the old test.
+  // activeTestIdRef is NOT cleared here — it persists across goBack() so that
+  // beforeunload can still fire a beacon even when the tester is on the list view.
+  // It is only cleared explicitly by finishTest() or the module-change effect.
   useEffect(() => {
     if (isAdmin || selTestIdx === null) return;
     const test = mod.tests[selTestIdx];
     if (!test) return;
-    activeTestIdRef.current = test.id;
     const beat = setInterval(() => {
       lockStore.heartbeat(test.id, session.id);
     }, HEARTBEAT_MS);
-    return () => {
-      clearInterval(beat);
-      activeTestIdRef.current = null;
-    };
+    return () => clearInterval(beat);
   }, [selTestIdx, isAdmin]);
 
   // beforeunload: best-effort release on normal tab/window close (testers only).
@@ -2729,10 +2877,12 @@ function ModuleView({
   // Uses refs so this always sees the latest selTestIdx / mod.tests values
   // even though the effect only re-runs when mod.id changes.
   useEffect(() => {
-    const idx = selTestIdxRef.current;
-    const tests = modTestsRef.current;
-    if (!isAdmin && idx !== null && tests[idx]) {
-      lockStore.release(tests[idx].id, session.id);
+    const testId = activeTestIdRef.current;
+    if (!isAdmin && testId) {
+      lockStore.release(testId, session.id);
+      activeTestIdRef.current = null;
+      if (onLockChange) onLockChange(false);
+      setUiLocked(false);
     }
     setSelTestIdx(null);
     setSearch("");
@@ -2742,26 +2892,39 @@ function ModuleView({
   const openTest = async (realIdx) => {
     const test = mod.tests[realIdx];
     if (!test) return;
-    // Admin bypasses lock — opens freely without acquiring
     if (!isAdmin) {
       const result = await lockStore.acquire(test.id, session.id, session.name);
       if (!result.ok) {
         toast(
-          `Test locked by ${result.by} — wait until they close it`,
+          `🔒 Locked by ${result.by} — they must click "Finish Test" first`,
           "error"
         );
         return;
       }
       setLocks(await lockStore.getAll());
+      // Track which test is locked so beforeunload can release it even from list view
+      activeTestIdRef.current = test.id;
+      if (onLockChange) onLockChange(true);
+      setUiLocked(true);
     }
     setSelTestIdx(realIdx);
   };
 
-  const closeTest = async () => {
-    // Release the lock for the test being closed, then go back to test list
+  // Back button: return to test list WITHOUT releasing the lock.
+  // The lock stays alive (heartbeat keeps it fresh) so the tester can come back.
+  const goBack = () => {
+    setSelTestIdx(null);
+  };
+
+  // Finish Test: saves, releases lock, clears ref, returns to test list.
+  // This is the canonical way for a tester to hand off a test.
+  const finishTest = async (finalSteps) => {
     if (!isAdmin && selTestIdx !== null && mod.tests[selTestIdx]) {
       await lockStore.release(mod.tests[selTestIdx].id, session.id);
+      activeTestIdRef.current = null; // lock released — no need for beforeunload beacon
       setLocks(await lockStore.getAll());
+      if (onLockChange) onLockChange(false);
+      setUiLocked(false);
     }
     setSelTestIdx(null);
   };
@@ -2824,7 +2987,8 @@ function ModuleView({
         saveMods={saveMods}
         addLog={addLog}
         toast={toast}
-        onBack={closeTest}
+        onBack={goBack}
+        onFinish={finishTest}
       />
     );
   }
@@ -2902,7 +3066,8 @@ function ModuleView({
         <button
           style={smBtn()}
           onClick={() => onNav(-1)}
-          disabled={modIdx === 0}
+          disabled={modIdx === 0 || uiLocked}
+          title={uiLocked ? "Finish the current test first" : undefined}
         >
           <Ico n="chevL" s={12} />
         </button>
@@ -2912,7 +3077,8 @@ function ModuleView({
         <button
           style={smBtn()}
           onClick={() => onNav(1)}
-          disabled={modIdx === modTotal - 1}
+          disabled={modIdx === modTotal - 1 || uiLocked}
+          title={uiLocked ? "Finish the current test first" : undefined}
         >
           <Ico n="chevR" s={12} />
         </button>
@@ -4025,6 +4191,7 @@ export default function App() {
   const [view, setView] = useState("dash");
   const [selMod, setSelMod] = useState(null);
   const [sideColl, setSideColl] = useState(false);
+  const [hasLock, setHasLock] = useState(false); // true while current tester holds an unreleased test lock
   const { push: toast, Host: ToastHost } = useToast();
 
   useEffect(() => {
@@ -4101,7 +4268,8 @@ export default function App() {
                   remarks: row.remarks,
                   action: row.action,
                   result: row.result,
-                  serial_no: row.serial_no,
+                  serialNo: row.serial_no,
+                  isDivider: row.is_divider ?? false,
                 };
                 const updatedTests = [...mod.tests];
                 updatedTests[testIdx] = { ...test, steps: updatedSteps };
@@ -4120,10 +4288,15 @@ export default function App() {
                 const test = mod.tests[testIdx];
                 if (test.steps.some((s) => s.id === row.id)) break; // already local
                 const updatedTests = [...mod.tests];
+                const normRow = {
+                  ...row,
+                  serialNo: row.serial_no,
+                  isDivider: row.is_divider ?? false,
+                };
                 updatedTests[testIdx] = {
                   ...test,
-                  steps: [...test.steps, row].sort(
-                    (a, b) => (a.serial_no ?? 0) - (b.serial_no ?? 0)
+                  steps: [...test.steps, normRow].sort(
+                    (a, b) => (a.serialNo ?? 0) - (b.serialNo ?? 0)
                   ),
                 };
                 next[modId] = { ...mod, tests: updatedTests };
@@ -4276,6 +4449,7 @@ export default function App() {
       setSession(null);
       setView("dash");
       setSelMod(null);
+      setHasLock(false);
     }
   }, [users, session]);
 
@@ -4284,6 +4458,7 @@ export default function App() {
     setSession(null);
     setView("dash");
     setSelMod(null);
+    setHasLock(false);
     // Release locks in background only for testers
     if (u && u.role !== "admin") lockStore.releaseAll(u.id);
   }, []);
@@ -4361,6 +4536,7 @@ export default function App() {
         }}
         collapsed={sideColl}
         setCollapsed={setSideColl}
+        locked={session.role !== "admin" && hasLock}
         onLogout={() => {
           addLog({
             ts: Date.now(),
@@ -4402,7 +4578,9 @@ export default function App() {
             saveMods={saveMods}
             addLog={addLog}
             toast={toast}
+            onLockChange={(locked) => setHasLock(locked)}
             onNav={(dir) => {
+              if (hasLock) return; // can't switch modules while lock is held
               const nk = modKeys[modIdx + dir];
               if (nk) setSelMod(nk);
             }}
@@ -4428,3 +4606,4 @@ export default function App() {
     </div>
   );
 }
+///sdufdwfhhfdufd//
