@@ -97,27 +97,25 @@ const store = {
 
     // ── Delete removed rows BEFORE upserting ────────────────────────────────
     // Steps first (FK child), then tests (FK parent).
+    // NOTE: Supabase PostgREST requires .not("id","in","(id1,id2)") as a
+    // parenthesised string — passing a raw JS array silently no-ops the filter.
 
     // 1. Delete steps that belong to live tests but are no longer in local state
-    if (liveTestIds.length && liveStepIds.length) {
-      await supabase
-        .from("steps")
-        .delete()
-        .in("test_id", liveTestIds)
-        .not("id", "in", liveStepIds);        // ← correct: pass array directly
-    } else if (liveTestIds.length) {
-      await supabase.from("steps").delete().in("test_id", liveTestIds);
+    if (liveTestIds.length) {
+      const stepDel = liveStepIds.length
+        ? supabase.from("steps").delete().in("test_id", liveTestIds)
+            .not("id", "in", `(${liveStepIds.join(",")})`)
+        : supabase.from("steps").delete().in("test_id", liveTestIds);
+      await stepDel;
     }
 
     // 2. Delete tests that belong to live modules but are no longer in local state
-    if (liveModuleIds.length && liveTestIds.length) {
-      await supabase
-        .from("tests")
-        .delete()
-        .in("module_id", liveModuleIds)
-        .not("id", "in", liveTestIds);        // ← correct: pass array directly
-    } else if (liveModuleIds.length) {
-      await supabase.from("tests").delete().in("module_id", liveModuleIds);
+    if (liveModuleIds.length) {
+      const testDel = liveTestIds.length
+        ? supabase.from("tests").delete().in("module_id", liveModuleIds)
+            .not("id", "in", `(${liveTestIds.join(",")})`)
+        : supabase.from("tests").delete().in("module_id", liveModuleIds);
+      await testDel;
     }
 
     // ── Upsert surviving rows ────────────────────────────────────────────────
