@@ -1,45 +1,41 @@
-<svg width="90" height="36" viewBox="0 0 90 36" xmlns="http://www.w3.org/2000/svg">
+<svg width="800" height="800" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
 
   <!-- Main body -->
-  <path d="M4 24 
-           Q10 12, 26 12 
-           H62 
-           Q74 12, 82 18 
-           Q84 19, 82 21 
-           Q74 26, 62 26 
-           H20 
-           Q10 26, 4 24 Z"
-        fill="#1E88E5"/>
+  <rect x="15" y="10" width="70" height="75" rx="20" fill="#FAFAFA"/>
 
-  <!-- Nose (darker for definition) -->
-  <path d="M4 24 
-           Q10 12, 18 13 
-           Q14 18, 18 24 Z"
-        fill="#0D47A1"/>
+  <!-- Windshield -->
+  <path d="M25 20 
+           Q50 10, 75 20 
+           L75 40 
+           Q50 45, 25 40 Z"
+        fill="#263238"/>
 
-  <!-- Cockpit windshield (front window - FIXED) -->
-  <path d="M18 15 
-           Q22 13.5, 26 15 
-           L24 18 
-           Q21 17, 18 17 Z"
-        fill="#BBDEFB"/>
+  <!-- Central headlight -->
+  <circle cx="50" cy="48" r="4" fill="#FFD54F"/>
+  <circle cx="50" cy="48" r="2" fill="#FFF176"/>
 
-  <!-- Passenger window band (aligned, not overlapping front) -->
-  <rect x="28" y="14" width="36" height="4" rx="2" fill="#E3F2FD"/>
+  <!-- Side headlights -->
+  <circle cx="32" cy="52" r="2.5" fill="#FFD54F"/>
+  <circle cx="68" cy="52" r="2.5" fill="#FFD54F"/>
 
-  <!-- Accent stripe -->
-  <path d="M26 20 
-           H60 
-           Q68 20, 70 22 
-           Q68 23, 60 23 
-           H26 Z"
-        fill="#64B5F6"/>
+  <!-- Orange accent -->
+  <path d="M30 58 
+           Q50 68, 70 58" 
+        stroke="#FF6F00" stroke-width="4" fill="none"/>
 
-  <!-- Wheels -->
-  <circle cx="32" cy="27" r="2.2" fill="#424242"/>
-  <circle cx="60" cy="27" r="2.2" fill="#424242"/>
+  <!-- Lower grille -->
+  <rect x="40" y="64" width="20" height="5" rx="2.5" fill="#CFD8DC"/>
 
-  <!-- Subtle shadow -->
-  <ellipse cx="45" cy="29" rx="28" ry="2" fill="#BDBDBD" opacity="0.35"/>
+  <!-- Cattle guard (pilot) -->
+  <path d="M35 75 
+           L50 85 
+           L65 75 
+           L60 75 
+           L50 82 
+           L40 75 Z"
+        fill="#90A4AE"/>
+
+  <!-- Shadow -->
+  <ellipse cx="50" cy="92" rx="25" ry="4" fill="#BDBDBD" opacity="0.25"/>
 
 </svg>
