@@ -486,24 +486,25 @@ function buildModules() {
   return out;
 }
 
-// ── Design Tokens — Light Mode ─────────────────────────────────────────────────
+// ── Design Tokens — Orange Theme ───────────────────────────────────────────────
 const C = {
-  bg: "#f0f2f5",
+  bg: "#fdf5ee",
   s1: "#ffffff",
-  s2: "#f6f8fa",
-  s3: "#edf0f4",
-  b1: "#dde2ea",
-  b2: "#c8d0db",
-  ac: "#0070f3",
+  s2: "#fef9f5",
+  s3: "#fdf0e6",
+  b1: "#f5dece",
+  b2: "#ecc9a8",
+  ac: "#ea580c",
   gr: "#16a34a",
   re: "#dc2626",
   am: "#d97706",
-  t1: "#111827",
-  t2: "#4b5563",
-  t3: "#9ca3af",
+  t1: "#1c0f07",
+  t2: "#57534e",
+  t3: "#a8a29e",
   grd: "rgba(22,163,74,0.10)",
   red: "rgba(220,38,38,0.10)",
   amd: "rgba(217,119,6,0.10)",
+  acd: "rgba(234,88,12,0.10)",
 };
 
 // ── Style Helpers ──────────────────────────────────────────────────────────────
@@ -544,7 +545,7 @@ const btn = (x = {}) => ({
   ...x,
 });
 const acBtn = (x = {}) =>
-  btn({ background: "#eff6ff", borderColor: "#bfdbfe", color: C.ac, ...x });
+  btn({ background: "#fff7ed", borderColor: "#fed7aa", color: C.ac, ...x });
 const grBtn = (x = {}) =>
   btn({ background: C.grd, borderColor: "#bbf7d0", color: C.gr, ...x });
 const reBtn = (x = {}) =>
@@ -689,7 +690,7 @@ function PBar({ pct, fail }) {
 
 function Badge({ type }) {
   const map = {
-    admin: { bg: "#dbeafe", color: C.ac },
+    admin: { bg: "#fff7ed", color: C.ac },
     tester: { bg: C.amd, color: C.am },
     active: { bg: C.grd, color: C.gr },
     inactive: { bg: C.red, color: C.re },
@@ -1075,7 +1076,7 @@ function useToast() {
   const cols = {
     success: { bg: "rgba(240,253,244,0.88)", border: "rgba(22,163,74,.35)", color: C.gr },
     error:   { bg: "rgba(254,242,242,0.88)", border: "rgba(220,38,38,.35)",  color: C.re },
-    info:    { bg: "rgba(239,246,255,0.88)", border: "rgba(0,112,243,.35)",  color: C.ac },
+    info:    { bg: "rgba(255,247,237,0.88)", border: "rgba(234,88,12,.35)",  color: C.ac },
   };
   const Host = () => {
     const isMobile = useIsMobile();
@@ -1165,8 +1166,8 @@ const LOGIN_KEYFRAMES = `
   50%      { opacity: 1; }
 }
 @keyframes logoGlow {
-  0%,100% { box-shadow: 0 4px 14px rgba(0,112,243,.30); }
-  50%      { box-shadow: 0 4px 24px rgba(0,112,243,.55), 0 0 0 6px rgba(0,112,243,.08); }
+  0%,100% { box-shadow: 0 4px 14px rgba(234,88,12,.30); }
+  50%      { box-shadow: 0 4px 24px rgba(234,88,12,.55), 0 0 0 6px rgba(234,88,12,.08); }
 }
 @keyframes fadeSlideUp {
   from { opacity: 0; transform: translateY(18px); }
@@ -1236,7 +1237,7 @@ function LoginPage({ users, onLogin }) {
     outline: "none",
     transition: "border-color .18s, background .18s, box-shadow .18s",
     lineHeight: 1.4,
-    boxShadow: focused ? `0 0 0 3px ${hasErr ? "rgba(220,38,38,.10)" : "rgba(0,112,243,.10)"}` : "none",
+    boxShadow: focused ? `0 0 0 3px ${hasErr ? "rgba(220,38,38,.10)" : "rgba(234,88,12,.12)"}` : "none",
   });
   const mdLabel = (focused, filled, hasErr) => ({
     position: "absolute",
@@ -1262,7 +1263,7 @@ function LoginPage({ users, onLogin }) {
         alignItems: "center",
         justifyContent: "center",
         // Animated shifting gradient background
-        background: "linear-gradient(135deg, #c8e6ff, #ddd6fe, #bae6fd, #e0f2fe, #ede9fe)",
+        background: "linear-gradient(135deg, #fde8d0, #fddbb4, #fef3e2, #ffe0cc, #fdf0dc)",
         backgroundSize: "400% 400%",
         animation: "gradShift 12s ease infinite",
         padding: isMobile
@@ -1285,7 +1286,7 @@ function LoginPage({ users, onLogin }) {
         width: isMobile ? 280 : 420,
         height: isMobile ? 280 : 420,
         borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(99,179,237,0.55) 0%, rgba(147,129,255,0.28) 60%, transparent 100%)",
+        background: "radial-gradient(circle, rgba(251,146,60,0.58) 0%, rgba(249,115,22,0.28) 60%, transparent 100%)",
         filter: "blur(48px)",
         animation: "orbA 14s ease-in-out infinite",
         pointerEvents: "none",
@@ -1299,7 +1300,7 @@ function LoginPage({ users, onLogin }) {
         width: isMobile ? 260 : 380,
         height: isMobile ? 260 : 380,
         borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(167,139,250,0.50) 0%, rgba(96,165,250,0.22) 60%, transparent 100%)",
+        background: "radial-gradient(circle, rgba(253,186,116,0.52) 0%, rgba(251,146,60,0.24) 60%, transparent 100%)",
         filter: "blur(52px)",
         animation: "orbB 17s ease-in-out infinite",
         pointerEvents: "none",
@@ -1313,7 +1314,7 @@ function LoginPage({ users, onLogin }) {
         width: isMobile ? 150 : 220,
         height: isMobile ? 150 : 220,
         borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(56,189,248,0.42) 0%, rgba(99,179,237,0.18) 60%, transparent 100%)",
+        background: "radial-gradient(circle, rgba(234,88,12,0.35) 0%, rgba(253,186,116,0.18) 60%, transparent 100%)",
         filter: "blur(36px)",
         animation: "orbC 11s ease-in-out infinite",
         pointerEvents: "none",
@@ -1327,7 +1328,7 @@ function LoginPage({ users, onLogin }) {
         width: isMobile ? 100 : 160,
         height: isMobile ? 100 : 160,
         borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(196,181,253,0.45) 0%, transparent 70%)",
+        background: "radial-gradient(circle, rgba(254,215,170,0.55) 0%, transparent 70%)",
         filter: "blur(28px)",
         animation: "orbA 19s ease-in-out infinite reverse",
         pointerEvents: "none",
@@ -1350,7 +1351,7 @@ function LoginPage({ users, onLogin }) {
           position: "absolute",
           inset: -2,
           borderRadius: 19,
-          background: "linear-gradient(135deg,#00b4d8,#0070f3,#7c3aed,#00b4d8)",
+          background: "linear-gradient(135deg,#f97316,#ea580c,#dc2626,#f97316)",
           backgroundSize: "300% 300%",
           animation: "gradShift 5s ease infinite, borderPulse 3s ease-in-out infinite",
           zIndex: -1,
@@ -1394,7 +1395,7 @@ function LoginPage({ users, onLogin }) {
           {/* Top accent bar — animated gradient */}
           <div style={{
             height: 4,
-            background: "linear-gradient(90deg,#00b4d8,#0070f3,#7c3aed,#0070f3,#00b4d8)",
+            background: "linear-gradient(90deg,#fb923c,#ea580c,#dc2626,#ea580c,#fb923c)",
             backgroundSize: "300% 100%",
             animation: "gradShift 4s ease infinite",
           }} />
