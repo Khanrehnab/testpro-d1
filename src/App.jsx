@@ -110,13 +110,29 @@ const store = {
   // ── saveSteps: surgical save for a single test's steps ─────────────────────
   // Called by commit() in TestDetail — only touches the one test that changed.
   // Much faster than saveModules which would rebuild all 120 modules.
-  async saveSteps(testId, moduleId, steps) {
+  async saveSteps(testId, moduleId, steps, testMeta) {
     const CHUNK = 500;
 
-    // 1. Upsert parent module + test first (FK constraints require them to exist)
-    // We pass minimal data — just enough to satisfy NOT NULL + FK.
-    // The full module/test row will already be in DB from the initial seed.
-    // These upserts are no-ops if nothing changed.
+    // 1. Ensure parent module + test rows exist in DB (FK constraints require them).
+    //    These are lightweight no-ops if the rows already exist.
+    if (moduleId) {
+      const { error: modErr } = await supabase
+        .from("modules")
+        .upsert({ id: moduleId, name: testMeta?.moduleName ?? moduleId, position: 0 }, { onConflict: "id" });
+      if (modErr) console.error("saveSteps: ensure module error:", modErr);
+    }
+    if (testMeta) {
+      const { error: testErr } = await supabase
+        .from("tests")
+        .upsert({
+          id:          testId,
+          module_id:   moduleId,
+          serial_no:   testMeta.serialNo ?? 0,
+          name:        testMeta.name ?? testId,
+          description: testMeta.description ?? "",
+        }, { onConflict: "id" });
+      if (testErr) console.error("saveSteps: ensure test error:", testErr);
+    }
 
     // 2. Build step rows
     const stepsWithPosition = steps.map((s, position) => ({
@@ -1657,11 +1673,21 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
     let n = keys.length + 1;
     while (modules[`m${n}`]) n++;
     const modId = `m${n}`;
+    const modName = `Module ${n}`;
     const tests = Array.from({ length: 5 }, (_, i) =>
       makeTest(modId, i + 1, 10)
     );
-    const newMod = { id: modId, name: `Module ${n}`, tests };
-    saveMods({ ...modules, [modId]: newMod });
+    const newMod = { id: modId, name: modName, tests };
+    saveMods({ ...modules, [modId]: newMod }, true);
+    // Save each new test's default steps surgically (saveModules skips empty-step tests)
+    tests.forEach((t) => {
+      store.saveSteps(t.id, modId, t.steps, {
+        moduleName:  modName,
+        serialNo:    t.serialNo ?? 0,
+        name:        t.name,
+        description: t.description ?? "",
+      }).catch((e) => console.error("addModule saveSteps error:", e));
+    });
     toast(`Module ${n} added`, "success");
     addLog({
       ts: Date.now(),
@@ -1678,13 +1704,13 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
     }
     const updated = { ...modules };
     delete updated[id];
-    saveMods(updated);
+    saveMods(updated, true);
     toast("Module deleted", "info");
     addLog({
       ts: Date.now(),
       user: session.name,
       action: `Deleted module "${modules[id]?.name}"`,
-      type: "warn",
+      type: "info",
     });
     setConfirmDel(null);
   };
@@ -2424,6 +2450,15 @@ function TestDetail({
   const stepsTimerRef = useRef(null);
   const latestStepsRef = useRef(test.steps);
 
+  // Reset step ref whenever we open a different test — prevents stale data bleed
+  useEffect(() => {
+    latestStepsRef.current = test.steps;
+    if (stepsTimerRef.current) {
+      clearTimeout(stepsTimerRef.current);
+      stepsTimerRef.current = null;
+    }
+  }, [test.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const commit = useCallback(
     (newSteps, newName, newDesc) => {
       localCommitRef.current = true; // suppress next RT echo (it's our own save)
@@ -2444,9 +2479,12 @@ function TestDetail({
       latestStepsRef.current = newSteps;
       if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
       stepsTimerRef.current = setTimeout(() => {
-        store.saveSteps(test.id, mod.id, latestStepsRef.current).catch((e) =>
-          console.error("saveSteps error:", e)
-        );
+        store.saveSteps(test.id, mod.id, latestStepsRef.current, {
+          moduleName:  mod.name,
+          serialNo:    test.serialNo ?? test.serial_no ?? 0,
+          name:        newName ?? test.name,
+          description: newDesc ?? test.description ?? "",
+        }).catch((e) => console.error("saveSteps error:", e));
       }, 400);
     },
     [mod, test, testIdx, allModules, saveMods]
@@ -2649,7 +2687,12 @@ function TestDetail({
 
         // Save each test's steps surgically to DB
         savePromises.push(
-          store.saveSteps(targetTest.id, modId, targetSteps).catch((e) =>
+          store.saveSteps(targetTest.id, modId, targetSteps, {
+            moduleName:  m.name,
+            serialNo:    targetTest.serialNo ?? targetTest.serial_no ?? 0,
+            name:        targetTest.name,
+            description: targetTest.description ?? "",
+          }).catch((e) =>
             console.error(`saveSteps error for ${modId}/${targetTest.id}:`, e)
           )
         );
@@ -3252,10 +3295,15 @@ function ModuleView({
       const testId = activeTestIdRef.current;
       if (!testId) return;
       try {
-        // sendBeacon is the most reliable way to fire a request on page unload
-        const url = `${supabase.supabaseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
-        const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
-        if (!sent) lockStore.release(testId, session.id);
+        // supabase.supabaseUrl is the correct property on @supabase/supabase-js v2
+        const baseUrl = supabase.supabaseUrl || supabase.storageUrl?.replace("/storage/v1", "") || "";
+        if (baseUrl) {
+          const url = `${baseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
+          const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
+          if (!sent) lockStore.release(testId, session.id);
+        } else {
+          lockStore.release(testId, session.id);
+        }
       } catch {
         lockStore.release(testId, session.id);
       }
@@ -3318,7 +3366,7 @@ function ModuleView({
   };
 
   const saveModName = (name) => {
-    saveMods({ ...allModules, [mod.id]: { ...mod, name } });
+    saveMods({ ...allModules, [mod.id]: { ...mod, name } }, true);
     toast("Renamed", "success");
     addLog({
       ts: Date.now(),
@@ -3332,7 +3380,14 @@ function ModuleView({
     const n = mod.tests.length + 1;
     const nt = makeTest(mod.id, n, 10);
     const updated = { ...mod, tests: [...mod.tests, nt] };
-    saveMods({ ...allModules, [mod.id]: updated });
+    saveMods({ ...allModules, [mod.id]: updated }, true);
+    // saveModules only upserts test rows — save the new test's default steps surgically
+    store.saveSteps(nt.id, mod.id, nt.steps, {
+      moduleName:  mod.name,
+      serialNo:    n,
+      name:        nt.name,
+      description: nt.description ?? "",
+    }).catch((e) => console.error("addTest saveSteps error:", e));
     toast(`Test ${n} added`, "success");
     addLog({
       ts: Date.now(),
@@ -3353,13 +3408,13 @@ function ModuleView({
         .filter((_, i) => i !== idx)
         .map((t, i) => ({ ...t, serialNo: i + 1, serial_no: i + 1, name: `Test ${i + 1}` })),
     };
-    saveMods({ ...allModules, [mod.id]: updated });
+    saveMods({ ...allModules, [mod.id]: updated }, true);
     toast("Test deleted", "info");
     addLog({
       ts: Date.now(),
       user: session.name,
       action: `Deleted test from ${mod.name}`,
-      type: "warn",
+      type: "info",
     });
   };
 
@@ -4360,7 +4415,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
       ts: Date.now(),
       user: session.name,
       action: `Deleted user "${u.name}"`,
-      type: "warn",
+      type: "info",
     });
   };
   const toggle = (u) => {
@@ -4373,7 +4428,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
       ts: Date.now(),
       user: session.name,
       action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`,
-      type: "warn",
+      type: "info",
     });
   };
 
@@ -4653,15 +4708,25 @@ export default function App() {
 
   // Always keep a ref to the latest modules so the debounced DB write
   // never uses a stale snapshot captured in an old closure.
-  const latestModulesRef = useRef(null);
-  const saveModsTimerRef = useRef(null);
-  const saveMods = useCallback((m) => {
+  const latestModulesRef   = useRef(null);
+  const saveModsTimerRef   = useRef(null);
+  const structuralFlagRef  = useRef(false); // true when a structural change needs saveModules
+
+  // saveMods(m)             — step-only change: update React state, skip saveModules
+  // saveMods(m, true)       — structural change (add/rename/delete module or test):
+  //                           update React state AND debounce saveModules
+  const saveMods = useCallback((m, structural = false) => {
     setModules(m);
-    latestModulesRef.current = m; // always track the very latest value
-    // Debounce DB writes — cancels previous timer so only the final state
-    // in a burst of rapid calls (e.g. keystrokes) is persisted.
+    latestModulesRef.current = m;
+    if (structural) structuralFlagRef.current = true; // latch: once set, stays true until timer fires
+
+    // Only schedule a saveModules call when there is a structural change pending.
+    // Step saves are handled surgically by saveSteps in commit().
+    if (!structuralFlagRef.current) return;
+
     if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current);
     saveModsTimerRef.current = setTimeout(() => {
+      structuralFlagRef.current = false;
       store.saveModules(latestModulesRef.current); // use ref, never stale closure
     }, 400);
   }, []);
