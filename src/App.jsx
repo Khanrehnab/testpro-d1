@@ -1126,6 +1126,54 @@ function useToast() {
 }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
+const LOGIN_KEYFRAMES = `
+@keyframes gradShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes orbA {
+  0%   { transform: translate(0px, 0px) scale(1); }
+  33%  { transform: translate(40px, -30px) scale(1.08); }
+  66%  { transform: translate(-20px, 20px) scale(0.95); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+@keyframes orbB {
+  0%   { transform: translate(0px, 0px) scale(1); }
+  33%  { transform: translate(-35px, 25px) scale(1.05); }
+  66%  { transform: translate(25px, -15px) scale(0.97); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+@keyframes orbC {
+  0%   { transform: translate(0px, 0px) scale(1); }
+  50%  { transform: translate(20px, 30px) scale(1.06); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+@keyframes cardFloat {
+  0%   { transform: translateY(0px); }
+  50%  { transform: translateY(-7px); }
+  100% { transform: translateY(0px); }
+}
+@keyframes shimmerSweep {
+  0%   { transform: translateX(-100%) rotate(25deg); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(400%) rotate(25deg); opacity: 0; }
+}
+@keyframes borderPulse {
+  0%,100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+@keyframes logoGlow {
+  0%,100% { box-shadow: 0 4px 14px rgba(0,112,243,.30); }
+  50%      { box-shadow: 0 4px 24px rgba(0,112,243,.55), 0 0 0 6px rgba(0,112,243,.08); }
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+`;
+
 function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
@@ -1171,22 +1219,24 @@ function LoginPage({ users, onLogin }) {
     </svg>
   );
 
-  // Shared MUI-style outlined field styles
   const fieldWrap = { position: "relative", width: "100%", boxSizing: "border-box" };
   const mdInput = (focused, hasErr) => ({
     display: "block",
     width: "100%",
     boxSizing: "border-box",
     padding: "16px 14px 6px",
-    background: focused ? "#fafcff" : C.s2,
-    border: `1.5px solid ${hasErr ? C.re : focused ? C.ac : C.b2}`,
-    borderRadius: 8,
+    background: focused ? "rgba(250,252,255,0.9)" : "rgba(246,248,250,0.7)",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
+    border: `1.5px solid ${hasErr ? C.re : focused ? C.ac : "rgba(200,208,219,0.8)"}`,
+    borderRadius: 10,
     color: C.t1,
     fontFamily: F.sans,
     fontSize: 16,
     outline: "none",
-    transition: "border-color .18s, background .18s",
+    transition: "border-color .18s, background .18s, box-shadow .18s",
     lineHeight: 1.4,
+    boxShadow: focused ? `0 0 0 3px ${hasErr ? "rgba(220,38,38,.10)" : "rgba(0,112,243,.10)"}` : "none",
   });
   const mdLabel = (focused, filled, hasErr) => ({
     position: "absolute",
@@ -1211,208 +1261,338 @@ function LoginPage({ users, onLogin }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        background: "linear-gradient(160deg,#e8f4fd 0%,#ede9fe 55%,#f0f2f5 100%)",
+        // Animated shifting gradient background
+        background: "linear-gradient(135deg, #c8e6ff, #ddd6fe, #bae6fd, #e0f2fe, #ede9fe)",
+        backgroundSize: "400% 400%",
+        animation: "gradShift 12s ease infinite",
         padding: isMobile
           ? `calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 16px)`
           : "40px 20px",
         boxSizing: "border-box",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
-      {/* Card */}
+      {/* Inject keyframes once */}
+      <style>{LOGIN_KEYFRAMES}</style>
+
+      {/* ── Floating background orbs ── */}
+      {/* Orb 1 — large blue-purple, top-left */}
+      <div style={{
+        position: "absolute",
+        top: isMobile ? "-10%" : "-15%",
+        left: isMobile ? "-15%" : "-10%",
+        width: isMobile ? 280 : 420,
+        height: isMobile ? 280 : 420,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(99,179,237,0.55) 0%, rgba(147,129,255,0.28) 60%, transparent 100%)",
+        filter: "blur(48px)",
+        animation: "orbA 14s ease-in-out infinite",
+        pointerEvents: "none",
+        willChange: "transform",
+      }} />
+      {/* Orb 2 — medium violet, bottom-right */}
+      <div style={{
+        position: "absolute",
+        bottom: isMobile ? "-8%" : "-12%",
+        right: isMobile ? "-12%" : "-8%",
+        width: isMobile ? 260 : 380,
+        height: isMobile ? 260 : 380,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(167,139,250,0.50) 0%, rgba(96,165,250,0.22) 60%, transparent 100%)",
+        filter: "blur(52px)",
+        animation: "orbB 17s ease-in-out infinite",
+        pointerEvents: "none",
+        willChange: "transform",
+      }} />
+      {/* Orb 3 — small cyan, top-right */}
+      <div style={{
+        position: "absolute",
+        top: "20%",
+        right: isMobile ? "-5%" : "8%",
+        width: isMobile ? 150 : 220,
+        height: isMobile ? 150 : 220,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(56,189,248,0.42) 0%, rgba(99,179,237,0.18) 60%, transparent 100%)",
+        filter: "blur(36px)",
+        animation: "orbC 11s ease-in-out infinite",
+        pointerEvents: "none",
+        willChange: "transform",
+      }} />
+      {/* Orb 4 — tiny warm, bottom-left */}
+      <div style={{
+        position: "absolute",
+        bottom: "15%",
+        left: isMobile ? "5%" : "12%",
+        width: isMobile ? 100 : 160,
+        height: isMobile ? 100 : 160,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(196,181,253,0.45) 0%, transparent 70%)",
+        filter: "blur(28px)",
+        animation: "orbA 19s ease-in-out infinite reverse",
+        pointerEvents: "none",
+        willChange: "transform",
+      }} />
+
+      {/* ── Card — floats gently up and down ── */}
       <div
         style={{
           width: "100%",
           maxWidth: 420,
-          background: "rgba(255,255,255,0.88)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          borderRadius: 16,
-          boxShadow: "0 2px 4px rgba(0,0,0,.04), 0 12px 40px rgba(0,112,243,.12), 0 1px 0 rgba(255,255,255,.9) inset",
-          border: `1px solid rgba(221,226,234,0.7)`,
-          overflow: "hidden",
+          position: "relative",
+          zIndex: 1,
+          animation: "cardFloat 6s ease-in-out infinite, fadeSlideUp 0.5s ease both",
+          willChange: "transform",
         }}
       >
-        {/* Top accent bar */}
+        {/* Animated gradient border ring behind card */}
         <div style={{
-          height: 4,
-          background: "linear-gradient(90deg,#00b4d8,#0070f3 50%,#7c3aed)",
+          position: "absolute",
+          inset: -2,
+          borderRadius: 19,
+          background: "linear-gradient(135deg,#00b4d8,#0070f3,#7c3aed,#00b4d8)",
+          backgroundSize: "300% 300%",
+          animation: "gradShift 5s ease infinite, borderPulse 3s ease-in-out infinite",
+          zIndex: -1,
+          filter: "blur(1px)",
         }} />
 
-        <div style={{ padding: isMobile ? "28px 24px 24px" : "36px 36px 30px", boxSizing: "border-box" }}>
-
-          {/* Logo + heading */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
+        {/* Card surface */}
+        <div
+          style={{
+            background: "rgba(255,255,255,0.82)",
+            backdropFilter: "blur(28px)",
+            WebkitBackdropFilter: "blur(28px)",
+            borderRadius: 17,
+            boxShadow: "0 8px 32px rgba(0,0,0,.08), 0 1px 0 rgba(255,255,255,.95) inset",
+            border: "1px solid rgba(255,255,255,0.6)",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          {/* Shimmer sweep — runs every 4s */}
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 10,
+            pointerEvents: "none",
+            overflow: "hidden",
+            borderRadius: 17,
+          }}>
             <div style={{
-              width: 48,
-              height: 48,
-              borderRadius: 12,
-              background: "linear-gradient(135deg,#0077b6,#0070f3)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: F.mono,
-              fontWeight: 800,
-              fontSize: 15,
-              color: "#fff",
-              flexShrink: 0,
-              boxShadow: "0 4px 14px rgba(0,112,243,.30)",
-              letterSpacing: "0.5px",
-            }}>
-              TP
-            </div>
-            <div>
-              <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 700, color: C.t1, letterSpacing: "-0.4px", lineHeight: 1.2 }}>
-                Test<span style={{ color: C.ac }}>Pro</span>
-              </div>
-              <div style={{ fontSize: 13, color: C.t3, marginTop: 2, fontFamily: F.sans }}>
-                Sign in to your workspace
-              </div>
-            </div>
+              position: "absolute",
+              top: "-40%",
+              left: 0,
+              width: "45%",
+              height: "180%",
+              background: "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.38) 50%, transparent 70%)",
+              animation: "shimmerSweep 4.5s ease-in-out 0.8s infinite",
+              willChange: "transform",
+            }} />
           </div>
 
-          {/* Error alert */}
-          {err && (
-            <div style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 10,
-              padding: "11px 14px",
-              borderRadius: 8,
-              background: "rgba(220,38,38,.06)",
-              border: `1px solid rgba(220,38,38,.22)`,
-              color: C.re,
-              fontSize: 13,
-              fontFamily: F.sans,
-              marginBottom: 20,
-              lineHeight: 1.45,
-              boxSizing: "border-box",
-            }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              {err}
-            </div>
-          )}
+          {/* Top accent bar — animated gradient */}
+          <div style={{
+            height: 4,
+            background: "linear-gradient(90deg,#00b4d8,#0070f3,#7c3aed,#0070f3,#00b4d8)",
+            backgroundSize: "300% 100%",
+            animation: "gradShift 4s ease infinite",
+          }} />
 
-          {/* Username field — MUI floating label */}
-          <div style={{ ...fieldWrap, marginBottom: 18 }}>
-            <input
-              value={u}
-              onChange={(e) => { setU(e.target.value); setErr(""); }}
-              onFocus={() => setUFocus(true)}
-              onBlur={() => setUFocus(false)}
-              onKeyDown={(e) => e.key === "Enter" && pwRef.current?.focus()}
-              autoFocus
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder=""
-              style={mdInput(uFocus, !!err)}
-            />
-            <label style={mdLabel(uFocus, !!u, !!err)}>Username</label>
-          </div>
+          <div style={{ padding: isMobile ? "28px 24px 26px" : "36px 36px 32px", boxSizing: "border-box" }}>
 
-          {/* Password field — MUI floating label, eye toggle */}
-          <div style={{ ...fieldWrap, marginBottom: 26 }}>
-            <input
-              ref={pwRef}
-              type={showPw ? "text" : "password"}
-              value={p}
-              onChange={(e) => { setP(e.target.value); setErr(""); }}
-              onFocus={() => setPFocus(true)}
-              onBlur={() => setPFocus(false)}
-              onKeyDown={(e) => e.key === "Enter" && go()}
-              autoComplete="current-password"
-              placeholder=""
-              style={{
-                ...mdInput(pFocus, !!err),
-                paddingRight: 48,
-              }}
-            />
-            <label style={mdLabel(pFocus, !!p, !!err)}>Password</label>
-            <button
-              onClick={() => setShowPw((s) => !s)}
-              tabIndex={-1}
-              style={{
-                position: "absolute",
-                right: 12,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: showPw ? C.ac : C.t3,
+            {/* Logo + heading */}
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: 13,
+                background: "linear-gradient(135deg,#0077b6,#0070f3,#7c3aed)",
+                backgroundSize: "200% 200%",
+                animation: "gradShift 6s ease infinite",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: 6,
-                borderRadius: 6,
-                transition: "color .15s",
-                lineHeight: 0,
-              }}
-              title={showPw ? "Hide password" : "Show password"}
-            >
-              <EyeIcon open={showPw} />
-            </button>
-          </div>
+                fontFamily: F.mono,
+                fontWeight: 800,
+                fontSize: 15,
+                color: "#fff",
+                flexShrink: 0,
+                animation: "logoGlow 3s ease-in-out infinite, gradShift 6s ease infinite",
+                letterSpacing: "0.5px",
+              }}>
+                TP
+              </div>
+              <div>
+                <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 700, color: C.t1, letterSpacing: "-0.4px", lineHeight: 1.2 }}>
+                  Test<span style={{ color: C.ac }}>Pro</span>
+                </div>
+                <div style={{ fontSize: 13, color: C.t3, marginTop: 2, fontFamily: F.sans }}>
+                  Sign in to your workspace
+                </div>
+              </div>
+            </div>
 
-          {/* Sign In button — MUI elevated */}
-          <button
-            onClick={go}
-            disabled={loading}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "14px",
-              border: "none",
-              borderRadius: 8,
-              background: loading
-                ? "linear-gradient(90deg,#5ba4f5,#7c9ef5)"
-                : "linear-gradient(90deg,#0070f3,#0077e6)",
-              color: "#fff",
-              fontFamily: F.sans,
-              fontSize: 15,
-              fontWeight: 600,
-              cursor: loading ? "default" : "pointer",
-              boxShadow: loading ? "none" : "0 3px 16px rgba(0,112,243,.38)",
-              letterSpacing: "0.2px",
-              transition: "background .15s, box-shadow .15s, transform .1s",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            {loading ? (
-              <>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                  style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            {/* Error alert */}
+            {err && (
+              <div style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                padding: "11px 14px",
+                borderRadius: 8,
+                background: "rgba(220,38,38,.07)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                border: `1px solid rgba(220,38,38,.25)`,
+                color: C.re,
+                fontSize: 13,
+                fontFamily: F.sans,
+                marginBottom: 20,
+                lineHeight: 1.45,
+                boxSizing: "border-box",
+                animation: "fadeSlideUp .2s ease both",
+              }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                Signing in…
-              </>
-            ) : (
-              <>
-                Sign In
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-              </>
+                {err}
+              </div>
             )}
-          </button>
 
+            {/* Username */}
+            <div style={{ ...fieldWrap, marginBottom: 18 }}>
+              <input
+                value={u}
+                onChange={(e) => { setU(e.target.value); setErr(""); }}
+                onFocus={() => setUFocus(true)}
+                onBlur={() => setUFocus(false)}
+                onKeyDown={(e) => e.key === "Enter" && pwRef.current?.focus()}
+                autoFocus
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder=""
+                style={mdInput(uFocus, !!err)}
+              />
+              <label style={mdLabel(uFocus, !!u, !!err)}>Username</label>
+            </div>
+
+            {/* Password */}
+            <div style={{ ...fieldWrap, marginBottom: 26 }}>
+              <input
+                ref={pwRef}
+                type={showPw ? "text" : "password"}
+                value={p}
+                onChange={(e) => { setP(e.target.value); setErr(""); }}
+                onFocus={() => setPFocus(true)}
+                onBlur={() => setPFocus(false)}
+                onKeyDown={(e) => e.key === "Enter" && go()}
+                autoComplete="current-password"
+                placeholder=""
+                style={{ ...mdInput(pFocus, !!err), paddingRight: 48 }}
+              />
+              <label style={mdLabel(pFocus, !!p, !!err)}>Password</label>
+              <button
+                onClick={() => setShowPw((s) => !s)}
+                tabIndex={-1}
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: showPw ? C.ac : C.t3,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 6,
+                  borderRadius: 6,
+                  transition: "color .15s",
+                  lineHeight: 0,
+                }}
+                title={showPw ? "Hide password" : "Show password"}
+              >
+                <EyeIcon open={showPw} />
+              </button>
+            </div>
+
+            {/* Sign In button */}
+            <button
+              onClick={go}
+              disabled={loading}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "14px",
+                border: "none",
+                borderRadius: 10,
+                background: loading
+                  ? "linear-gradient(90deg,#5ba4f5,#7c9ef5)"
+                  : "linear-gradient(90deg,#0070f3,#7c3aed,#0070f3)",
+                backgroundSize: "200% 100%",
+                animation: loading ? "none" : "gradShift 4s ease infinite",
+                color: "#fff",
+                fontFamily: F.sans,
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: loading ? "default" : "pointer",
+                boxShadow: loading ? "none" : "0 4px 20px rgba(0,112,243,.40)",
+                letterSpacing: "0.2px",
+                transition: "box-shadow .2s, transform .1s",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              {/* Button shimmer */}
+              {!loading && (
+                <div style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.22) 50%, transparent 65%)",
+                  animation: "shimmerSweep 3s ease-in-out 1.5s infinite",
+                  pointerEvents: "none",
+                }} />
+              )}
+              {loading ? (
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                    style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                  Signing in…
+                </>
+              ) : (
+                <>
+                  Sign In
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </>
+              )}
+            </button>
+
+          </div>
         </div>
       </div>
 
       {/* Footer */}
       <div style={{
-        marginTop: 20,
+        marginTop: 22,
         fontSize: 11,
         fontFamily: F.mono,
-        color: "rgba(100,116,139,.65)",
+        color: "rgba(71,85,105,.65)",
         textAlign: "center",
         letterSpacing: "0.3px",
+        position: "relative",
+        zIndex: 1,
       }}>
         TestPro · Internal Testing Tool
       </div>
