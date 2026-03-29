@@ -906,8 +906,10 @@ function Topbar({ title, sub, children }) {
         minHeight: 58,
         padding: isMobile ? "10px 14px" : "0 22px",
         flexShrink: 0,
-        background: C.s1,
-        borderBottom: `1px solid ${C.b1}`,
+        background: "rgba(255,255,255,0.82)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        borderBottom: `1px solid rgba(221,226,234,0.7)`,
         display: "flex",
         alignItems: "center",
         gap: 8,
@@ -983,8 +985,9 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(15,23,42,.35)",
-        backdropFilter: "blur(2px)",
+        background: "rgba(15,23,42,.28)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
         display: "flex",
         alignItems: isMobile ? "flex-end" : "center",
         justifyContent: "center",
@@ -995,11 +998,13 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: isMobile ? "100%" : width,
-          background: C.s1,
-          border: `1px solid ${C.b1}`,
+          background: "rgba(255,255,255,0.92)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          border: `1px solid rgba(221,226,234,0.7)`,
           borderRadius: isMobile ? "14px 14px 0 0" : 14,
           padding: isMobile ? "24px 20px" : "28px 30px",
-          boxShadow: "0 16px 48px rgba(0,0,0,.12)",
+          boxShadow: "0 8px 40px rgba(0,0,0,.14), 0 1px 0 rgba(255,255,255,.8) inset",
           maxHeight: isMobile ? "90vh" : "90vh",
           overflowY: "auto",
         }}
@@ -1068,9 +1073,9 @@ function useToast() {
     setTimeout(() => setList((l) => l.filter((x) => x.id !== id)), 3000);
   }, []);
   const cols = {
-    success: { bg: "#f0fdf4", border: "rgba(22,163,74,.4)", color: C.gr },
-    error: { bg: "#fef2f2", border: "rgba(220,38,38,.4)", color: C.re },
-    info: { bg: "#eff6ff", border: "rgba(0,112,243,.4)", color: C.ac },
+    success: { bg: "rgba(240,253,244,0.88)", border: "rgba(22,163,74,.35)", color: C.gr },
+    error:   { bg: "rgba(254,242,242,0.88)", border: "rgba(220,38,38,.35)",  color: C.re },
+    info:    { bg: "rgba(239,246,255,0.88)", border: "rgba(0,112,243,.35)",  color: C.ac },
   };
   const Host = () => {
     const isMobile = useIsMobile();
@@ -1095,16 +1100,18 @@ function useToast() {
             key={t.id}
             style={{
               padding: "10px 16px",
-              borderRadius: 8,
+              borderRadius: 10,
               border: `1px solid ${c.border}`,
               background: c.bg,
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
               color: c.color,
               fontFamily: F.mono,
               fontSize: isMobile ? 13 : 12,
               display: "flex",
               alignItems: "center",
               gap: 8,
-              boxShadow: "0 4px 16px rgba(0,0,0,.14)",
+              boxShadow: "0 4px 20px rgba(0,0,0,.12)",
             }}
           >
             <Ico n={t.type === "success" ? "check" : t.type === "error" ? "x" : "bell"} s={12} />
@@ -1216,10 +1223,12 @@ function LoginPage({ users, onLogin }) {
         style={{
           width: "100%",
           maxWidth: 420,
-          background: C.s1,
+          background: "rgba(255,255,255,0.88)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
           borderRadius: 16,
-          boxShadow: "0 2px 4px rgba(0,0,0,.04), 0 8px 32px rgba(0,112,243,.10), 0 1px 0 rgba(255,255,255,.9) inset",
-          border: `1px solid ${C.b1}`,
+          boxShadow: "0 2px 4px rgba(0,0,0,.04), 0 12px 40px rgba(0,112,243,.12), 0 1px 0 rgba(255,255,255,.9) inset",
+          border: `1px solid rgba(221,226,234,0.7)`,
           overflow: "hidden",
         }}
       >
@@ -1496,8 +1505,9 @@ function Sidebar({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(15,23,42,.35)",
-            backdropFilter: "blur(2px)",
+            background: "rgba(15,23,42,.25)",
+            backdropFilter: "blur(5px)",
+            WebkitBackdropFilter: "blur(5px)",
             zIndex: 300,
           }}
         />
@@ -1506,8 +1516,10 @@ function Sidebar({
       style={{
         width: isMobile ? 280 : (collapsed ? 54 : 250),
         flexShrink: 0,
-        background: C.s1,
-        borderRight: `1px solid ${C.b1}`,
+        background: "rgba(255,255,255,0.88)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderRight: `1px solid rgba(221,226,234,0.7)`,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -3011,7 +3023,9 @@ function TestDetail({
           style={{
             display: "grid",
             gridTemplateColumns: "50px 1fr 1fr 180px 110px",
-            background: C.s2,
+            background: "rgba(246,248,250,0.88)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
             borderBottom: `1px solid ${C.b2}`,
             position: "sticky",
             top: 0,
@@ -5002,12 +5016,14 @@ export default function App() {
             bottom: 0,
             left: 0,
             right: 0,
-            background: C.s1,
-            borderTop: `1px solid ${C.b1}`,
+            background: "rgba(255,255,255,0.80)",
+            backdropFilter: "blur(18px)",
+            WebkitBackdropFilter: "blur(18px)",
+            borderTop: `1px solid rgba(221,226,234,0.6)`,
             display: "flex",
             alignItems: "stretch",
             zIndex: 200,
-            boxShadow: "0 -2px 12px rgba(0,0,0,.08)",
+            boxShadow: "0 -2px 20px rgba(0,0,0,.07)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)",
           }}
         >
