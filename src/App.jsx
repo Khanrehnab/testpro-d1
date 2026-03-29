@@ -33,10 +33,21 @@ const store = {
       const stepsByTest = {};
       for (const s of steps || []) {
         if (!stepsByTest[s.test_id]) stepsByTest[s.test_id] = [];
+        // Explicitly map only the fields the app needs — never spread the raw DB row.
+        // Spreading would keep snake_case DB columns (like is_divider) on the object,
+        // which then leak into upsert payloads via ...(existing||{}) in importCSV,
+        // causing PostgREST to receive is_divider:1 (integer) instead of true (boolean).
         stepsByTest[s.test_id].push({
-          ...s,
+          id:        s.id,
+          test_id:   s.test_id,
+          position:  s.position,
           serialNo:  s.serial_no,
-          isDivider: !!s.is_divider,
+          serial_no: s.serial_no,
+          action:    s.action   ?? "",
+          result:    s.result   ?? "",
+          remarks:   s.remarks  ?? "",
+          status:    s.status   ?? "pending",
+          isDivider: s.is_divider === true || s.is_divider === 1,
         });
       }
 
@@ -4935,7 +4946,7 @@ export default function App() {
                   action:    row.action,
                   result:    row.result,
                   serialNo:  row.serial_no,
-                  isDivider: !!row.is_divider,
+                  isDivider: row.is_divider === true || row.is_divider === 1,
                 };
                 const updatedTests = [...mod.tests];
                 updatedTests[testIdx] = { ...test, steps: updatedSteps };
@@ -4952,7 +4963,7 @@ export default function App() {
                 const test = mod.tests[testIdx];
                 if (test.steps.some((s) => s.id === row.id)) break; // already local
                 const updatedTests = [...mod.tests];
-                const normRow = { ...row, serialNo: row.serial_no, isDivider: !!row.is_divider };
+                const normRow = { ...row, serialNo: row.serial_no, isDivider: row.is_divider === true || row.is_divider === 1 };
                 updatedTests[testIdx] = {
                   ...test,
                   steps: [...test.steps, normRow].sort(
