@@ -1187,18 +1187,15 @@ function LoginPage({ users, onLogin }) {
           background: C.s1,
           border: `1px solid ${C.b1}`,
           borderRadius: isMobile ? 20 : 16,
+          borderTop: "4px solid transparent",
+          backgroundImage: `linear-gradient(${C.s1}, ${C.s1}), linear-gradient(90deg,#00b4d8,#0070f3,#7c3aed)`,
+          backgroundOrigin: "border-box",
+          backgroundClip: "padding-box, border-box",
           boxShadow: isMobile
             ? "0 4px 32px rgba(0,0,0,.10)"
             : "0 8px 40px rgba(0,0,0,.10)",
-          overflow: "hidden",
         }}
       >
-        {/* Top accent stripe */}
-        <div style={{
-          height: 4,
-          background: "linear-gradient(90deg,#00b4d8,#0070f3,#7c3aed)",
-        }} />
-
         <div style={{ padding: isMobile ? "32px 28px 28px" : "44px 40px 36px" }}>
           {/* Logo */}
           <div style={{
@@ -1392,8 +1389,6 @@ function LoginPage({ users, onLogin }) {
               "Sign In →"
             )}
           </button>
-
-          <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
         </div>
       </div>
 
@@ -4879,7 +4874,7 @@ export default function App() {
         lineHeight: 1.5,
       }}
     >
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}a{-webkit-tap-highlight-color:transparent}`}</style>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}a{-webkit-tap-highlight-color:transparent}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       {/* Desktop sidebar — hidden on mobile (drawer handles it) */}
       {!isMobile && (
         <Sidebar
