@@ -1034,7 +1034,7 @@ function ModalActions({ children }) {
     </div>
   );
 }
-function Field({ label, children }) {
+function Field({ label, children, labelColor }) {
   return (
     <div style={{ marginBottom: 18 }}>
       <label
@@ -1042,7 +1042,7 @@ function Field({ label, children }) {
           display: "block",
           fontSize: 10,
           fontFamily: F.mono,
-          color: C.t2,
+          color: labelColor || C.t2,
           textTransform: "uppercase",
           letterSpacing: "1.2px",
           marginBottom: 7,
@@ -1116,64 +1116,195 @@ function useToast() {
 
 // ── Login ──────────────────────────────────────────────────────────────────────
 
-// Background watermark logo — large faint "TP" mark behind the login card.
-// TO EDIT THIS SVG IN THE FUTURE: see comment block below the LoginPage function.
-function LoginBgLogo() {
+// Animated SaaS canvas background — floating network nodes, edges, particles.
+// Mounts/unmounts cleanly with React's useEffect lifecycle.
+function LoginCanvas() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    let W, H, t = 0, nodes = [], particles = [], travelDots = [], rafId;
+
+    const rand = (a, b) => a + Math.random() * (b - a);
+
+    function resize() {
+      W = canvas.width  = canvas.offsetWidth;
+      H = canvas.height = canvas.offsetHeight;
+      initScene();
+    }
+
+    function initScene() {
+      nodes = [];
+      particles = [];
+      travelDots = [];
+      const cols = ["#1a6bff", "#00c9a7", "#a855f7"];
+      for (let i = 0; i < 22; i++) {
+        nodes.push({
+          x: rand(W * 0.05, W * 0.95),
+          y: rand(H * 0.05, H * 0.95),
+          r: rand(3, 6.5),
+          color: cols[i % 3],
+          vx: rand(-0.14, 0.14),
+          vy: rand(-0.14, 0.14),
+          pulse: rand(0, Math.PI * 2),
+        });
+      }
+      for (let i = 0; i < 55; i++) spawnParticle(true);
+    }
+
+    function spawnParticle(init = false) {
+      const maxLife = rand(70, 190);
+      particles.push({
+        x: rand(0, W), y: rand(0, H),
+        size: rand(1, 2.4),
+        alpha: rand(0.2, 0.65),
+        speed: rand(0.25, 1.1),
+        angle: rand(0, Math.PI * 2),
+        age: init ? rand(0, maxLife) : 0,
+        maxLife,
+      });
+    }
+
+    function spawnTravelDot(a, b) {
+      travelDots.push({
+        ax: a.x, ay: a.y, bx: b.x, by: b.y,
+        prog: 0,
+        speed: rand(0.008, 0.018),
+        color: "#00c9a7",
+      });
+    }
+
+    function draw() {
+      t++;
+      ctx.clearRect(0, 0, W, H);
+
+      // ── Background fill ──
+      ctx.fillStyle = "#060b18";
+      ctx.fillRect(0, 0, W, H);
+
+      // ── Grid ──
+      ctx.strokeStyle = "rgba(30,80,200,0.07)";
+      ctx.lineWidth = 0.5;
+      const sp = 60;
+      for (let x = 0; x < W; x += sp) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+      for (let y = 0; y < H; y += sp) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+      // ── Ambient glow pools ──
+      const g1 = ctx.createRadialGradient(W * 0.22, H * 0.38, 0, W * 0.22, H * 0.38, W * 0.38);
+      g1.addColorStop(0, "rgba(26,107,255,0.13)"); g1.addColorStop(1, "transparent");
+      ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
+
+      const g2 = ctx.createRadialGradient(W * 0.78, H * 0.65, 0, W * 0.78, H * 0.65, W * 0.32);
+      g2.addColorStop(0, "rgba(168,85,247,0.10)"); g2.addColorStop(1, "transparent");
+      ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+
+      // ── Edges ──
+      const DIST = 195;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const d  = Math.sqrt(dx * dx + dy * dy);
+          if (d < DIST) {
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(26,107,255,${(1 - d / DIST) * 0.38})`;
+            ctx.lineWidth = 0.55;
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.stroke();
+            if (d < DIST * 0.55 && Math.random() < 0.002) spawnTravelDot(nodes[i], nodes[j]);
+          }
+        }
+      }
+
+      // ── Travel dots ──
+      for (let i = travelDots.length - 1; i >= 0; i--) {
+        const d = travelDots[i];
+        d.prog += d.speed;
+        if (d.prog >= 1) { travelDots.splice(i, 1); continue; }
+        const x = d.ax + (d.bx - d.ax) * d.prog;
+        const y = d.ay + (d.by - d.ay) * d.prog;
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = 1 - Math.abs(d.prog - 0.5) * 1.8;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // ── Nodes ──
+      nodes.forEach((n) => {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 0 || n.x > W) n.vx *= -1;
+        if (n.y < 0 || n.y > H) n.vy *= -1;
+        n.pulse += 0.025;
+        const pr = n.r + Math.sin(n.pulse) * 1.8;
+        // halo
+        const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, pr * 5);
+        grd.addColorStop(0, n.color + "bb"); grd.addColorStop(1, "transparent");
+        ctx.beginPath(); ctx.arc(n.x, n.y, pr * 5, 0, Math.PI * 2);
+        ctx.fillStyle = grd; ctx.fill();
+        // core
+        ctx.beginPath(); ctx.arc(n.x, n.y, pr, 0, Math.PI * 2);
+        ctx.fillStyle = n.color; ctx.fill();
+        // ring
+        ctx.beginPath(); ctx.arc(n.x, n.y, pr * 2.2, 0, Math.PI * 2);
+        ctx.strokeStyle = n.color + "3a"; ctx.lineWidth = 0.8; ctx.stroke();
+      });
+
+      // ── Particles ──
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        p.age++;
+        p.x += Math.cos(p.angle) * p.speed;
+        p.y += Math.sin(p.angle) * p.speed;
+        const fade = 1 - p.age / p.maxLife;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0,201,167,${p.alpha * fade})`;
+        ctx.fill();
+        if (p.age >= p.maxLife) spawnParticle();
+        if (p.age >= p.maxLife) particles.splice(i--, 1);
+      }
+
+      // ── Scan line ──
+      const sy = (Math.sin(t * 0.003) * 0.5 + 0.5) * H;
+      const sg = ctx.createLinearGradient(0, sy - 80, 0, sy + 80);
+      sg.addColorStop(0, "transparent");
+      sg.addColorStop(0.5, "rgba(26,107,255,0.022)");
+      sg.addColorStop(1, "transparent");
+      ctx.fillStyle = sg; ctx.fillRect(0, sy - 80, W, 160);
+
+      rafId = requestAnimationFrame(draw);
+    }
+
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    resize();
+    draw();
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
+  }, []);
+
   return (
-    <svg
-      viewBox="0 0 200 200"
-      xmlns="http://www.w3.org/2000/svg"
+    <canvas
+      ref={canvasRef}
       style={{
         position: "absolute",
-        width: "min(520px, 90vw)",
-        height: "min(520px, 90vw)",
-        opacity: 0.045,
-        pointerEvents: "none",
-        userSelect: "none",
-        // centred in the background
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        display: "block",
         zIndex: 0,
       }}
       aria-hidden="true"
-    >
-      {/* ── Outer ring ── */}
-      <circle cx="100" cy="100" r="96" fill="none" stroke="#0070f3" strokeWidth="3.5" />
-
-      {/* ── Inner decorative ring ── */}
-      <circle cx="100" cy="100" r="80" fill="none" stroke="#0070f3" strokeWidth="1" strokeDasharray="4 6" />
-
-      {/* ── "TP" wordmark ── */}
-      {/* T */}
-      <text
-        x="28" y="122"
-        fontFamily="'SF Mono','Fira Code',monospace"
-        fontWeight="800"
-        fontSize="72"
-        fill="#0070f3"
-        letterSpacing="-4"
-      >T</text>
-      {/* P */}
-      <text
-        x="96" y="122"
-        fontFamily="'SF Mono','Fira Code',monospace"
-        fontWeight="800"
-        fontSize="72"
-        fill="#0077b6"
-        letterSpacing="-4"
-      >P</text>
-
-      {/* ── Small tick mark (pass icon) at bottom ── */}
-      <polyline
-        points="82,158 94,170 120,144"
-        fill="none"
-        stroke="#0070f3"
-        strokeWidth="5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    />
   );
 }
 
@@ -1191,36 +1322,23 @@ function LoginPage({ users, onLogin }) {
   };
 
   return (
-    /*
-     * Outer wrapper:
-     *   - min-height instead of height so the page scrolls on very small screens
-     *     instead of clipping content
-     *   - overflowY: "auto" lets the card scroll into view on short viewports
-     *   - position: relative so the absolute background logo is contained here
-     */
     <div
       style={{
-        minHeight: "100dvh",        // dvh = dynamic viewport height (accounts for mobile browser chrome)
+        position: "fixed",      // fills entire viewport behind everything
+        inset: 0,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "linear-gradient(160deg,#e8f0fe 0%,#eef2fb 50%,#f0f2f5 100%)",
+        background: "#060b18",
         padding: isMobile ? "24px 16px" : "40px 16px",
         boxSizing: "border-box",
         overflowY: "auto",
-        position: "relative",
       }}
     >
-      {/* Faint background watermark logo */}
-      <LoginBgLogo />
+      {/* Animated SaaS canvas background */}
+      <LoginCanvas />
 
-      {/*
-       * Login card:
-       *   - boxSizing: border-box ensures padding doesn't add to the stated width
-       *   - width is capped so it never bleeds off screen
-       *   - no hard height — the card grows to fit its content
-       *   - zIndex: 1 puts it above the background logo
-       */}
+      {/* Login card — sits above the canvas via zIndex */}
       <div
         style={{
           position: "relative",
@@ -1229,54 +1347,52 @@ function LoginPage({ users, onLogin }) {
           maxWidth: 400,
           boxSizing: "border-box",
           padding: isMobile ? "32px 24px 28px" : "48px 40px 40px",
-          background: C.s1,
-          border: `1px solid ${C.b1}`,
-          borderRadius: 18,
-          boxShadow: "0 8px 48px rgba(0,0,0,.11), 0 1px 3px rgba(0,0,0,.06)",
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 20,
+          boxShadow: "0 8px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)",
+          backdropFilter: "blur(18px)",
+          WebkitBackdropFilter: "blur(18px)",
         }}
       >
         {/* Logo + brand */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
-          {/* Inline SVG logo mark — edit colours/shape here */}
           <svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
-            <rect width="42" height="42" rx="10" fill="url(#lgGrad)" />
+            <rect width="42" height="42" rx="10" fill="url(#lgGrad2)" />
             <defs>
-              <linearGradient id="lgGrad" x1="0" y1="0" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+              <linearGradient id="lgGrad2" x1="0" y1="0" x2="42" y2="42" gradientUnits="userSpaceOnUse">
                 <stop offset="0%" stopColor="#00b4d8" />
                 <stop offset="100%" stopColor="#0077b6" />
               </linearGradient>
             </defs>
-            {/* T bar */}
             <rect x="9" y="12" width="24" height="4" rx="2" fill="white" />
-            {/* T stem */}
             <rect x="19" y="16" width="4" height="14" rx="2" fill="white" />
-            {/* P loop — simple tick/check to hint "testing" */}
-            <polyline
-              points="12,33 17,38 30,25"
-              fill="none"
-              stroke="white"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <polyline points="12,33 17,38 30,25" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 800, color: C.t1, letterSpacing: -0.5 }}>
-            Test<span style={{ color: C.ac }}>Pro</span>
+          <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 800, color: "#ffffff", letterSpacing: -0.5 }}>
+            Test<span style={{ color: "#00c9a7" }}>Pro</span>
           </div>
         </div>
 
         {/* Heading */}
-        <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: C.t1, marginBottom: 4 }}>
+        <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: "#ffffff", marginBottom: 4 }}>
           Sign in
         </div>
-        <div style={{ fontSize: 13, color: C.t2, marginBottom: 28 }}>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 28 }}>
           Access your testing workspace
         </div>
 
-        {/* Fields — Field component already adds marginBottom: 18, no extra spacing needed */}
-        <Field label="Username">
+        {/* Username field */}
+        <Field label="Username" labelColor="rgba(255,255,255,0.45)">
           <input
-            style={{ ...inputSty, boxSizing: "border-box" }}
+            style={{
+              ...inputSty,
+              boxSizing: "border-box",
+              background: "rgba(255,255,255,0.07)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              color: "#ffffff",
+              caretColor: "#00c9a7",
+            }}
             value={u}
             onChange={(e) => { setU(e.target.value); setErr(""); }}
             onKeyDown={(e) => e.key === "Enter" && go()}
@@ -1286,9 +1402,18 @@ function LoginPage({ users, onLogin }) {
             placeholder="Enter your username"
           />
         </Field>
-        <Field label="Password">
+
+        {/* Password field */}
+        <Field label="Password" labelColor="rgba(255,255,255,0.45)">
           <input
-            style={{ ...inputSty, boxSizing: "border-box" }}
+            style={{
+              ...inputSty,
+              boxSizing: "border-box",
+              background: "rgba(255,255,255,0.07)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              color: "#ffffff",
+              caretColor: "#00c9a7",
+            }}
             type="password"
             value={p}
             onChange={(e) => { setP(e.target.value); setErr(""); }}
@@ -1301,11 +1426,12 @@ function LoginPage({ users, onLogin }) {
         {err && (
           <div style={{
             display: "flex", alignItems: "center", gap: 7,
-            background: "#fef2f2", border: "1px solid #fecaca",
+            background: "rgba(220,38,38,0.15)",
+            border: "1px solid rgba(220,38,38,0.35)",
             borderRadius: 8, padding: "9px 12px", marginBottom: 16,
           }}>
-            <Ico n="x" s={13} c={C.re} />
-            <span style={{ color: C.re, fontSize: 12, fontFamily: F.mono }}>{err}</span>
+            <Ico n="x" s={13} c="#f87171" />
+            <span style={{ color: "#f87171", fontSize: 12, fontFamily: F.mono }}>{err}</span>
           </div>
         )}
 
@@ -1318,71 +1444,32 @@ function LoginPage({ users, onLogin }) {
             padding: "13px 16px",
             border: "none",
             borderRadius: 9,
-            background: C.ac,
+            background: "linear-gradient(135deg,#1a6bff,#0050cc)",
             color: "#fff",
             fontFamily: F.mono,
             fontSize: 14,
             fontWeight: 700,
             cursor: "pointer",
-            boxShadow: "0 2px 12px rgba(0,112,243,.35)",
+            boxShadow: "0 2px 20px rgba(26,107,255,0.45)",
             letterSpacing: 0.2,
-            transition: "opacity .15s",
+            transition: "opacity .15s, transform .1s",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
           onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+          onMouseDown={(e)  => { e.currentTarget.style.transform = "scale(0.985)"; }}
+          onMouseUp={(e)    => { e.currentTarget.style.transform = "scale(1)"; }}
         >
           Sign In →
         </button>
 
-        {/* Footer hint */}
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: C.t3, fontFamily: F.mono }}>
+        {/* Footer */}
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: "rgba(255,255,255,0.28)", fontFamily: F.mono }}>
           Contact your admin if you need access
         </div>
       </div>
     </div>
   );
 }
-
-/*
- * ┌─────────────────────────────────────────────────────────────────────────┐
- * │  HOW TO EDIT THE SVG LOGO IN FUTURE                                     │
- * ├─────────────────────────────────────────────────────────────────────────┤
- * │                                                                         │
- * │  There are TWO SVGs in the login screen:                                │
- * │                                                                         │
- * │  1. LoginBgLogo  (the large faint watermark behind the card)            │
- * │     — viewBox="0 0 200 200"                                             │
- * │     — Controlled by its `style` prop (size, opacity, position)          │
- * │     — To change opacity: edit  opacity: 0.045  (0 = invisible, 1=full) │
- * │     — To resize: edit  width/height  in the style prop                  │
- * │     — To change the letters: edit the two <text> elements               │
- * │     — To change ring style: edit stroke / strokeDasharray on <circle>   │
- * │     — To change tick colour/size: edit <polyline> stroke / strokeWidth  │
- * │                                                                         │
- * │  2. Inline logo mark  (the 42×42 icon inside the card header)           │
- * │     — viewBox="0 0 42 42"                                               │
- * │     — Background: edit the <linearGradient> stop colours                │
- * │     — Rounded rect: edit rx on <rect width="42" height="42" …>          │
- * │     — "T" shape: two <rect> elements — adjust x/y/width/height          │
- * │     — Tick: <polyline points="12,33 17,38 30,25"> — edit the numbers   │
- * │       Format: "x1,y1 x2,y2 x3,y3" where the tick bends at point 2      │
- * │                                                                         │
- * │  QUICK SVG COORDINATE CHEATSHEET                                        │
- * │     viewBox="0 0 W H"  →  top-left is 0,0  bottom-right is W,H         │
- * │     x increases →  y increases ↓                                        │
- * │     <rect x y width height rx> — rx rounds the corners                  │
- * │     <circle cx cy r> — centre x, centre y, radius                       │
- * │     <text x y fontSize>  — x/y is the baseline-left of the text         │
- * │     <polyline points="x1,y1 x2,y2 …"> — connected line segments         │
- * │     <path d="M x y L x y Z"> — M=move, L=line, Z=close                 │
- * │     fill — shape fill colour    stroke — outline colour                  │
- * │     strokeWidth — outline thickness                                      │
- * │     opacity — 0=invisible, 1=solid (can also use on individual elements) │
- * │                                                                         │
- * │  TIP: Paste either SVG into https://svgviewer.dev to live-edit and      │
- * │  preview changes before copying back here.                              │
- * └─────────────────────────────────────────────────────────────────────────┘
- */
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 function Sidebar({
