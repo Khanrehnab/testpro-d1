@@ -1,5 +1,16 @@
 import { supabase } from "./supabase";
-import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+
+// ── Mobile detection hook ──────────────────────────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [breakpoint]);
+  return isMobile;
+}
 
 // ── Storage ────────────────────────────────────────────────────────────────────
 
@@ -12,10 +23,10 @@ const store = {
         { data: tests },
         { data: steps },
       ] = await Promise.all([
-        supabase.from("users").select("*").limit(10_000),
-        supabase.from("modules").select("*").order("position").limit(10_000),
-        supabase.from("tests").select("*").order("serial_no").limit(100_000),
-        supabase.from("steps").select("*").order("position").limit(10_000_000),
+        supabase.from("users").select("*"),
+        supabase.from("modules").select("*").order("position"),
+        supabase.from("tests").select("*").order("serial_no"),
+        supabase.from("steps").select("*").order("position"),
       ]);
 
       // Rebuild nested structure: modules → tests → steps
@@ -62,15 +73,12 @@ const store = {
     // Only attempt if there are surviving UUID users to use as the exclusion list.
     const liveUUIDs = toUpsert.map(u => u.id);
     if (liveUUIDs.length) {
-      // Fetch all existing user IDs, delete any not in our live set
-      const { data: existing } = await supabase.from("users").select("id");
-      const liveSet = new Set(liveUUIDs);
-      const stale = (existing || []).map(r => r.id).filter(id => !liveSet.has(id));
-      for (let i = 0; i < stale.length; i += 500) {
-        await supabase.from("users").delete().in("id", stale.slice(i, i + 500));
-      }
+      await supabase
+        .from("users")
+        .delete()
+        .not("id", "in", `(${liveUUIDs.join(",")})`);
     } else if (!toInsert.length) {
-      // No live users at all — wipe the table
+      // No live users at all — wipe the table (edge case: all users deleted)
       await supabase.from("users").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     }
 
@@ -114,57 +122,33 @@ const store = {
 
     // ── Delete removed rows BEFORE upserting ────────────────────────────────
     // Steps first (FK child), then tests (FK parent).
-    // For large step counts the .not("id","in","(...)") string exceeds URL limits.
-    // Strategy: fetch all existing IDs for live tests, then delete any not in
-    // the current live set using chunked .in() calls instead of .not().
+    // NOTE: Supabase PostgREST requires .not("id","in","(id1,id2)") as a
+    // parenthesised string — passing a raw JS array silently no-ops the filter.
 
-    const CHUNK = 500;
-
-    // Helper: delete rows whose id IS in a list, in chunks
-    const deleteInChunks = async (table, ids) => {
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        await supabase.from(table).delete().in("id", ids.slice(i, i + CHUNK));
-      }
-    };
-
-    // 0 & 1. For steps: fetch existing step IDs under live tests, find stale ones, delete
+    // 1. Delete steps that belong to live tests but are no longer in local state
     if (liveTestIds.length) {
-      // Fetch in chunks to avoid URL-length issues on the IN filter too
-      const existingStepIds = [];
-      for (let i = 0; i < liveTestIds.length; i += CHUNK) {
-        const { data } = await supabase
-          .from("steps")
-          .select("id")
-          .in("test_id", liveTestIds.slice(i, i + CHUNK))
-          .limit(1_000_000);
-        if (data) existingStepIds.push(...data.map((r) => r.id));
-      }
-      const liveStepSet = new Set(liveStepIds);
-      const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
-      if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
+      const stepDel = liveStepIds.length
+        ? supabase.from("steps").delete().in("test_id", liveTestIds)
+            .not("id", "in", `(${liveStepIds.join(",")})`)
+        : supabase.from("steps").delete().in("test_id", liveTestIds);
+      await stepDel;
     }
 
-    // 2. For tests: fetch existing test IDs under live modules, find stale ones, delete
+    // 2. Delete tests that belong to live modules but are no longer in local state
     if (liveModuleIds.length) {
-      const existingTestIds = [];
-      for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
-        const { data } = await supabase
-          .from("tests")
-          .select("id")
-          .in("module_id", liveModuleIds.slice(i, i + CHUNK));
-        if (data) existingTestIds.push(...data.map((r) => r.id));
-      }
-      const liveTestSet = new Set(liveTestIds);
-      const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
-      if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
+      const testDel = liveTestIds.length
+        ? supabase.from("tests").delete().in("module_id", liveModuleIds)
+            .not("id", "in", `(${liveTestIds.join(",")})`)
+        : supabase.from("tests").delete().in("module_id", liveModuleIds);
+      await testDel;
     }
 
     // 3. Delete module rows that no longer exist in local state
     if (liveModuleIds.length) {
-      const { data: existingMods } = await supabase.from("modules").select("id");
-      const liveModSet = new Set(liveModuleIds);
-      const staleMods = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
-      if (staleMods.length) await deleteInChunks("modules", staleMods);
+      await supabase
+        .from("modules")
+        .delete()
+        .not("id", "in", `(${liveModuleIds.join(",")})`);
     }
 
     // ── Upsert surviving rows ────────────────────────────────────────────────
@@ -174,19 +158,17 @@ const store = {
     if (modErr) { console.error("Upsert modules error", modErr); return; }
 
     if (allTests.length) {
-      const testRows = allTests.map((t) => ({
-        id:          t.id,
-        module_id:   t.module_id,
-        serial_no:   t.serial_no ?? t.serialNo ?? 0,
-        name:        t.name,
-        description: t.description ?? "",
-      }));
-      for (let i = 0; i < testRows.length; i += CHUNK) {
-        const { error: testErr } = await supabase
-          .from("tests")
-          .upsert(testRows.slice(i, i + CHUNK), { onConflict: "id" });
-        if (testErr) { console.error("Upsert tests error", testErr); return; }
-      }
+      const { error: testErr } = await supabase.from("tests").upsert(
+        allTests.map((t) => ({
+          id:          t.id,
+          module_id:   t.module_id,
+          serial_no:   t.serial_no ?? t.serialNo ?? 0,
+          name:        t.name,
+          description: t.description ?? "",
+        })),
+        { onConflict: "id" }
+      );
+      if (testErr) { console.error("Upsert tests error", testErr); return; }
     }
 
     if (allSteps.length) {
@@ -209,14 +191,8 @@ const store = {
           is_divider: s.isDivider ?? false,
         };
       });
-      // Chunk into batches of 500 so any number of steps persists correctly.
-      for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
-        const chunk = stepsWithPosition.slice(i, i + CHUNK);
-        const { error: stepErr } = await supabase
-          .from("steps")
-          .upsert(chunk, { onConflict: "id" });
-        if (stepErr) { console.error("Upsert steps error", stepErr); break; }
-      }
+      const { error: stepErr } = await supabase.from("steps").upsert(stepsWithPosition, { onConflict: "id" });
+      if (stepErr) console.error("Upsert steps error", stepErr);
     }
   },
 
@@ -373,7 +349,7 @@ const SEED_USERS = [
 
 // ── Data Model ─────────────────────────────────────────────────────────────────
 // Module → Tests[] → Steps[]
-// Each Test is a sub-module with its own name, description, and up to 100,000 steps per test.
+// Each Test is a sub-module with its own name, description, and up to 1000 steps.
 // Each Step has: id, serialNo, action, result, remarks, status
 
 function makeStep(testId, n) {
@@ -416,12 +392,9 @@ function csvParse(line) {
   const cols = [];
   let cur = "";
   let q = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      if (q && line[i + 1] === '"') { cur += '"'; i++; } // escaped quote ""
-      else q = !q;
-    } else if (c === "," && !q) {
+  for (const c of line) {
+    if (c === '"') q = !q;
+    else if (c === "," && !q) {
       cols.push(cur.trim());
       cur = "";
     } else cur += c;
@@ -455,22 +428,6 @@ const F = {
   sans: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
   mono: "'SF Mono','Fira Code','Fira Mono',monospace",
 };
-// ── Mobile detection ───────────────────────────────────────────────────────────
-function useIsMobile(breakpoint = 768) {
-  const [mobile, setMobile] = useState(() =>
-    typeof window !== "undefined" && window.innerWidth < breakpoint
-  );
-  useEffect(() => {
-    const handler = () => setMobile(window.innerWidth < breakpoint);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, [breakpoint]);
-  return mobile;
-}
-
-// ── Mobile menu context — avoids prop-drilling onMenuClick to every Topbar ──────
-const MobileMenuCtx = React.createContext(null);
-
 const btn = (x = {}) => ({
   display: "inline-flex",
   alignItems: "center",
@@ -537,7 +494,7 @@ const PATHS = {
     ["M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"],
   ],
   plus: [["M12 5v14"], ["M5 12h14"]],
-  search: [["M21 21l-4.35-4.35"], ["M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"]],
+  search: [["M11 11m-6 0a6 6 0 1 0 12 0 6 6 0 0 0-12 0"], ["M21 21l-3.5-3.5"]],
   dash: [["M22 12h-4l-3 9L9 3l-3 9H2"]],
   report: [
     ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],
@@ -724,11 +681,7 @@ function ExportMenu({ onCSV, onPDF }) {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener("mousedown", close);
-    document.addEventListener("touchstart", close);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("touchstart", close);
-    };
+    return () => document.removeEventListener("mousedown", close);
   }, [open]);
 
   return (
@@ -812,8 +765,9 @@ function ExportMenu({ onCSV, onPDF }) {
 }
 
 function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ position: "relative", width }}>
+    <div style={{ position: "relative", flex: isMobile ? 1 : "none", minWidth: 0 }}>
       <div
         style={{
           position: "absolute",
@@ -839,7 +793,7 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) 
           fontFamily: F.sans,
           fontSize: 13,
           outline: "none",
-          width: "100%",
+          width: isMobile ? "100%" : width,
           boxShadow: "inset 0 1px 2px rgba(0,0,0,.04)",
         }}
       />
@@ -849,38 +803,25 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) 
 
 function Topbar({ title, sub, children }) {
   const isMobile = useIsMobile();
-  const onMenuClick = useContext(MobileMenuCtx);
   return (
     <div
       style={{
-        height: 58,
-        padding: "0 22px",
+        padding: isMobile ? "8px 14px" : "0 22px",
+        minHeight: isMobile ? "auto" : 58,
         flexShrink: 0,
         background: C.s1,
         borderBottom: `1px solid ${C.b1}`,
         display: "flex",
-        alignItems: "center",
-        gap: 10,
+        flexDirection: isMobile ? "column" : "row",
+        alignItems: isMobile ? "stretch" : "center",
+        gap: isMobile ? 8 : 10,
         boxShadow: "0 1px 3px rgba(0,0,0,.06)",
       }}
     >
-      {isMobile && onMenuClick && (
-        <button
-          onClick={onMenuClick}
-          style={{ ...iBtn(), padding: "6px 8px", marginLeft: -8 }}
-          title="Menu"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
-      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: 16,
+            fontSize: isMobile ? 15 : 16,
             fontWeight: 700,
             color: C.t1,
             overflow: "hidden",
@@ -893,7 +834,7 @@ function Topbar({ title, sub, children }) {
         {sub && (
           <div
             style={{
-              fontSize: 12,
+              fontSize: 11,
               color: C.t3,
               marginTop: 1,
               fontFamily: F.mono,
@@ -903,7 +844,16 @@ function Topbar({ title, sub, children }) {
           </div>
         )}
       </div>
-      {children}
+      {children && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -946,7 +896,7 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
           borderRadius: isMobile ? "14px 14px 0 0" : 14,
           padding: isMobile ? "24px 20px" : "28px 30px",
           boxShadow: "0 16px 48px rgba(0,0,0,.12)",
-          maxHeight: isMobile ? "90vh" : "90vh",
+          maxHeight: isMobile ? "85vh" : "90vh",
           overflowY: "auto",
         }}
       >
@@ -1018,17 +968,22 @@ function useToast() {
     error: { bg: "#fef2f2", border: "rgba(220,38,38,.4)", color: C.re },
     info: { bg: "#eff6ff", border: "rgba(0,112,243,.4)", color: C.ac },
   };
-  const Host = () => (
+  const Host = () => {
+    const isMobile = useIsMobile();
+    return (
     <div
       style={{
         position: "fixed",
-        bottom: 20,
-        right: 20,
+        bottom: isMobile ? 70 : 20,
+        right: isMobile ? "50%" : 20,
+        transform: isMobile ? "translateX(50%)" : "none",
         zIndex: 999,
         display: "flex",
         flexDirection: "column",
         gap: 8,
         pointerEvents: "none",
+        width: isMobile ? "calc(100vw - 32px)" : "auto",
+        maxWidth: isMobile ? 400 : "none",
       }}
     >
       {list.map((t) => {
@@ -1066,15 +1021,16 @@ function useToast() {
       })}
     </div>
   );
+  };
   return { push, Host };
 }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
 function LoginPage({ users, onLogin }) {
+  const isMobile = useIsMobile();
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
-  const isMobile = useIsMobile();
   const go = () => {
     const found = users.find(
       (x) => x.username === u.trim() && x.password === p && x.active
@@ -1086,17 +1042,16 @@ function LoginPage({ users, onLogin }) {
       style={{
         height: "100vh",
         display: "flex",
-        alignItems: isMobile ? "flex-start" : "center",
+        alignItems: "center",
         justifyContent: "center",
         background: `linear-gradient(160deg,#e8f0fe 0%,#f0f2f5 60%)`,
-        padding: isMobile ? "40px 16px" : 0,
-        overflowY: "auto",
+        padding: isMobile ? 20 : 0,
       }}
     >
       <div
         style={{
           width: isMobile ? "100%" : 390,
-          maxWidth: 420,
+          maxWidth: 390,
           padding: isMobile ? "36px 24px" : "48px 40px",
           background: C.s1,
           border: `1px solid ${C.b1}`,
@@ -1212,11 +1167,10 @@ function Sidebar({
   setCollapsed,
   onLogout,
   locked,        // true while a tester holds an unreleased lock
-  mobileOpen,    // mobile drawer open state
-  onMobileClose, // close mobile drawer
 }) {
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const modList = useMemo(() => Object.values(modules), [modules]);
   const filtered = useMemo(
     () =>
@@ -1226,11 +1180,11 @@ function Sidebar({
     [modList, search]
   );
 
-  // Aggregate pass/fail across all tests→steps for each module (dividers excluded)
+  // Aggregate pass/fail across all tests→steps for each module
   const modStats = useMemo(() => {
     const s = {};
     modList.forEach((m) => {
-      const allSteps = m.tests.flatMap((t) => t.steps).filter((s) => !s.isDivider);
+      const allSteps = m.tests.flatMap((t) => t.steps);
       s[m.id] = {
         pass: allSteps.filter((s) => s.status === "pass").length,
         fail: allSteps.filter((s) => s.status === "fail").length,
@@ -1242,14 +1196,14 @@ function Sidebar({
 
   const navRow = (id, icon, label) => {
     const active = view === id;
-    const isLocked = locked && !active; // locked & trying to leave current view
+    const isLocked = locked && !active;
     return (
       <div
         key={id}
         onClick={() => {
           if (isLocked) return;
           setView(id);
-          if (onMobileClose) onMobileClose();
+          if (isMobile) setDrawerOpen(false);
         }}
         title={isLocked ? "Finish the current test first to navigate away" : undefined}
         style={{
@@ -1268,48 +1222,195 @@ function Sidebar({
         }}
       >
         <Ico n={icon} s={15} />
-        {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
-        {isLocked && !collapsed && (
-          <Ico n="lock" s={10} />
-        )}
+        <span style={{ flex: 1 }}>{label}</span>
+        {isLocked && <Ico n="lock" s={10} />}
       </div>
     );
   };
 
+  // ── Mobile: bottom tab bar + slide-up module drawer ────────────────────────
+  if (isMobile) {
+    const tabs = [
+      { id: "dash", icon: "dash", label: "Dashboard" },
+      { id: "mod", icon: "layers", label: "Modules" },
+      { id: "report", icon: "report", label: "Report" },
+      ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }] : []),
+    ];
+
+    return (
+      <>
+        {/* Module drawer overlay */}
+        {drawerOpen && (
+          <div
+            onClick={() => setDrawerOpen(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.3)", zIndex: 80 }}
+          />
+        )}
+        {/* Module drawer */}
+        <div style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 56,
+          top: drawerOpen ? "30%" : "100%",
+          background: C.s1,
+          borderTop: `1px solid ${C.b1}`,
+          borderRadius: "16px 16px 0 0",
+          zIndex: 90,
+          display: "flex",
+          flexDirection: "column",
+          transition: "top .3s ease",
+          overflow: "hidden",
+        }}>
+          <div style={{ padding: "12px 16px 8px", borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: C.b2, margin: "0 auto 0" }} />
+          </div>
+          <div style={{ padding: "6px 10px 6px", borderBottom: `1px solid ${C.b1}`, position: "relative" }}>
+            <div style={{ position: "absolute", left: 20, top: "50%", transform: "translateY(-50%)", color: C.t3, pointerEvents: "none" }}>
+              <Ico n="search" s={12} />
+            </div>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search modules…"
+              style={{
+                width: "100%",
+                padding: "7px 8px 7px 28px",
+                background: C.s2,
+                border: `1px solid ${C.b1}`,
+                borderRadius: 6,
+                color: C.t1,
+                fontFamily: F.mono,
+                fontSize: 12,
+                outline: "none",
+              }}
+            />
+          </div>
+          <div style={{ flex: 1, overflowY: "auto" }}>
+            {filtered.map((m) => {
+              const st = modStats[m.id] || {};
+              const active = selMod === m.id && view === "mod";
+              return (
+                <div
+                  key={m.id}
+                  onClick={() => {
+                    if (locked && !(selMod === m.id && view === "mod")) return;
+                    setSelMod(m.id);
+                    setView("mod");
+                    setDrawerOpen(false);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "12px 16px",
+                    cursor: locked && !(selMod === m.id && view === "mod") ? "not-allowed" : "pointer",
+                    fontSize: 14,
+                    color: active ? C.ac : locked && !(selMod === m.id && view === "mod") ? C.t3 : C.t1,
+                    background: active ? "#eff6ff" : "transparent",
+                    borderBottom: `1px solid ${C.b1}`,
+                    opacity: locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
+                  }}
+                >
+                  <Ico n="layers" s={14} />
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+                  {st.fail > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, background: C.red, color: C.re, padding: "1px 6px", borderRadius: 8 }}>✗{st.fail}</span>}
+                  {st.fail === 0 && st.pass === st.total && st.pass > 0 && <span style={{ fontSize: 10, background: C.grd, color: C.gr, padding: "1px 6px", borderRadius: 8, fontFamily: F.mono }}>✓</span>}
+                  <Ico n="chevR" s={12} />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{session.name}</div>
+            <Badge type={session.role} />
+            <button onClick={onLogout} style={{ ...iBtn(), padding: 6 }} title="Logout"><Ico n="logout" s={15} /></button>
+          </div>
+        </div>
+
+        {/* Bottom tab bar */}
+        <div style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 56,
+          background: C.s1,
+          borderTop: `1px solid ${C.b1}`,
+          display: "flex",
+          zIndex: 100,
+          boxShadow: "0 -2px 8px rgba(0,0,0,.06)",
+        }}>
+          {tabs.map((t) => {
+            const active = t.id === "mod" ? (view === "mod" || drawerOpen) : view === t.id;
+            const isLocked = locked && !active;
+            return (
+              <div
+                key={t.id}
+                onClick={() => {
+                  if (isLocked) return;
+                  if (t.id === "mod") { setDrawerOpen((o) => !o); }
+                  else { setView(t.id); setDrawerOpen(false); }
+                }}
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 3,
+                  cursor: isLocked ? "not-allowed" : "pointer",
+                  color: active ? C.ac : isLocked ? C.t3 : C.t2,
+                  opacity: isLocked ? 0.4 : 1,
+                  fontSize: 10,
+                  fontFamily: F.mono,
+                  background: active && t.id !== "mod" ? "#eff6ff" : "transparent",
+                  transition: "all .12s",
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                <Ico n={t.icon} s={18} />
+                {t.label}
+              </div>
+            );
+          })}
+          {/* Logout tab */}
+          <div
+            onClick={onLogout}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 3,
+              cursor: "pointer",
+              color: C.t2,
+              fontSize: 10,
+              fontFamily: F.mono,
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <Ico n="logout" s={18} />
+            Logout
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ── Desktop sidebar ────────────────────────────────────────────────────────
   return (
-    <>
-      {/* Mobile overlay backdrop */}
-      {isMobile && mobileOpen && (
-        <div
-          onClick={onMobileClose}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,.35)",
-            backdropFilter: "blur(2px)",
-            zIndex: 300,
-          }}
-        />
-      )}
     <div
       style={{
-        width: isMobile ? 280 : (collapsed ? 54 : 250),
+        width: collapsed ? 54 : 250,
         flexShrink: 0,
         background: C.s1,
         borderRight: `1px solid ${C.b1}`,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
-        transition: isMobile ? "transform .25s" : "width .2s",
-        // Mobile: slide in/out as a drawer
-        ...(isMobile ? {
-          position: "fixed",
-          top: 0,
-          left: 0,
-          height: "100%",
-          zIndex: 301,
-          transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
-        } : {}),
+        transition: "width .2s",
       }}
     >
       <div
@@ -1435,7 +1536,6 @@ function Sidebar({
                     if (locked && !(selMod === m.id && view === "mod")) return;
                     setSelMod(m.id);
                     setView("mod");
-                    if (onMobileClose) onMobileClose();
                   }}
                   title={locked && !(selMod === m.id && view === "mod") ? "Finish the current test first" : undefined}
                   style={{
@@ -1524,7 +1624,7 @@ function Sidebar({
             border: `1px solid ${C.b1}`,
           }}
         >
-          {(session.name || "?")[0]}
+          {session.name[0]}
         </div>
         {!collapsed && (
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1553,14 +1653,12 @@ function Sidebar({
         </button>
       </div>
     </div>
-    </>
   );
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   const isAdmin = session.role === "admin";
-  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [confirmDel, setConfirmDel] = useState(null); // module id to delete
@@ -1569,7 +1667,7 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   const modStats = useMemo(
     () =>
       modList.map((m) => {
-        const allSteps = m.tests.flatMap((t) => t.steps).filter((s) => !s.isDivider);
+        const allSteps = m.tests.flatMap((t) => t.steps);
         const pass = allSteps.filter((s) => s.status === "pass").length;
         const fail = allSteps.filter((s) => s.status === "fail").length;
         return {
@@ -1692,37 +1790,25 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
           month: "short",
         })}`}
       >
-        {!isMobile && (
-          <SearchBox
-            value={search}
-            onChange={setSearch}
-            placeholder="Search modules…"
-            width={200}
-          />
-        )}
+        <SearchBox
+          value={search}
+          onChange={setSearch}
+          placeholder="Search modules…"
+          width={200}
+        />
         {isAdmin && (
           <button style={acBtn(smBtn())} onClick={addModule}>
-            <Ico n="plus" s={12} /> {isMobile ? "" : "Add Module"}
+            <Ico n="plus" s={12} /> Add Module
           </button>
         )}
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 20 }}>
-        {isMobile && (
-          <div style={{ marginBottom: 12 }}>
-            <SearchBox
-              value={search}
-              onChange={setSearch}
-              placeholder="Search modules…"
-              width="100%"
-            />
-          </div>
-        )}
+      <div style={{ flex: 1, overflowY: "auto", padding: 20, paddingBottom: 80 }}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)",
-            gap: isMobile ? 10 : 14,
-            marginBottom: isMobile ? 14 : 20,
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 14,
+            marginBottom: 20,
           }}
         >
           {sc("Total Steps", total, C.ac, `Across ${modList.length} modules`)}
@@ -1752,11 +1838,11 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
         <div
           style={{
             display: "flex",
-            alignItems: isMobile ? "flex-start" : "center",
-            flexDirection: isMobile ? "column" : "row",
+            alignItems: "center",
             justifyContent: "space-between",
             marginBottom: 14,
-            gap: isMobile ? 8 : 0,
+            flexWrap: "wrap",
+            gap: 8,
           }}
         >
           <div style={{ fontSize: 14, fontWeight: 600 }}>
@@ -1989,13 +2075,8 @@ function CsvImportModal({ onImport, onClose }) {
   const [drag, setDrag] = useState(false);
   const fileRef = useRef();
   const handleFile = (f) => {
-    if (!f.name.match(/\.(csv|txt)$/i)) {
-      alert("Please select a .csv or .txt file");
-      return;
-    }
     const r = new FileReader();
     r.onload = (e) => onImport(e.target.result);
-    r.onerror = () => alert("Failed to read file — please try again");
     r.readAsText(f);
   };
   return (
@@ -2106,6 +2187,103 @@ function StepRow({
   onActivate,
   rowRef,
 }) {
+  const isMobile = useIsMobile();
+
+  const rowBg =
+    step.status === "fail"
+      ? "#fff5f5"
+      : step.status === "pass"
+      ? "#f0fdf4"
+      : isActive
+      ? "#eff6ff"
+      : "transparent";
+
+  if (isMobile) {
+    return (
+      <div
+        ref={rowRef}
+        onClick={onActivate}
+        style={{
+          borderBottom: `1px solid ${C.b1}`,
+          background: rowBg,
+          outline: isActive ? `2px solid ${C.ac}` : "none",
+          outlineOffset: -2,
+          padding: "10px 12px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+        {/* Header row: serial no + status buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {isActive && <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.ac, flexShrink: 0 }} />}
+          <span style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: C.t3, minWidth: 28 }}>
+            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
+          </span>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "5px 12px", borderRadius: 20,
+              border: `1px solid ${step.status === "pass" ? "#86efac" : C.b2}`,
+              background: step.status === "pass" ? C.grd : "transparent",
+              color: step.status === "pass" ? C.gr : C.t3,
+              fontFamily: F.mono, fontSize: 11, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            <Ico n="check" s={11} /> PASS
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "5px 12px", borderRadius: 20,
+              border: `1px solid ${step.status === "fail" ? "#fca5a5" : C.b2}`,
+              background: step.status === "fail" ? C.red : "transparent",
+              color: step.status === "fail" ? C.re : C.t3,
+              fontFamily: F.mono, fontSize: 11, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            <Ico n="x" s={11} /> FAIL
+          </button>
+        </div>
+        {/* Action */}
+        {step.action ? (
+          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{step.action}</div>
+        ) : (
+          <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", fontFamily: F.mono }}>No action</div>
+        )}
+        {/* Expected result */}
+        {step.result && (
+          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", paddingLeft: 8, borderLeft: `2px solid ${C.b2}` }}>{step.result}</div>
+        )}
+        {/* Remarks */}
+        <textarea
+          value={step.remarks}
+          onChange={(e) => onChange(idx, "remarks", e.target.value)}
+          placeholder="Add remarks…"
+          rows={2}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: "100%",
+            background: "rgba(0,0,0,.03)",
+            border: `1px solid ${C.b1}`,
+            borderRadius: 6,
+            color: C.t2,
+            fontFamily: F.sans,
+            fontSize: 12,
+            resize: "vertical",
+            outline: "none",
+            lineHeight: 1.5,
+            padding: "6px 8px",
+            minHeight: 40,
+          }}
+        />
+      </div>
+    );
+  }
+
   const readonlyCell = (text, color) => (
     <div
       style={{
@@ -2142,15 +2320,6 @@ function StepRow({
       )}
     </div>
   );
-
-  const rowBg =
-    step.status === "fail"
-      ? "#fff5f5"
-      : step.status === "pass"
-      ? "#f0fdf4"
-      : isActive
-      ? "#eff6ff"
-      : "transparent";
 
   return (
     <div
@@ -2446,11 +2615,11 @@ function TestDetail({
   };
 
   const addSteps = () => {
-    if (steps.length >= 100_000) {
-      toast("Maximum 100,000 steps per test", "error");
+    if (steps.length >= 1000) {
+      toast("Maximum 1000 steps per test", "error");
       return;
     }
-    const n = Math.min(addCount, 100_000 - steps.length);
+    const n = Math.min(addCount, 1000 - steps.length);
     const start = steps.length + 1;
     const ns = [
       ...steps,
@@ -2460,7 +2629,7 @@ function TestDetail({
     commit(ns);
     toast(
       `Added ${n} step${n > 1 ? "s" : ""}`,
-      steps.length + n >= 100_000 ? "info" : "success"
+      steps.length + n >= 1000 ? "info" : "success"
     );
   };
 
@@ -2482,136 +2651,102 @@ function TestDetail({
   // Rows whose first column starts with $$$ become section dividers.
   // IDs are matched by serialNo so they stay stable across re-imports,
   // preserving tester remarks/status and preventing duplicate DB rows.
-  //
-  // Cross-module sync: after importing, the same Action/Result/divider
-  // structure is pushed to the same test-index in every other module,
-  // preserving each module's own existing remarks and status values.
   const importCSV = (text) => {
-    const lines = text.trim().split(/\r?\n/);
+    const lines = text.trim().split("\n");
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
-    const dataLines = lines.slice(start).slice(0, 100_000);
+    const dataLines = lines.slice(start).slice(0, 1000);
 
-    // Helper: build a steps array for a given target test, using the parsed
-    // CSV rows but preserving any existing remarks/status from that test.
-    const buildStepsForTest = (targetTest, targetTestId) => {
-      const existingBySN = {};
-      (targetTest.steps || []).forEach((s) => {
-        if (!s.isDivider && s.serialNo !== "" && s.serialNo != null) {
-          existingBySN[String(s.serialNo)] = s;
-        }
-      });
-
-      let stepCounter = 0;
-      const result = [];
-
-      dataLines.forEach((line, i) => {
-        const cols = csvParse(line);
-        const rawFirst = (cols[0] || "").trim();
-
-        if (rawFirst.startsWith("$$$")) {
-          const label =
-            rawFirst.slice(3).trim() ||
-            cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
-            "Section";
-          const stableLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 40);
-          const divId = `${targetTestId}_div_${stableLabel}_${i}`;
-          result.push({
-            id: divId,
-            serialNo: null,
-            action: label,
-            result: "",
-            remarks: "",
-            status: "pending",
-            isDivider: true,
-          });
-        } else {
-          stepCounter++;
-          const csvSN =
-            rawFirst !== ""
-              ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
-              : stepCounter;
-
-          const existing = existingBySN[String(csvSN)];
-          const stableId = existing?.id || `${targetTestId}_s${csvSN}`;
-
-          result.push({
-            ...(existing || {}),
-            id: stableId,
-            isDivider: false,
-            serialNo: csvSN,
-            action: cols[1] !== undefined ? cols[1] : (existing?.action ?? ""),
-            result: cols[2] !== undefined ? cols[2] : (existing?.result ?? ""),
-            // Preserve each module's tester remarks + status — never overwrite
-            remarks: existing?.remarks ?? "",
-            status:  existing?.status  ?? "pending",
-          });
-        }
-      });
-
-      return result;
-    };
-
-    // Build steps for the current test (to update local state immediately)
-    const ns = buildStepsForTest(test, test.id);
-    setSteps(ns);
-
-    // Now propagate to ALL modules at the same test-index (testIdx)
-    localCommitRef.current = true;
-    const updatedModules = {};
-    for (const [modId, m] of Object.entries(allModules)) {
-      const targetTest = m.tests[testIdx];
-      if (!targetTest) {
-        // Module doesn't have a test at this index — leave it unchanged
-        updatedModules[modId] = m;
-        continue;
+    // Build a lookup of existing real steps by serialNo so we can reuse their IDs
+    const existingBySN = {};
+    steps.forEach((s) => {
+      if (!s.isDivider && s.serialNo !== "" && s.serialNo != null) {
+        existingBySN[String(s.serialNo)] = s;
       }
-      const targetSteps = buildStepsForTest(targetTest, targetTest.id);
-      const updTests = m.tests.map((t, i) =>
-        i === testIdx ? { ...t, steps: targetSteps } : t
-      );
-      updatedModules[modId] = { ...m, tests: updTests };
-    }
+    });
 
-    saveMods(updatedModules);
+    let stepCounter = 0; // counts only real steps (not dividers) for auto-SN
+    const ns = [];
+
+    dataLines.forEach((line, i) => {
+      const cols = csvParse(line);
+      const rawFirst = (cols[0] || "").trim();
+
+      if (rawFirst.startsWith("$$$")) {
+        // Section divider: label is everything after $$$
+        const label =
+          rawFirst.slice(3).trim() ||
+          cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
+          "Section";
+        ns.push({
+          id: `${test.id}_div_${Date.now()}_${i}`,
+          serialNo: null,       // null not "" — safe for integer DB column
+          action: label,
+          result: "",
+          remarks: "",
+          status: "pending",
+          isDivider: true,
+        });
+      } else {
+        stepCounter++;
+        // Determine SN from CSV col[0], else auto-assign
+        const csvSN =
+          rawFirst !== ""
+            ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
+            : stepCounter;
+
+        // Reuse existing step by SN so the ID is stable across re-imports
+        const existing = existingBySN[String(csvSN)];
+        const stableId = existing?.id || `${test.id}_s${csvSN}`;
+
+        ns.push({
+          ...(existing || {}),
+          id: stableId,
+          isDivider: false,
+          serialNo: csvSN,
+          action: cols[1] !== undefined ? cols[1] : (existing?.action ?? ""),
+          result: cols[2] !== undefined ? cols[2] : (existing?.result ?? ""),
+          // Always preserve tester's existing remarks + status — never overwrite on re-import
+          remarks: existing?.remarks ?? "",
+          status:  existing?.status  ?? "pending",
+        });
+      }
+    });
+
+    setSteps(ns);
+    commit(ns);
     setCsvOpen(false);
-
-    const modCount = Object.values(allModules).filter((m) => m.tests[testIdx]).length;
     toast(
-      `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""} → synced to ${modCount} module${modCount !== 1 ? "s" : ""}`,
+      `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""}`,
       "success"
     );
     addLog({
       ts: Date.now(),
       user: session.name,
-      action: `CSV imported into Test ${testIdx + 1} across ${modCount} modules (${dataLines.length} rows each)`,
+      action: `CSV imported into ${mod.name} › ${test.name} (${dataLines.length} rows)`,
       type: "info",
     });
   };
 
   const exportCSV = () => {
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = [["Serial No", "Action", "Result", "Remarks", "Status"]];
     steps.forEach((s) => {
       if (s.isDivider) {
-        rows.push([esc(`$$$${s.action}`), "", "", "", ""]);
+        rows.push([`"$$$${s.action}"`, "", "", "", ""]);
       } else {
-        rows.push([s.serialNo ?? "", esc(s.action), esc(s.result), esc(s.remarks), s.status]);
+        rows.push([s.serialNo, `"${s.action}"`, `"${s.result}"`, `"${s.remarks}"`, s.status]);
       }
     });
     const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
       type: "text/csv",
     });
-    const url = URL.createObjectURL(b);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = URL.createObjectURL(b);
     a.download = `${mod.name}_${test.name}.csv`.replace(/\s+/g, "_");
     a.click();
-    URL.revokeObjectURL(url);
     toast("CSV exported", "success");
   };
 
   const exportPDF = () => {
-    const he = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     const statusColor = (s) =>
       s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
     const statusBg = (s) =>
@@ -2623,9 +2758,15 @@ function TestDetail({
         <td style="padding:7px 10px;border:1px solid #e5e7eb;font-family:monospace;font-size:12px;text-align:center;white-space:nowrap">${
           s.serialNo || "—"
         }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px">${he(s.action)}</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#4b5563">${he(s.result)}</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#6b7280">${he(s.remarks)}</td>
+        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px">${
+          s.action || ""
+        }</td>
+        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#4b5563">${
+          s.result || ""
+        }</td>
+        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#6b7280">${
+          s.remarks || ""
+        }</td>
         <td style="padding:7px 10px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;font-weight:700;text-align:center;color:${statusColor(
           s.status
         )}">${s.status.toUpperCase()}</td>
@@ -2634,7 +2775,7 @@ function TestDetail({
       .join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>${he(mod.name)} — ${he(test.name)}</title>
+      <title>${mod.name} — ${test.name}</title>
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;padding:32px}
@@ -2647,8 +2788,8 @@ function TestDetail({
         @page{margin:16mm}
         @media print{body{padding:0}}
       </style></head><body>
-      <h1>${he(mod.name)} — ${he(test.name)}</h1>
-      ${test.description ? `<h2>${he(test.description)}</h2>` : ""}
+      <h1>${mod.name} — ${test.name}</h1>
+      ${test.description ? `<h2>${test.description}</h2>` : ""}
       <div class="meta">
         <div>Total <span>${steps.length}</span></div>
         <div>Pass <span style="color:#16a34a">${pass}</span></div>
@@ -2664,10 +2805,6 @@ function TestDetail({
       </body></html>`;
 
     const w = window.open("", "_blank");
-    if (!w) {
-      toast("Pop-up blocked — please allow pop-ups for this site", "error");
-      return;
-    }
     w.document.write(html);
     w.document.close();
     w.focus();
@@ -2704,9 +2841,6 @@ function TestDetail({
     [steps, fStat, search]
   );
 
-  const isMobile = useIsMobile();
-  const onMenuClick = useContext(MobileMenuCtx);
-
   return (
     <div
       style={{
@@ -2716,229 +2850,177 @@ function TestDetail({
         overflow: "hidden",
       }}
     >
-      {/* ── Test header: redesigned 2-row layout ─────────────────────────── */}
       <div
         style={{
+          padding: "10px 14px",
           background: C.s1,
           borderBottom: `1px solid ${C.b1}`,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
           flexShrink: 0,
-          boxShadow: "0 1px 4px rgba(0,0,0,.06)",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        {/* Row 1 — breadcrumb + title + progress */}
-        <div
-          style={{
-            padding: isMobile ? "10px 14px 8px" : "12px 22px 10px",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            borderBottom: `1px solid ${C.b1}`,
-          }}
-        >
-          {/* Hamburger on mobile */}
-          {isMobile && onMenuClick && (
-            <button onClick={onMenuClick} style={{ ...iBtn(), padding: "5px 6px", marginLeft: -6 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-              </svg>
+        <button style={smBtn()} onClick={onBack}>
+          <Ico n="back" s={12} /> {mod.name}
+        </button>
+        {/* Module nav arrows — shown inside TestDetail too, disabled until Finish clicked */}
+        {modIdx !== undefined && modTotal !== undefined && (
+          <>
+            <button
+              style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
+              onClick={() => !navLocked && onNav && onNav(-1)}
+              disabled={modIdx === 0 || navLocked}
+              title={navLocked ? 'Finish your test before switching modules' : undefined}
+            >
+              <Ico n="chevL" s={12} />
             </button>
-          )}
+            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>
+              {modIdx + 1}/{modTotal}
+            </span>
+            <button
+              style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
+              onClick={() => !navLocked && onNav && onNav(1)}
+              disabled={modIdx === modTotal - 1 || navLocked}
+              title={navLocked ? 'Finish your test before switching modules' : undefined}
+            >
+              <Ico n="chevR" s={12} />
+            </button>
+          </>
+        )}
+        <div style={{ width: 1, height: 20, background: C.b2 }} />
+        {renaming ? (
+          <input
+            ref={renRef}
+            value={renVal}
+            onChange={(e) => setRenVal(e.target.value)}
+            onBlur={() => {
+              commit(steps, renVal || test.name, descVal);
+              setRenaming(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                commit(steps, renVal || test.name, descVal);
+                setRenaming(false);
+              }
+              if (e.key === "Escape") setRenaming(false);
+            }}
+            autoFocus
+            style={{
+              background: "none",
+              border: "none",
+              borderBottom: `1px solid ${C.ac}`,
+              color: C.t1,
+              fontFamily: F.sans,
+              fontSize: 14,
+              fontWeight: 700,
+              padding: "0 2px",
+              outline: "none",
+              width: 220,
+            }}
+          />
+        ) : (
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {test.name}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setRenaming(true);
+                  setTimeout(() => renRef.current?.select(), 20);
+                }}
+                style={{ ...iBtn(), padding: 3 }}
+                title="Rename test"
+              >
+                <Ico n="edit" s={11} />
+              </button>
+            )}
+          </span>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, color: C.t2, fontFamily: F.mono }}>
+            {pass} pass · {fail} fail · {pending} pending · {pct}%
+          </div>
+        </div>
+        <div style={{ width: 80 }}>
+          <PBar pct={pct} fail={fail > 0} />
+        </div>
 
-          {/* Back breadcrumb */}
-          <button
-            onClick={onBack}
+        {isAdmin ? (
+          <button style={acBtn(smBtn())} onClick={() => setCsvOpen(true)}>
+            <Ico n="upload" s={12} /> Import CSV
+          </button>
+        ) : (
+          <span
             style={{
               ...smBtn(),
+              opacity: 0.35,
+              cursor: "not-allowed",
               display: "inline-flex",
               alignItems: "center",
               gap: 5,
-              background: C.s2,
-              borderColor: C.b1,
-              color: C.t2,
-              flexShrink: 0,
             }}
           >
-            <Ico n="chevL" s={11} />
-            <span style={{ maxWidth: isMobile ? 80 : 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {mod.name}
-            </span>
+            <Ico n="lock" s={12} /> Import CSV
+          </span>
+        )}
+        <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
+        {isAdmin && (
+          <button style={reBtn(smBtn())} onClick={resetAll}>
+            <Ico n="reset" s={12} /> Reset
           </button>
+        )}
+        {!isAdmin && onFinish && (
+          <button
+            style={grBtn(smBtn())}
+            onClick={() => {
+              commit(steps);
+              addLog({ ts: Date.now(), user: session.name,
+                action: `Finished ${mod.name} › ${test.name}`, type: "info" });
+              toast("Test finished — progress saved & lock released", "success");
+              onFinish(steps);
+            }}
+            title="Save progress and release the lock so others can continue"
+          >
+            <Ico n="check" s={12} /> Finish Test
+          </button>
+        )}
+      </div>
 
-          <span style={{ color: C.t3, fontSize: 12, flexShrink: 0 }}>›</span>
-
-          {/* Test name (editable) */}
-          {renaming ? (
-            <input
-              ref={renRef}
-              value={renVal}
-              onChange={(e) => setRenVal(e.target.value)}
-              onBlur={() => { commit(steps, renVal || test.name, descVal); setRenaming(false); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { commit(steps, renVal || test.name, descVal); setRenaming(false); }
-                if (e.key === "Escape") setRenaming(false);
-              }}
-              autoFocus
-              style={{
-                background: "none", border: "none",
-                borderBottom: `2px solid ${C.ac}`,
-                color: C.t1, fontFamily: F.sans,
-                fontSize: isMobile ? 14 : 15,
-                fontWeight: 700, padding: "0 2px",
-                outline: "none", minWidth: 0, flex: 1,
-              }}
-            />
-          ) : (
-            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{
-                fontSize: isMobile ? 14 : 15,
-                fontWeight: 700,
-                color: C.t1,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}>
-                {test.name}
-              </span>
-              {isAdmin && (
-                <button
-                  onClick={() => { setRenaming(true); setTimeout(() => renRef.current?.select(), 20); }}
-                  style={{ ...iBtn(), padding: 3, flexShrink: 0 }}
-                  title="Rename test"
-                >
-                  <Ico n="edit" s={11} />
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Progress pill — always visible */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexShrink: 0,
-            background: C.s2,
-            border: `1px solid ${C.b1}`,
-            borderRadius: 20,
-            padding: "4px 12px",
-          }}>
-            {!isMobile && (
-              <>
-                <span style={{ fontSize: 10, fontFamily: F.mono, color: C.gr, fontWeight: 600 }}>{pass}✓</span>
-                {fail > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.re, fontWeight: 600 }}>{fail}✗</span>}
-                <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>{pending}…</span>
-                <div style={{ width: 1, height: 12, background: C.b2 }} />
-              </>
-            )}
-            <span style={{ fontSize: 11, fontFamily: F.mono, fontWeight: 700,
-              color: pct === 100 ? C.gr : fail > 0 ? C.re : C.ac }}>
-              {pct}%
-            </span>
-          </div>
-
-          {/* Module nav arrows */}
-          {!isMobile && modIdx !== undefined && modTotal !== undefined && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-              <button
-                style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
-                onClick={() => !navLocked && onNav && onNav(-1)}
-                disabled={modIdx === 0 || navLocked}
-                title={navLocked ? "Finish your test first" : "Previous module"}
-              >
-                <Ico n="chevL" s={12} />
-              </button>
-              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, whiteSpace: "nowrap" }}>
-                {modIdx + 1}/{modTotal}
-              </span>
-              <button
-                style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
-                onClick={() => !navLocked && onNav && onNav(1)}
-                disabled={modIdx === modTotal - 1 || navLocked}
-                title={navLocked ? "Finish your test first" : "Next module"}
-              >
-                <Ico n="chevR" s={12} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Row 2 — description + progress bar */}
-        <div style={{
-          padding: isMobile ? "6px 14px" : "6px 22px",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
+      <div
+        style={{
+          padding: "6px 20px",
           background: C.s2,
           borderBottom: `1px solid ${C.b1}`,
-        }}>
-          <input
-            value={descVal}
-            onChange={(e) => { setDescVal(e.target.value); commit(steps, renVal, e.target.value); }}
-            placeholder="Add a description…"
-            style={{
-              flex: 1,
-              background: "transparent",
-              border: "none",
-              color: C.t2,
-              fontFamily: F.sans,
-              fontSize: 12,
-              outline: "none",
-            }}
-          />
-          <div style={{ width: isMobile ? 80 : 120, flexShrink: 0 }}>
-            <PBar pct={pct} fail={fail > 0} />
-          </div>
-        </div>
-
-        {/* Row 3 — action buttons */}
-        <div style={{
-          padding: isMobile ? "8px 14px" : "8px 22px",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          flexWrap: "wrap",
-        }}>
-          {isAdmin ? (
-            <button style={acBtn(smBtn())} onClick={() => setCsvOpen(true)}>
-              <Ico n="upload" s={12} /> {isMobile ? "Import" : "Import CSV"}
-            </button>
-          ) : (
-            <span style={{ ...smBtn(), opacity: 0.3, cursor: "not-allowed", display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Ico n="lock" s={12} /> {isMobile ? "Import" : "Import CSV"}
-            </span>
-          )}
-          <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
-          {isAdmin && (
-            <button style={reBtn(smBtn())} onClick={resetAll}>
-              <Ico n="reset" s={12} /> Reset
-            </button>
-          )}
-          {/* Finish test button — prominent for testers */}
-          {!isAdmin && onFinish && (
-            <button
-              style={{
-                ...grBtn(smBtn()),
-                marginLeft: "auto",
-                padding: isMobile ? "7px 16px" : "6px 14px",
-                fontSize: isMobile ? 13 : 12,
-                fontWeight: 600,
-                boxShadow: "0 2px 8px rgba(22,163,74,.25)",
-              }}
-              onClick={() => {
-                commit(steps);
-                addLog({ ts: Date.now(), user: session.name,
-                  action: `Finished ${mod.name} › ${test.name}`, type: "info" });
-                toast("Test finished — progress saved & lock released", "success");
-                onFinish(steps);
-              }}
-              title="Save progress and release the lock so others can continue"
-            >
-              <Ico n="check" s={12} /> Finish Test
-            </button>
-          )}
-          {/* Spacer if admin (no Finish button) */}
-          {isAdmin && <div style={{ flex: 1 }} />}
-        </div>
+          flexShrink: 0,
+        }}
+      >
+        <input
+          value={descVal}
+          onChange={(e) => {
+            setDescVal(e.target.value);
+            commit(steps, renVal, e.target.value);
+          }}
+          placeholder="Description…"
+          style={{
+            width: "100%",
+            background: "transparent",
+            border: "none",
+            color: C.t2,
+            fontFamily: F.sans,
+            fontSize: 12,
+            outline: "none",
+          }}
+        />
       </div>
 
       <div
@@ -3007,7 +3089,7 @@ function TestDetail({
                 outline: "none",
               }}
             >
-              {[1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000].map((n) => (
+              {[1, 5, 10, 25, 50, 100, 250, 500].map((n) => (
                 <option key={n} value={n}>
                   +{n}
                 </option>
@@ -3016,7 +3098,7 @@ function TestDetail({
             <button
               style={grBtn(smBtn())}
               onClick={addSteps}
-              disabled={steps.length >= 100_000}
+              disabled={steps.length >= 1000}
             >
               <Ico n="plus" s={11} /> Add Steps
             </button>
@@ -3024,8 +3106,7 @@ function TestDetail({
         )}
       </div>
 
-      <div ref={tableRef} style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-        <div style={{ minWidth: 680 }}>
+      <div ref={tableRef} style={{ flex: 1, overflowY: "auto", paddingBottom: 64 }}>
         <div
           style={{
             display: "grid",
@@ -3036,6 +3117,7 @@ function TestDetail({
             top: 0,
             zIndex: 2,
           }}
+          className="desktop-table-header"
         >
           {["S.No", "Action", "Expected Result", "Remarks", "Status"].map(
             (h, i) => (
@@ -3090,7 +3172,6 @@ function TestDetail({
             />
           )
         )}
-        </div>
       </div>
 
       {csvOpen && isAdmin && (
@@ -3160,7 +3241,7 @@ function ModuleView({
       lockStore.heartbeat(test.id, session.id);
     }, HEARTBEAT_MS);
     return () => clearInterval(beat);
-  }, [selTestIdx, isAdmin, session.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selTestIdx, isAdmin]);
 
   // beforeunload: best-effort release on normal tab/window close (testers only).
   // Uses activeTestIdRef so it always sees the latest open test id.
@@ -3170,18 +3251,12 @@ function ModuleView({
       const testId = activeTestIdRef.current;
       if (!testId) return;
       try {
-        // keepalive fetch survives page unload and sends proper headers
+        // sendBeacon is the most reliable way to fire a request on page unload
         const url = `${supabase.supabaseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
-        fetch(url, {
-          method: "DELETE",
-          keepalive: true,
-          headers: {
-            apikey: supabase.supabaseKey,
-            Authorization: `Bearer ${supabase.supabaseKey}`,
-          },
-        });
+        const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
+        if (!sent) lockStore.release(testId, session.id);
       } catch {
-        // best-effort — TTL will expire the lock within 60s anyway
+        lockStore.release(testId, session.id);
       }
     };
     window.addEventListener("beforeunload", onUnload);
@@ -3275,7 +3350,7 @@ function ModuleView({
       ...mod,
       tests: mod.tests
         .filter((_, i) => i !== idx)
-        .map((t, i) => ({ ...t, serialNo: i + 1, serial_no: i + 1 })),
+        .map((t, i) => ({ ...t, serialNo: i + 1, serial_no: i + 1, name: `Test ${i + 1}` })),
     };
     saveMods({ ...allModules, [mod.id]: updated });
     toast("Test deleted", "info");
@@ -3303,7 +3378,7 @@ function ModuleView({
         onFinish={finishTest}
         modIdx={modIdx}
         modTotal={modTotal}
-        onNav={onNav}
+        onNav={!isAdmin ? null : onNav}
         navLocked={!isAdmin && uiLocked}
       />
     );
@@ -3411,7 +3486,7 @@ function ModuleView({
         )}
       </Topbar>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 16, paddingBottom: 80 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map((t, visIdx) => {
             const realIdx = mod.tests.indexOf(t);
@@ -3676,40 +3751,35 @@ function ReportView({ modules, toast }) {
   }, [modStats, search, failOnly]);
 
   const exportAllCSV = () => {
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = [
       ["Module", "Test", "Step", "Action", "Result", "Remarks", "Status"],
     ];
     modList.forEach((m) =>
       m.tests.forEach((t) =>
-        t.steps.forEach((s) => {
-          if (s.isDivider) return; // skip section dividers
+        t.steps.forEach((s) =>
           rows.push([
-            esc(m.name),
-            esc(t.name),
-            s.serialNo ?? "",
-            esc(s.action),
-            esc(s.result),
-            esc(s.remarks),
+            `"${m.name}"`,
+            `"${t.name}"`,
+            s.serialNo,
+            `"${s.action}"`,
+            `"${s.result}"`,
+            `"${s.remarks}"`,
             s.status,
-          ]);
-        })
+          ])
+        )
       )
     );
     const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
       type: "text/csv",
     });
-    const url = URL.createObjectURL(b);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = URL.createObjectURL(b);
     a.download = `TestPro_Report_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
     toast("CSV exported", "success");
   };
 
   const exportAllPDF = () => {
-    const he = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     const sc = (s) =>
       s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
     const sb = (s) =>
@@ -3737,9 +3807,15 @@ function ReportView({ modules, toast }) {
             <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${
               s.serialNo || "—"
             }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${he(s.action)}</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${he(s.result)}</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${he(s.remarks)}</td>
+            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${
+              s.action || ""
+            }</td>
+            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${
+              s.result || ""
+            }</td>
+            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${
+              s.remarks || ""
+            }</td>
             <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:10px;font-weight:700;text-align:center;color:${sc(
               s.status
             )}">${s.status.toUpperCase()}</td>
@@ -3812,10 +3888,6 @@ function ReportView({ modules, toast }) {
       </body></html>`;
 
     const w = window.open("", "_blank");
-    if (!w) {
-      toast("Pop-up blocked — please allow pop-ups for this site", "error");
-      return;
-    }
     w.document.write(html);
     w.document.close();
     w.focus();
@@ -3852,7 +3924,7 @@ function ReportView({ modules, toast }) {
         </div>
         <ExportMenu onCSV={exportAllCSV} onPDF={exportAllPDF} />
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 20, paddingBottom: 80 }}>
         <div
           style={{
             display: "flex",
@@ -4133,7 +4205,7 @@ function AuditView({ log }) {
   return (
     <>
       <Topbar title="Audit Log" sub={`${log.length} events recorded`} />
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px", paddingBottom: 80 }}>
         <div
           style={{
             background: C.s1,
@@ -4157,7 +4229,7 @@ function AuditView({ log }) {
           )}
           {log.map((e, i) => (
             <div
-              key={`${e.ts}-${i}`}
+              key={i}
               style={{
                 padding: "10px 16px",
                 borderBottom: `1px solid ${C.b1}`,
@@ -4322,7 +4394,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
           <Ico n="plus" s={13} /> Add User
         </button>
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: 20, paddingBottom: 80 }}>
         <div style={{ display: "grid", gap: 10 }}>
           {filtered.map((u) => (
             <div
@@ -4354,7 +4426,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
                   border: `1px solid ${C.b1}`,
                 }}
               >
-                {(u.name || "?")[0].toUpperCase()}
+                {u.name[0].toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{u.name}</div>
@@ -4525,29 +4597,24 @@ export default function App() {
   const [view, setView] = useState("dash");
   const [selMod, setSelMod] = useState(null);
   const [sideColl, setSideColl] = useState(false);
-  const [hasLock, setHasLock] = useState(false);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const isMobile = useIsMobile();
+  const [hasLock, setHasLock] = useState(false); // true while current tester holds an unreleased test lock
   const { push: toast, Host: ToastHost } = useToast();
 
   useEffect(() => {
-    let alive = true;
     (async () => {
       const { users, modules } = await store.loadAll();
       const log = await store.loadLog();
-      if (!alive) return;
       setUsers(users.length ? users : SEED_USERS);
       setModules(Object.keys(modules).length ? modules : buildModules());
       setLog(log);
     })();
-    return () => { alive = false; };
   }, []);
 
   const saveUsers = useCallback(async (u) => {
     setUsers(u);
     await store.saveUsers(u);
     // Reload from Supabase so new users get their real UUID (replaces temp new_XXXX id)
-    const { data: fresh } = await supabase.from("users").select("*").limit(10_000);
+    const { data: fresh } = await supabase.from("users").select("*");
     if (fresh && fresh.length) setUsers(fresh);
   }, []);
 
@@ -4555,8 +4622,6 @@ export default function App() {
   // never uses a stale snapshot captured in an old closure.
   const latestModulesRef = useRef(null);
   const saveModsTimerRef = useRef(null);
-  // Clear pending debounce on unmount to prevent setState-after-unmount
-  useEffect(() => () => { if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current); }, []);
   const saveMods = useCallback((m) => {
     setModules(m);
     latestModulesRef.current = m; // always track the very latest value
@@ -4642,7 +4707,7 @@ export default function App() {
                 updatedTests[testIdx] = {
                   ...test,
                   steps: [...test.steps, normRow].sort(
-                    (a, b) => (a.position ?? 0) - (b.position ?? 0)
+                    (a, b) => (a.serialNo ?? 0) - (b.serialNo ?? 0)
                   ),
                 };
                 next[modId] = { ...mod, tests: updatedTests };
@@ -4848,20 +4913,9 @@ export default function App() {
 
   const modKeys = Object.keys(modules);
   const modIdx = selMod ? modKeys.indexOf(selMod) : -1;
-
-  // Mobile bottom nav items
-  const mobileNavItems = [
-    { id: "dash", icon: "dash", label: "Dashboard" },
-    { id: "report", icon: "report", label: "Report" },
-    ...(session.role === "admin" ? [
-      { id: "users", icon: "users", label: "Users" },
-      { id: "audit", icon: "log", label: "Audit" },
-    ] : []),
-    { id: "_modules", icon: "layers", label: "Modules" },
-  ];
+  const isMobileLayout = window.innerWidth <= 768;
 
   return (
-    <MobileMenuCtx.Provider value={() => setMobileDrawerOpen(true)}>
     <div
       style={{
         display: "flex",
@@ -4874,60 +4928,34 @@ export default function App() {
         lineHeight: 1.5,
       }}
     >
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}`}</style>
-      {/* Desktop sidebar — hidden on mobile (drawer handles it) */}
-      {!isMobile && (
-        <Sidebar
-          session={session}
-          view={view}
-          setView={setView}
-          modules={modules}
-          selMod={selMod}
-          setSelMod={(id) => {
-            if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
-              toast("Finish the current test first", "error");
-              return;
-            }
-            setSelMod(id);
-            setView("mod");
-          }}
-          collapsed={sideColl}
-          setCollapsed={setSideColl}
-          locked={session.role !== "admin" && hasLock}
-          onLogout={() => {
-            addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
-            handleLogout(session);
-          }}
-        />
-      )}
-      {/* Mobile drawer sidebar */}
-      {isMobile && (
-        <Sidebar
-          session={session}
-          view={view}
-          setView={(v) => { setView(v); setMobileDrawerOpen(false); }}
-          modules={modules}
-          selMod={selMod}
-          setSelMod={(id) => {
-            if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
-              toast("Finish the current test first", "error");
-              return;
-            }
-            setSelMod(id);
-            setView("mod");
-            setMobileDrawerOpen(false);
-          }}
-          collapsed={false}
-          setCollapsed={() => {}}
-          locked={session.role !== "admin" && hasLock}
-          mobileOpen={mobileDrawerOpen}
-          onMobileClose={() => setMobileDrawerOpen(false)}
-          onLogout={() => {
-            addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
-            handleLogout(session);
-          }}
-        />
-      )}
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}.desktop-table-header{display:grid}@media(max-width:768px){.desktop-table-header{display:none!important}}`}</style>
+      <Sidebar
+        session={session}
+        view={view}
+        setView={setView}
+        modules={modules}
+        selMod={selMod}
+        setSelMod={(id) => {
+          if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
+            toast("Finish the current test first", "error");
+            return;
+          }
+          setSelMod(id);
+          setView("mod");
+        }}
+        collapsed={sideColl}
+        setCollapsed={setSideColl}
+        locked={session.role !== "admin" && hasLock}
+        onLogout={() => {
+          addLog({
+            ts: Date.now(),
+            user: session.name,
+            action: "Logged out",
+            type: "info",
+          });
+          handleLogout(session);
+        }}
+      />
       <div
         style={{
           flex: 1,
@@ -4935,8 +4963,6 @@ export default function App() {
           flexDirection: "column",
           overflow: "hidden",
           minWidth: 0,
-          // On mobile, add bottom padding for the nav bar
-          paddingBottom: isMobile ? 56 : 0,
         }}
       >
         {view === "dash" && (
@@ -4967,7 +4993,7 @@ export default function App() {
             toast={toast}
             onLockChange={(locked) => setHasLock(locked)}
             onNav={(dir) => {
-              if (hasLock) return;
+              if (hasLock) return; // can't switch modules while lock is held
               const nk = modKeys[modIdx + dir];
               if (nk) setSelMod(nk);
             }}
@@ -4989,96 +5015,7 @@ export default function App() {
           <AuditView log={log} />
         )}
       </div>
-      {/* Mobile bottom navigation bar */}
-      {isMobile && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 56,
-            background: C.s1,
-            borderTop: `1px solid ${C.b1}`,
-            display: "flex",
-            alignItems: "center",
-            zIndex: 200,
-            boxShadow: "0 -2px 10px rgba(0,0,0,.07)",
-          }}
-        >
-          {mobileNavItems.map(({ id, icon, label }) => {
-            const isActive = id === "_modules"
-              ? view === "mod"
-              : view === id;
-            return (
-              <button
-                key={id}
-                onClick={() => {
-                  if (id === "_modules") {
-                    setMobileDrawerOpen(true);
-                  } else {
-                    if (session.role !== "admin" && hasLock && id !== view) {
-                      toast("Finish the current test first", "error");
-                      return;
-                    }
-                    setView(id);
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 3,
-                  border: "none",
-                  background: "transparent",
-                  color: isActive ? C.ac : C.t3,
-                  fontFamily: F.sans,
-                  fontSize: 9,
-                  fontWeight: isActive ? 600 : 400,
-                  cursor: "pointer",
-                  padding: "4px 0",
-                  height: "100%",
-                }}
-              >
-                <Ico n={icon} s={18} />
-                {label}
-              </button>
-            );
-          })}
-          {/* Logout at end of bottom nav */}
-          <button
-            onClick={() => {
-              addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
-              handleLogout(session);
-            }}
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 3,
-              border: "none",
-              borderLeft: `1px solid ${C.b1}`,
-              background: "transparent",
-              color: C.re,
-              fontFamily: F.sans,
-              fontSize: 9,
-              fontWeight: 400,
-              cursor: "pointer",
-              padding: "4px 0",
-              height: "100%",
-            }}
-          >
-            <Ico n="logout" s={18} />
-            Logout
-          </button>
-        </div>
-      )}
       <ToastHost />
     </div>
-    </MobileMenuCtx.Provider>
   );
 }
