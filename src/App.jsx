@@ -3455,6 +3455,7 @@ function ModuleView({
 
 // ── Report View ────────────────────────────────────────────────────────────────
 function ReportView({ modules, toast }) {
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [failOnly, setFailOnly] = useState(false);
   const [exp, setExp] = useState(new Set());
@@ -3636,263 +3637,233 @@ function ReportView({ modules, toast }) {
         title="Test Report"
         sub={`${pass} passed · ${fail} failed · ${total - pass - fail} pending`}
       >
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder="Search modules…"
-          width={190}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Toggle on={failOnly} onClick={() => setFailOnly((f) => !f)} />
-          <span
+        {!isMobile && (
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            placeholder="Search modules…"
+            width={190}
+          />
+        )}
+        {!isMobile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Toggle on={failOnly} onClick={() => setFailOnly((f) => !f)} />
+            <span style={{ fontSize: 11, fontFamily: F.mono, color: C.t2, whiteSpace: "nowrap" }}>
+              Failures only
+            </span>
+          </div>
+        )}
+        <ExportMenu onCSV={exportAllCSV} onPDF={exportAllPDF} />
+      </Topbar>
+
+      {/* Mobile-only filter bar */}
+      {isMobile && (
+        <div style={{
+          padding: "10px 12px",
+          background: C.s1,
+          borderBottom: `1px solid ${C.b1}`,
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexShrink: 0,
+        }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" width="100%" />
+          <button
+            onClick={() => setFailOnly((f) => !f)}
             style={{
-              fontSize: 11,
-              fontFamily: F.mono,
-              color: C.t2,
+              ...smBtn(failOnly ? { background: C.red, borderColor: "#fca5a5", color: C.re } : {}),
+              flexShrink: 0,
               whiteSpace: "nowrap",
             }}
           >
-            Failures only
-          </span>
+            <Ico n="x" s={11} /> {failOnly ? "All" : "Failures"}
+          </button>
         </div>
-        <ExportMenu onCSV={exportAllCSV} onPDF={exportAllPDF} />
-      </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <Chip
-            label={`${total.toLocaleString()} steps`}
-            color={C.ac}
-            bg="#eff6ff"
-          />
-          <Chip
-            label={`✓ ${pass.toLocaleString()} passed (${
-              total ? Math.round((pass / total) * 100) : 0
-            }%)`}
-            color={C.gr}
-            bg={C.grd}
-          />
-          <Chip
-            label={`✗ ${fail.toLocaleString()} failed (${
-              total ? Math.round((fail / total) * 100) : 0
-            }%)`}
-            color={C.re}
-            bg={C.red}
-          />
-          <Chip
-            label={`⟳ ${(total - pass - fail).toLocaleString()} pending`}
-            color={C.am}
-            bg={C.amd}
-          />
-        </div>
+      )}
+
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "12px 12px" : 20 }}>
+
+        {/* Summary stats */}
+        {isMobile ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+            {[
+              { label: "Total Steps", val: total.toLocaleString(), color: C.ac, bg: "#eff6ff" },
+              { label: "Pass Rate", val: `${total ? Math.round((pass / total) * 100) : 0}%`, color: C.gr, bg: C.grd },
+              { label: `Passed`, val: pass.toLocaleString(), color: C.gr, bg: C.grd },
+              { label: `Failed`, val: fail.toLocaleString(), color: C.re, bg: C.red },
+            ].map(({ label, val, color, bg }) => (
+              <div key={label} style={{
+                background: bg, borderRadius: 10, padding: "12px 14px",
+                border: `1px solid ${color}22`,
+              }}>
+                <div style={{ fontSize: 11, fontFamily: F.mono, color, fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 22, fontFamily: F.mono, fontWeight: 700, color }}>{val}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            <Chip label={`${total.toLocaleString()} steps`} color={C.ac} bg="#eff6ff" />
+            <Chip label={`✓ ${pass.toLocaleString()} passed (${total ? Math.round((pass / total) * 100) : 0}%)`} color={C.gr} bg={C.grd} />
+            <Chip label={`✗ ${fail.toLocaleString()} failed (${total ? Math.round((fail / total) * 100) : 0}%)`} color={C.re} bg={C.red} />
+            <Chip label={`⟳ ${(total - pass - fail).toLocaleString()} pending`} color={C.am} bg={C.amd} />
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <button
-            style={smBtn()}
-            onClick={() => setExp(new Set(modList.map((m) => m.id)))}
-          >
-            Expand All
-          </button>
-          <button style={smBtn()} onClick={() => setExp(new Set())}>
-            Collapse All
-          </button>
+          <button style={smBtn()} onClick={() => setExp(new Set(modList.map((m) => m.id)))}>Expand All</button>
+          <button style={smBtn()} onClick={() => setExp(new Set())}>Collapse All</button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 8 : 10 }}>
           {filtered.map((m) => {
             const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
             const open = exp.has(m.id);
+            const pendingM = m.total - m.pass - m.fail;
             return (
-              <div
-                key={m.id}
-                style={{
-                  background: C.s1,
-                  border: `1px solid ${C.b1}`,
-                  borderRadius: 8,
-                  overflow: "hidden",
-                }}
-              >
+              <div key={m.id} style={{
+                background: C.s1,
+                border: `1px solid ${m.fail > 0 ? "#fca5a5" : m.pass === m.total && m.total > 0 ? "#86efac" : C.b1}`,
+                borderRadius: 10,
+                overflow: "hidden",
+              }}>
+                {/* Module header */}
                 <div
-                  onClick={() => {
-                    const s = new Set(exp);
-                    s.has(m.id) ? s.delete(m.id) : s.add(m.id);
-                    setExp(s);
-                  }}
-                  style={{
-                    padding: "11px 16px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    cursor: "pointer",
-                  }}
+                  onClick={() => { const s = new Set(exp); s.has(m.id) ? s.delete(m.id) : s.add(m.id); setExp(s); }}
+                  style={{ padding: isMobile ? "12px 14px" : "11px 16px", cursor: "pointer" }}
                 >
-                  <Ico n={open ? "chevD" : "chevR"} s={13} />
-                  <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
-                    {m.name}
+                  {/* Top line: chevron + name + pct */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Ico n={open ? "chevD" : "chevR"} s={13} />
+                    <div style={{ fontSize: isMobile ? 14 : 13, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.name}
+                    </div>
+                    <span style={{ fontSize: 12, fontFamily: F.mono, fontWeight: 700,
+                      color: pct === 100 ? C.gr : m.fail > 0 ? C.re : C.t2, flexShrink: 0 }}>
+                      {pct}%
+                    </span>
                   </div>
-                  <span
-                    style={{ fontSize: 11, fontFamily: F.mono, color: C.t3 }}
-                  >
-                    {m.tests.length} tests · {m.total} steps
-                  </span>
-                  {m.pass > 0 && (
-                    <Chip label={`✓${m.pass}`} color={C.gr} bg={C.grd} />
-                  )}
-                  {m.fail > 0 && (
-                    <Chip label={`✗${m.fail}`} color={C.re} bg={C.red} />
-                  )}
-                  {m.total - m.pass - m.fail > 0 && (
-                    <Chip
-                      label={`⟳${m.total - m.pass - m.fail}`}
-                      color={C.am}
-                      bg={C.amd}
-                    />
-                  )}
-                  <span
-                    style={{ fontSize: 11, fontFamily: F.mono, color: C.t3 }}
-                  >
-                    {pct}%
-                  </span>
-                  <div style={{ width: 60 }}>
-                    <PBar pct={pct} fail={m.fail > 0} />
+                  {/* Second line: stats + mini bar */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, paddingLeft: 21 }}>
+                    <span style={{ fontSize: 11, fontFamily: F.mono, color: C.t3 }}>
+                      {m.tests.length}t · {m.total}s
+                    </span>
+                    {m.pass > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.gr }}>✓{m.pass}</span>}
+                    {m.fail > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.re }}>✗{m.fail}</span>}
+                    {pendingM > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.am }}>⟳{pendingM}</span>}
+                    <div style={{ flex: 1 }}>
+                      <PBar pct={pct} fail={m.fail > 0} />
+                    </div>
                   </div>
                 </div>
+
                 {open && (
                   <div style={{ borderTop: `1px solid ${C.b1}` }}>
                     {m.tests.map((t) => {
-                      const tp = t.steps.filter(
-                        (s) => s.status === "pass"
-                      ).length;
-                      const tf = t.steps.filter(
-                        (s) => s.status === "fail"
-                      ).length;
-                      const tpct = Math.round(
-                        (tp / Math.max(t.steps.length, 1)) * 100
-                      );
+                      const tp = t.steps.filter((s) => s.status === "pass").length;
+                      const tf = t.steps.filter((s) => s.status === "fail").length;
+                      const tpct = Math.round((tp / Math.max(t.steps.length, 1)) * 100);
+                      const tpending = t.steps.length - tp - tf;
                       return (
                         <div key={t.id}>
-                          <div
-                            style={{
-                              padding: "8px 16px 8px 28px",
-                              background: C.s2,
-                              borderBottom: `1px solid ${C.b1}`,
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 10,
-                            }}
-                          >
-                            <Ico n="file" s={11} />
-                            <span
-                              style={{ fontSize: 12, fontWeight: 600, flex: 1 }}
-                            >
-                              {t.name}
-                            </span>
-                            {t.description && (
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  color: C.t2,
-                                  flex: 2,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {t.description}
+                          {/* Test sub-header */}
+                          <div style={{
+                            padding: isMobile ? "9px 14px 9px 22px" : "8px 16px 8px 28px",
+                            background: C.s2,
+                            borderBottom: `1px solid ${C.b1}`,
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <Ico n="file" s={11} />
+                              <span style={{ fontSize: 12, fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {t.name}
                               </span>
-                            )}
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontFamily: F.mono,
-                                color: C.t3,
-                              }}
-                            >
-                              {t.steps.length} steps · {tpct}%
-                            </span>
-                            {tp > 0 && (
-                              <Chip label={`✓${tp}`} color={C.gr} bg={C.grd} />
-                            )}
-                            {tf > 0 && (
-                              <Chip label={`✗${tf}`} color={C.re} bg={C.red} />
-                            )}
+                              <span style={{ fontSize: 11, fontFamily: F.mono, color: C.t3, flexShrink: 0 }}>
+                                {tpct}%
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 19 }}>
+                              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>{t.steps.length} steps</span>
+                              {tp > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.gr }}>✓{tp}</span>}
+                              {tf > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.re }}>✗{tf}</span>}
+                              {tpending > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.am }}>⟳{tpending}</span>}
+                              {t.description && !isMobile && (
+                                <span style={{ fontSize: 11, color: C.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                                  {t.description}
+                                </span>
+                              )}
+                            </div>
                           </div>
+
+                          {/* Step rows */}
                           {t.steps.map((s) => {
-                            const c =
-                              s.status === "pass"
-                                ? C.gr
-                                : s.status === "fail"
-                                ? C.re
-                                : C.am;
-                            const bg2 =
-                              s.status === "pass"
-                                ? C.grd
-                                : s.status === "fail"
-                                ? C.red
-                                : C.amd;
-                            return (
-                              <div
-                                key={s.id}
-                                style={{
-                                  padding: "7px 16px 7px 40px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 10,
+                            const c = s.status === "pass" ? C.gr : s.status === "fail" ? C.re : C.am;
+                            const bg2 = s.status === "pass" ? C.grd : s.status === "fail" ? C.red : C.amd;
+                            const stepBg = s.status === "fail" ? "#fff5f5" : s.status === "pass" ? "#f9fffe" : "transparent";
+
+                            if (isMobile) {
+                              // Mobile: card layout per step
+                              return (
+                                <div key={s.id} style={{
+                                  padding: "9px 14px 9px 22px",
                                   borderBottom: `1px solid ${C.b1}`,
-                                  fontSize: 12,
-                                  background:
-                                    s.status === "fail"
-                                      ? "#fff5f5"
-                                      : "transparent",
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    fontFamily: F.mono,
-                                    fontSize: 10,
-                                    color: C.t3,
-                                    width: 24,
-                                    flexShrink: 0,
-                                  }}
-                                >
+                                  background: stepBg,
+                                }}>
+                                  {/* Top: serial + status */}
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: s.action ? 5 : 0 }}>
+                                    <span style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, flexShrink: 0, minWidth: 22 }}>
+                                      {s.isDivider ? "" : `#${s.serialNo || "—"}`}
+                                    </span>
+                                    <span style={{
+                                      display: "inline-flex", alignItems: "center",
+                                      padding: "2px 8px", borderRadius: 12,
+                                      fontSize: 10, fontFamily: F.mono, fontWeight: 700,
+                                      background: bg2, color: c, flexShrink: 0,
+                                    }}>
+                                      {s.status.toUpperCase()}
+                                    </span>
+                                    {s.remarks ? (
+                                      <span style={{ fontSize: 11, color: C.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontStyle: "italic" }}>
+                                        {s.remarks}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {s.action && (
+                                    <div style={{ fontSize: 12, color: C.t1, lineHeight: 1.5, wordBreak: "break-word" }}>
+                                      {s.action}
+                                    </div>
+                                  )}
+                                  {s.result && (
+                                    <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.4, marginTop: 3, paddingLeft: 8, borderLeft: `2px solid ${C.b2}`, wordBreak: "break-word" }}>
+                                      {s.result}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            // Desktop: horizontal row
+                            return (
+                              <div key={s.id} style={{
+                                padding: "7px 16px 7px 40px",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                borderBottom: `1px solid ${C.b1}`,
+                                fontSize: 12,
+                                background: stepBg,
+                              }}>
+                                <span style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, width: 24, flexShrink: 0 }}>
                                   {s.serialNo}
                                 </span>
-                                <span style={{ flex: 1 }}>
-                                  {s.action || (
-                                    <span style={{ color: C.t3 }}>—</span>
-                                  )}
-                                </span>
-                                <span style={{ flex: 1, color: C.t2 }}>
-                                  {s.result || (
-                                    <span style={{ color: C.t3 }}>—</span>
-                                  )}
-                                </span>
-                                <span
-                                  style={{
-                                    width: 100,
-                                    fontSize: 11,
-                                    color: C.t2,
-                                  }}
-                                >
-                                  {s.remarks}
-                                </span>
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    padding: "2px 8px",
-                                    borderRadius: 12,
-                                    fontSize: 10,
-                                    fontFamily: F.mono,
-                                    background: bg2,
-                                    color: c,
-                                    flexShrink: 0,
-                                  }}
-                                >
+                                <span style={{ flex: 1 }}>{s.action || <span style={{ color: C.t3 }}>—</span>}</span>
+                                <span style={{ flex: 1, color: C.t2 }}>{s.result || <span style={{ color: C.t3 }}>—</span>}</span>
+                                <span style={{ width: 100, fontSize: 11, color: C.t2 }}>{s.remarks}</span>
+                                <span style={{
+                                  display: "inline-flex", alignItems: "center",
+                                  padding: "2px 8px", borderRadius: 12,
+                                  fontSize: 10, fontFamily: F.mono,
+                                  background: bg2, color: c, flexShrink: 0,
+                                }}>
                                   {s.status}
                                 </span>
                               </div>
@@ -3907,15 +3878,7 @@ function ReportView({ modules, toast }) {
             );
           })}
           {filtered.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "48px 0",
-                color: C.t3,
-                fontFamily: F.mono,
-                fontSize: 12,
-              }}
-            >
+            <div style={{ textAlign: "center", padding: "48px 0", color: C.t3, fontFamily: F.mono, fontSize: 12 }}>
               No modules match.
             </div>
           )}
