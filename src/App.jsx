@@ -1291,6 +1291,7 @@ function LoginPage({ users, onLogin }) {
         animation: "orbA 14s ease-in-out infinite",
         pointerEvents: "none",
         willChange: "transform",
+        zIndex: 1,
       }} />
       {/* Orb 2 — medium violet, bottom-right */}
       <div style={{
@@ -1305,6 +1306,7 @@ function LoginPage({ users, onLogin }) {
         animation: "orbB 17s ease-in-out infinite",
         pointerEvents: "none",
         willChange: "transform",
+        zIndex: 1,
       }} />
       {/* Orb 3 — small cyan, top-right */}
       <div style={{
@@ -1319,6 +1321,7 @@ function LoginPage({ users, onLogin }) {
         animation: "orbC 11s ease-in-out infinite",
         pointerEvents: "none",
         willChange: "transform",
+        zIndex: 1,
       }} />
       {/* Orb 4 — tiny warm, bottom-left */}
       <div style={{
@@ -1333,15 +1336,13 @@ function LoginPage({ users, onLogin }) {
         animation: "orbA 19s ease-in-out infinite reverse",
         pointerEvents: "none",
         willChange: "transform",
+        zIndex: 1,
       }} />
 
-      {/* ── Background train illustration ── */}
+      {/* ── Background train illustration — full screen ── */}
       <div style={{
         position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: isMobile ? "52%" : "58%",
+        inset: 0,
         pointerEvents: "none",
         zIndex: 0,
         opacity: 0.13,
@@ -1354,7 +1355,7 @@ function LoginPage({ users, onLogin }) {
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            objectPosition: "center bottom",
+            objectPosition: "center center",
             display: "block",
           }}
         />
