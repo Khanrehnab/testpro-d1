@@ -1,7 +1,22 @@
 import { supabase } from "./supabase";
-import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from "react";
+import React, {
+  useState, useEffect, useRef, useCallback, useMemo, useContext,
+} from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ThemeProvider, createTheme, CssBaseline, alpha,
+  Box, Stack, Paper, Typography, Button, IconButton,
+  TextField, InputAdornment, Drawer, AppBar, Toolbar,
+  List, ListItemButton, ListItemIcon, ListItemText,
+  Chip, LinearProgress, Switch, Divider, Avatar,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Snackbar, Alert, Select, MenuItem, FormControl, InputLabel,
+  Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
+  Tooltip, Menu, CircularProgress, BottomNavigation,
+  BottomNavigationAction, Collapse,
+} from "@mui/material";
 
-// ── Storage ────────────────────────────────────────────────────────────────────
+// ── Storage ─────────────────────────────────────────────────────────────────────
 
 const store = {
   async loadAll() {
@@ -17,77 +32,40 @@ const store = {
         supabase.from("tests").select("*").order("serial_no").limit(100_000),
         supabase.from("steps").select("*").order("position").limit(10_000_000),
       ]);
-
-      // Surface Supabase errors so they are not silently swallowed
       if (usersErr)  console.error("Load users error",   usersErr);
       if (modsErr)   console.error("Load modules error", modsErr);
       if (testsErr)  console.error("Load tests error",   testsErr);
       if (stepsErr)  console.error("Load steps error",   stepsErr);
-
-      // If any critical table fails, return empty so App falls back to seed
-      if (modsErr || testsErr || stepsErr) {
-        return { users: users || [], modules: {} };
-      }
-
-      // Rebuild nested structure: modules → tests → steps
+      if (modsErr || testsErr || stepsErr) return { users: users || [], modules: {} };
       const stepsByTest = {};
       for (const s of steps || []) {
         if (!stepsByTest[s.test_id]) stepsByTest[s.test_id] = [];
-        stepsByTest[s.test_id].push({
-          ...s,
-          serialNo:  s.serial_no,
-          isDivider: s.is_divider ?? false,
-        });
+        stepsByTest[s.test_id].push({ ...s, serialNo: s.serial_no, isDivider: s.is_divider ?? false });
       }
-
       const testsByModule = {};
       for (const t of tests || []) {
         if (!testsByModule[t.module_id]) testsByModule[t.module_id] = [];
-        testsByModule[t.module_id].push({
-          ...t,
-          serialNo: t.serial_no,  // normalise snake_case → camelCase for local usage
-          steps: stepsByTest[t.id] || [],
-        });
+        testsByModule[t.module_id].push({ ...t, serialNo: t.serial_no, steps: stepsByTest[t.id] || [] });
       }
-
       const modulesMap = {};
-      for (const m of modules || []) {
-        modulesMap[m.id] = { ...m, tests: testsByModule[m.id] || [] };
-      }
-
+      for (const m of modules || []) modulesMap[m.id] = { ...m, tests: testsByModule[m.id] || [] };
       return { users: users || [], modules: modulesMap };
-    } catch (e) {
-      console.error("Load error", e);
-      return { users: [], modules: {} };
-    }
+    } catch (e) { console.error("Load error", e); return { users: [], modules: {} }; }
   },
-
   async saveUsers(users) {
-    // Split into new vs existing — new users have no valid UUID yet
-    // We identify "new" rows as those whose id is NOT a UUID (e.g. temp Date.now() ids)
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const toInsert = users.filter(u => !uuidRe.test(u.id));
     const toUpsert = users.filter(u =>  uuidRe.test(u.id));
-
-    // Delete users that have been removed from local state but still exist in DB.
-    // Only attempt if there are surviving UUID users to use as the exclusion list.
     const liveUUIDs = toUpsert.map(u => u.id);
     if (liveUUIDs.length) {
-      await supabase
-        .from("users")
-        .delete()
-        .not("id", "in", `(${liveUUIDs.join(",")})`);
+      await supabase.from("users").delete().not("id", "in", `(${liveUUIDs.join(",")})`);
     } else if (!toInsert.length) {
-      // No live users at all — wipe the table (edge case: all users deleted)
       await supabase.from("users").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     }
-
     if (toInsert.length) {
-      // Let Supabase generate the UUID — omit the client-side id entirely
       const rows = toInsert.map(({ id: _skip, ...rest }) => rest);
       const { data: inserted, error } = await supabase.from("users").insert(rows).select();
       if (error) { console.error("Insert users error", error); return; }
-      // Patch local state ids back to the real UUIDs Supabase assigned
       if (inserted) {
         for (const row of inserted) {
           const u = toInsert.find(x => x.username === row.username);
@@ -95,424 +73,275 @@ const store = {
         }
       }
     }
-
     if (toUpsert.length) {
       const { error } = await supabase.from("users").upsert(
         toUpsert.map(({ id, username, password, name, email, role, active }) =>
-          ({ id, username, password, name, email, role, active })
-        ),
+          ({ id, username, password, name, email, role, active })),
         { onConflict: "id" }
       );
       if (error) console.error("Upsert users error", error);
     }
   },
-
-  // ── saveSteps: surgical save for a single test's steps ─────────────────────
-  // Called by commit() in TestDetail — only touches the one test that changed.
-  // Much faster than saveModules which would rebuild all 120 modules.
   async saveSteps(testId, moduleId, steps, testMeta) {
     const CHUNK = 500;
-
-    // 1. Ensure parent module + test rows exist in DB (FK constraints require them).
-    //    These are lightweight no-ops if the rows already exist.
     if (moduleId) {
-      const { error: modErr } = await supabase
-        .from("modules")
+      const { error: modErr } = await supabase.from("modules")
         .upsert({ id: moduleId, name: testMeta?.moduleName ?? moduleId, position: 0 }, { onConflict: "id" });
       if (modErr) console.error("saveSteps: ensure module error:", modErr);
     }
     if (testMeta) {
-      const { error: testErr } = await supabase
-        .from("tests")
-        .upsert({
-          id:          testId,
-          module_id:   moduleId,
-          serial_no:   testMeta.serialNo ?? 0,
-          name:        testMeta.name ?? testId,
-          description: testMeta.description ?? "",
-        }, { onConflict: "id" });
+      const { error: testErr } = await supabase.from("tests").upsert({
+        id: testId, module_id: moduleId, serial_no: testMeta.serialNo ?? 0,
+        name: testMeta.name ?? testId, description: testMeta.description ?? "",
+      }, { onConflict: "id" });
       if (testErr) console.error("saveSteps: ensure test error:", testErr);
     }
-
-    // 2. Build step rows
     const stepsWithPosition = steps.map((s, position) => ({
-      id:         s.id,
-      test_id:    testId,
-      position,
-      serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
-      action:     s.action   ?? "",
-      result:     s.result   ?? "",
-      remarks:    s.remarks  ?? "",
-      status:     s.status   ?? "pending",
-      is_divider: s.isDivider ?? false,
+      id: s.id, test_id: testId, position,
+      serial_no: s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
+      action: s.action ?? "", result: s.result ?? "", remarks: s.remarks ?? "",
+      status: s.status ?? "pending", is_divider: s.isDivider ?? false,
     }));
-
-    // 3. Upsert all steps for this test
     for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
-      const { error } = await supabase
-        .from("steps")
+      const { error } = await supabase.from("steps")
         .upsert(stepsWithPosition.slice(i, i + CHUNK), { onConflict: "id" });
-      if (error) {
-        console.error("Upsert steps error:", error);
-        return;
-      }
+      if (error) { console.error("Upsert steps error:", error); return; }
     }
-
-    // 4. Delete steps that are no longer in the current list (e.g. after reset/reimport)
     if (stepsWithPosition.length > 0) {
-      const liveIds = new Set(stepsWithPosition.map((s) => s.id));
-      const { data: existing, error: fetchErr } = await supabase
-        .from("steps")
-        .select("id")
-        .eq("test_id", testId);
+      const liveIds = new Set(stepsWithPosition.map(s => s.id));
+      const { data: existing, error: fetchErr } = await supabase.from("steps").select("id").eq("test_id", testId);
       if (fetchErr) { console.error("Fetch steps for cleanup error:", fetchErr); return; }
-      const stale = (existing || []).map((r) => r.id).filter((id) => !liveIds.has(id));
+      const stale = (existing || []).map(r => r.id).filter(id => !liveIds.has(id));
       for (let i = 0; i < stale.length; i += CHUNK) {
-        const { error } = await supabase
-          .from("steps")
-          .delete()
-          .in("id", stale.slice(i, i + CHUNK));
+        const { error } = await supabase.from("steps").delete().in("id", stale.slice(i, i + CHUNK));
         if (error) console.error("Delete stale steps error:", error);
       }
     } else {
-      // All steps removed — wipe the test's steps entirely
-      const { error } = await supabase
-        .from("steps")
-        .delete()
-        .eq("test_id", testId);
+      const { error } = await supabase.from("steps").delete().eq("test_id", testId);
       if (error) console.error("Delete all steps error:", error);
     }
   },
-
-  // ── saveModules: full save used for structural changes (add/delete/rename module or test) ──
   async saveModules(modulesMap) {
     const modules = Object.values(modulesMap);
-    const allTests = modules.flatMap((m) =>
-      m.tests.map((t) => ({ ...t, module_id: m.id }))
-    );
-    const allSteps = allTests.flatMap((t) =>
-      (t.steps || []).map((s) => ({ ...s, test_id: t.id }))
-    );
-
-    const liveModuleIds = modules.map((m) => m.id);
-    const liveTestIds   = allTests.map((t) => t.id);
-    const liveStepIds   = allSteps.map((s) => s.id);
-
+    const allTests = modules.flatMap(m => m.tests.map(t => ({ ...t, module_id: m.id })));
+    const allSteps = allTests.flatMap(t => (t.steps || []).map(s => ({ ...s, test_id: t.id })));
+    const liveModuleIds = modules.map(m => m.id);
+    const liveTestIds = allTests.map(t => t.id);
+    const liveStepIds = allSteps.map(s => s.id);
     const CHUNK = 500;
-
     const deleteInChunks = async (table, ids) => {
       for (let i = 0; i < ids.length; i += CHUNK) {
-        const { error } = await supabase
-          .from(table).delete().in("id", ids.slice(i, i + CHUNK));
+        const { error } = await supabase.from(table).delete().in("id", ids.slice(i, i + CHUNK));
         if (error) console.error(`Delete ${table} error`, error);
       }
     };
-
-    // ── 1. Upsert modules ────────────────────────────────────────────────────
     const moduleRows = modules.map(({ id, name }, i) => ({ id, name, position: i }));
     for (let i = 0; i < moduleRows.length; i += CHUNK) {
-      const { error } = await supabase
-        .from("modules")
-        .upsert(moduleRows.slice(i, i + CHUNK), { onConflict: "id" });
+      const { error } = await supabase.from("modules").upsert(moduleRows.slice(i, i + CHUNK), { onConflict: "id" });
       if (error) { console.error("Upsert modules error", error); return; }
     }
-
-    // ── 2. Upsert tests ──────────────────────────────────────────────────────
     if (allTests.length) {
-      const testRows = allTests.map((t) => ({
-        id:          t.id,
-        module_id:   t.module_id,
-        serial_no:   t.serial_no ?? t.serialNo ?? 0,
-        name:        t.name,
-        description: t.description ?? "",
+      const testRows = allTests.map(t => ({
+        id: t.id, module_id: t.module_id, serial_no: t.serial_no ?? t.serialNo ?? 0,
+        name: t.name, description: t.description ?? "",
       }));
       for (let i = 0; i < testRows.length; i += CHUNK) {
-        const { error } = await supabase
-          .from("tests")
-          .upsert(testRows.slice(i, i + CHUNK), { onConflict: "id" });
+        const { error } = await supabase.from("tests").upsert(testRows.slice(i, i + CHUNK), { onConflict: "id" });
         if (error) { console.error("Upsert tests error", error); return; }
       }
     }
-
-    // ── 3. Upsert steps ──────────────────────────────────────────────────────
     if (allSteps.length) {
       const testPositionCounters = {};
-      const stepsWithPosition = allSteps.map((s) => {
+      const stepsWithPosition = allSteps.map(s => {
         if (testPositionCounters[s.test_id] === undefined) testPositionCounters[s.test_id] = 0;
         const position = testPositionCounters[s.test_id]++;
         return {
-          id:         s.id,
-          test_id:    s.test_id,
-          position,
-          serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
-          action:     s.action   ?? "",
-          result:     s.result   ?? "",
-          remarks:    s.remarks  ?? "",
-          status:     s.status   ?? "pending",
-          is_divider: s.isDivider ?? false,
+          id: s.id, test_id: s.test_id, position,
+          serial_no: s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
+          action: s.action ?? "", result: s.result ?? "", remarks: s.remarks ?? "",
+          status: s.status ?? "pending", is_divider: s.isDivider ?? false,
         };
       });
       for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
-        const { error } = await supabase
-          .from("steps")
-          .upsert(stepsWithPosition.slice(i, i + CHUNK), { onConflict: "id" });
+        const { error } = await supabase.from("steps").upsert(stepsWithPosition.slice(i, i + CHUNK), { onConflict: "id" });
         if (error) { console.error("Upsert steps error", error); return; }
       }
     }
-
-    // ── 4. Delete stale rows after upserts succeed ───────────────────────────
     try {
       if (liveTestIds.length) {
         const existingStepIds = [];
         for (let i = 0; i < liveTestIds.length; i += CHUNK) {
-          const { data } = await supabase
-            .from("steps").select("id")
-            .in("test_id", liveTestIds.slice(i, i + CHUNK));
-          if (data) existingStepIds.push(...data.map((r) => r.id));
+          const { data } = await supabase.from("steps").select("id").in("test_id", liveTestIds.slice(i, i + CHUNK));
+          if (data) existingStepIds.push(...data.map(r => r.id));
         }
-        const liveStepSet  = new Set(liveStepIds);
-        const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
+        const liveStepSet = new Set(liveStepIds);
+        const staleStepIds = existingStepIds.filter(id => !liveStepSet.has(id));
         if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
       }
       if (liveModuleIds.length) {
         const existingTestIds = [];
         for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
-          const { data } = await supabase
-            .from("tests").select("id")
-            .in("module_id", liveModuleIds.slice(i, i + CHUNK));
-          if (data) existingTestIds.push(...data.map((r) => r.id));
+          const { data } = await supabase.from("tests").select("id").in("module_id", liveModuleIds.slice(i, i + CHUNK));
+          if (data) existingTestIds.push(...data.map(r => r.id));
         }
-        const liveTestSet  = new Set(liveTestIds);
-        const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
+        const liveTestSet = new Set(liveTestIds);
+        const staleTestIds = existingTestIds.filter(id => !liveTestSet.has(id));
         if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
       }
       const { data: existingMods } = await supabase.from("modules").select("id");
       const liveModSet = new Set(liveModuleIds);
-      const staleMods  = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
+      const staleMods = (existingMods || []).map(r => r.id).filter(id => !liveModSet.has(id));
       if (staleMods.length) await deleteInChunks("modules", staleMods);
-    } catch (e) {
-      console.error("Cleanup stale rows error", e);
-    }
+    } catch (e) { console.error("Cleanup stale rows error", e); }
   },
-
   async addLog(entry) {
-    await supabase.from("audit_log").insert({
-      user_name: entry.user,
-      action: entry.action,
-      type: entry.type,
-    });
+    await supabase.from("audit_log").insert({ user_name: entry.user, action: entry.action, type: entry.type });
   },
-
   async loadLog() {
-    const { data } = await supabase
-      .from("audit_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(300);
-    return (data || []).map((r) => ({
-      ts: new Date(r.created_at).getTime(),
-      user: r.user_name,
-      action: r.action,
-      type: r.type,
-    }));
+    const { data } = await supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(300);
+    return (data || []).map(r => ({ ts: new Date(r.created_at).getTime(), user: r.user_name, action: r.action, type: r.type }));
   },
 };
 
-// ── Test Lock System (Supabase-backed, TTL + Heartbeat) ───────────────────────
-//
-// Strategy:
-//   - Normal close  → beforeunload fires → releaseAll() called immediately
-//   - Crash/force close → heartbeat stops → lock expires after LOCK_TTL_MS (60s)
-//   - Active user sends heartbeat every HEARTBEAT_MS (25s) to refresh locked_at
-//   - getAll() and acquire() ignore locks whose locked_at is older than LOCK_TTL_MS
-//
-// SQL to create the table (run ONCE in Supabase SQL editor):
-//
-//   CREATE TABLE IF NOT EXISTS test_locks (
-//     test_id   text PRIMARY KEY,
-//     user_id   text NOT NULL,
-//     user_name text NOT NULL,
-//     locked_at timestamptz DEFAULT now()
-//   );
-//   ALTER TABLE test_locks ENABLE ROW LEVEL SECURITY;
-//   CREATE POLICY "allow_all" ON test_locks FOR ALL USING (true) WITH CHECK (true);
-//
-const LOCK_TTL_MS  = 60_000; // lock treated as dead after 60s of no heartbeat
-const HEARTBEAT_MS = 25_000; // active user refreshes every 25s
-
+// ── Test Lock System ─────────────────────────────────────────────────────────────
+const LOCK_TTL_MS  = 60_000;
+const HEARTBEAT_MS = 25_000;
 const lockStore = {
-  // Returns only LIVE locks — stale ones (locked_at > 60s ago) are ignored
   async getAll() {
     try {
       const cutoff = new Date(Date.now() - LOCK_TTL_MS).toISOString();
-      const { data, error } = await supabase
-        .from("test_locks")
-        .select("*")
-        .gt("locked_at", cutoff);
+      const { data, error } = await supabase.from("test_locks").select("*").gt("locked_at", cutoff);
       if (error) return {};
       const out = {};
-      for (const row of data || []) {
-        out[row.test_id] = {
-          userId:   row.user_id,
-          userName: row.user_name,
-          ts:       new Date(row.locked_at).getTime(),
-        };
-      }
+      for (const row of data || [])
+        out[row.test_id] = { userId: row.user_id, userName: row.user_name, ts: new Date(row.locked_at).getTime() };
       return out;
-    } catch {
-      return {};
-    }
+    } catch { return {}; }
   },
-
-  // Try to acquire lock. Returns { ok: true } or { ok: false, by: userName }
   async acquire(testId, userId, userName) {
     try {
       const cutoff = new Date(Date.now() - LOCK_TTL_MS).toISOString();
-      // Only treat as locked if the row is still fresh (within TTL)
-      const { data: existing } = await supabase
-        .from("test_locks")
-        .select("*")
-        .eq("test_id", testId)
-        .gt("locked_at", cutoff)
-        .maybeSingle();
-      if (existing && existing.user_id !== userId) {
-        return { ok: false, by: existing.user_name };
-      }
+      const { data: existing } = await supabase.from("test_locks").select("*").eq("test_id", testId).gt("locked_at", cutoff).maybeSingle();
+      if (existing && existing.user_id !== userId) return { ok: false, by: existing.user_name };
       const { error } = await supabase.from("test_locks").upsert(
-        {
-          test_id:   testId,
-          user_id:   userId,
-          user_name: userName,
-          locked_at: new Date().toISOString(),
-        },
+        { test_id: testId, user_id: userId, user_name: userName, locked_at: new Date().toISOString() },
         { onConflict: "test_id" }
       );
       if (error) return { ok: false, by: "unknown" };
       return { ok: true };
-    } catch {
-      return { ok: true }; // fail-open — app stays usable if Supabase is unreachable
-    }
+    } catch { return { ok: true }; }
   },
-
-  // Refresh locked_at to prove the user is still alive (heartbeat tick)
   async heartbeat(testId, userId) {
-    try {
-      await supabase
-        .from("test_locks")
-        .update({ locked_at: new Date().toISOString() })
-        .eq("test_id", testId)
-        .eq("user_id", userId);
-    } catch {}
+    try { await supabase.from("test_locks").update({ locked_at: new Date().toISOString() }).eq("test_id", testId).eq("user_id", userId); } catch {}
   },
-
-  // Release a specific lock (only if owned by userId)
   async release(testId, userId) {
-    try {
-      await supabase
-        .from("test_locks")
-        .delete()
-        .eq("test_id", testId)
-        .eq("user_id", userId);
-    } catch {}
+    try { await supabase.from("test_locks").delete().eq("test_id", testId).eq("user_id", userId); } catch {}
   },
-
-  // Release ALL locks held by userId (logout / window close / deactivation)
   async releaseAll(userId) {
-    try {
-      await supabase.from("test_locks").delete().eq("user_id", userId);
-    } catch {}
+    try { await supabase.from("test_locks").delete().eq("user_id", userId); } catch {}
   },
 };
 
-// ── Seed Users ─────────────────────────────────────────────────────────────────
+// ── Seed Users ───────────────────────────────────────────────────────────────────
 const SEED_USERS = [
-  {
-    id: "1",
-    username: "admin",
-    password: "admin123",
-    role: "admin",
-    name: "Administrator",
-    email: "admin@testpro.io",
-    active: true,
-  },
-  {
-    id: "2",
-    username: "tester1",
-    password: "test123",
-    role: "tester",
-    name: "Alex Johnson",
-    email: "alex@testpro.io",
-    active: true,
-  },
+  { id: "1", username: "admin", password: "admin123", role: "admin", name: "Administrator", email: "admin@testpro.io", active: true },
+  { id: "2", username: "tester1", password: "test123", role: "tester", name: "Alex Johnson", email: "alex@testpro.io", active: true },
 ];
 
-// ── Data Model ─────────────────────────────────────────────────────────────────
-// Module → Tests[] → Steps[]
-// Each Test is a sub-module with its own name, description, and up to 100,000 steps per test.
-// Each Step has: id, serialNo, action, result, remarks, status
-
 function makeStep(testId, n) {
-  return {
-    id: `${testId}_s${n}`,
-    serialNo: n,
-    action: "",
-    result: "",
-    remarks: "",
-    status: "pending",
-    isDivider: false,
-  };
+  return { id: `${testId}_s${n}`, serialNo: n, action: "", result: "", remarks: "", status: "pending", isDivider: false };
 }
-
 function makeTest(modId, n, stepCount = 0) {
   const testId = `${modId}_t${n}`;
-  return {
-    id: testId,
-    serialNo: n,
-    name: `Test ${n}`,
-    description: "",
-    steps: Array.from({ length: stepCount }, (_, i) => makeStep(testId, i + 1)),
-  };
+  return { id: testId, serialNo: n, name: `Test ${n}`, description: "", steps: Array.from({ length: stepCount }, (_, i) => makeStep(testId, i + 1)) };
 }
-
 function buildModules() {
   const out = {};
   for (let m = 1; m <= 120; m++) {
     const modId = `m${m}`;
-    const tests = Array.from({ length: 5 }, (_, i) =>
-      makeTest(modId, i + 1, 0)
-    );
-    out[modId] = { id: modId, name: `Module ${m}`, tests };
+    out[modId] = { id: modId, name: `Module ${m}`, tests: Array.from({ length: 5 }, (_, i) => makeTest(modId, i + 1, 0)) };
   }
   return out;
 }
 
-// ── Design Tokens — Orange Theme ───────────────────────────────────────────────
-const C = {
-  bg: "#fdf5ee",
-  s1: "#ffffff",
-  s2: "#fef9f5",
-  s3: "#fdf0e6",
-  b1: "#f5dece",
-  b2: "#ecc9a8",
-  ac: "#ea580c",
-  gr: "#16a34a",
-  re: "#dc2626",
-  am: "#d97706",
-  t1: "#1c0f07",
-  t2: "#57534e",
-  t3: "#a8a29e",
-  grd: "rgba(22,163,74,0.10)",
-  red: "rgba(220,38,38,0.10)",
-  amd: "rgba(217,119,6,0.10)",
-  acd: "rgba(234,88,12,0.10)",
-};
+// ── MUI Theme ────────────────────────────────────────────────────────────────────
+const muiTheme = createTheme({
+  palette: {
+    primary:    { main: "#ea580c", light: "#fb923c", dark: "#c2410c", contrastText: "#fff" },
+    success:    { main: "#16a34a", light: "#dcfce7", dark: "#15803d" },
+    error:      { main: "#dc2626", light: "#fee2e2", dark: "#b91c1c" },
+    warning:    { main: "#d97706", light: "#fef3c7", dark: "#b45309" },
+    background: { default: "#fdf5ee", paper: "#ffffff" },
+    text:       { primary: "#1c0f07", secondary: "#57534e", disabled: "#a8a29e" },
+    divider:    "#f5dece",
+  },
+  typography: {
+    fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif",
+    h1: { fontWeight: 800 }, h2: { fontWeight: 700 }, h3: { fontWeight: 700 },
+    h4: { fontWeight: 700 }, h5: { fontWeight: 600 }, h6: { fontWeight: 600 },
+    button: { fontWeight: 600, textTransform: "none" },
+  },
+  shape: { borderRadius: 10 },
+  shadows: [
+    "none",
+    "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+    "0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)",
+    "0 4px 16px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)",
+    "0 8px 24px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06)",
+    "0 12px 32px rgba(0,0,0,0.14), 0 6px 12px rgba(0,0,0,0.08)",
+    ...Array(19).fill("none"),
+  ],
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: `
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+        * { box-sizing: border-box; }
+        body { -webkit-font-smoothing: antialiased; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        button { -webkit-tap-highlight-color: transparent; }
+      `,
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: { borderRadius: 8, fontWeight: 600, letterSpacing: 0 },
+        sizeSmall: { fontSize: 12, padding: "4px 12px" },
+        sizeMedium: { fontSize: 13, padding: "6px 16px" },
+      },
+    },
+    MuiTextField: {
+      defaultProps: { size: "small" },
+    },
+    MuiChip: {
+      styleOverrides: { root: { fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" } },
+    },
+    MuiPaper: { defaultProps: { elevation: 0 } },
+    MuiLinearProgress: {
+      styleOverrides: { root: { borderRadius: 4, height: 5 } },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: { fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.8px", color: "#a8a29e", fontFamily: "'JetBrains Mono', monospace" },
+        root: { borderColor: "#f5dece" },
+      },
+    },
+  },
+});
 
-// ── Style Helpers ──────────────────────────────────────────────────────────────
-const F = {
-  sans: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
-  mono: "'SF Mono','Fira Code','Fira Mono',monospace",
+// ── Design tokens (kept for complex components) ──────────────────────────────────
+const C = {
+  bg: "#fdf5ee", s1: "#ffffff", s2: "#fef9f5", s3: "#fdf0e6",
+  b1: "#f5dece", b2: "#ecc9a8", ac: "#ea580c",
+  gr: "#16a34a", re: "#dc2626", am: "#d97706",
+  t1: "#1c0f07", t2: "#57534e", t3: "#a8a29e",
+  grd: "rgba(22,163,74,0.10)", red: "rgba(220,38,38,0.10)",
+  amd: "rgba(217,119,6,0.10)", acd: "rgba(234,88,12,0.10)",
 };
-// ── Mobile detection ───────────────────────────────────────────────────────────
+const MONO = "'JetBrains Mono', 'Fira Code', monospace";
+
+// ── Mobile detection ──────────────────────────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
   const [mobile, setMobile] = useState(() => window.innerWidth < breakpoint);
   useEffect(() => {
@@ -522,2066 +351,869 @@ function useIsMobile(breakpoint = 768) {
   }, [breakpoint]);
   return mobile;
 }
-
-// ── Mobile menu context — avoids prop-drilling onMenuClick to every Topbar ──────
 const MobileMenuCtx = React.createContext(null);
 
-const btn = (x = {}) => ({
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  padding: "6px 13px",
-  borderRadius: 7,
-  border: `1px solid ${C.b2}`,
-  background: C.s1,
-  color: C.t2,
-  fontFamily: F.sans,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-  lineHeight: 1,
-  ...x,
-});
-const acBtn = (x = {}) =>
-  btn({ background: "#fff7ed", borderColor: "#fed7aa", color: C.ac, ...x });
-const grBtn = (x = {}) =>
-  btn({ background: C.grd, borderColor: "#bbf7d0", color: C.gr, ...x });
-const reBtn = (x = {}) =>
-  btn({ background: C.red, borderColor: "#fecaca", color: C.re, ...x });
-const amBtn = (x = {}) =>
-  btn({ background: C.amd, borderColor: "#fde68a", color: C.am, ...x });
-const smBtn = (x = {}) => btn({ padding: "4px 10px", fontSize: 11, ...x });
-const iBtn = (x = {}) =>
-  btn({
-    padding: "5px 7px",
-    border: "none",
-    background: "transparent",
-    color: C.t3,
-    ...x,
-  });
-
-// ── Icons ──────────────────────────────────────────────────────────────────────
-const PATHS = {
-  check: [["M20 6 9 17 4 12"]],
-  x: [["M18 6 6 18"], ["M6 6l12 12"]],
-  upload: [
-    ["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"],
-    ["M17 8l-5-5-5 5"],
-    ["M12 3v12"],
-  ],
-  logout: [
-    ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"],
-    ["M16 17l5-5-5-5"],
-    ["M21 12H9"],
-  ],
-  grid: [
-    ["M3 3h7v7H3z"],
-    ["M14 3h7v7h-7z"],
-    ["M14 14h7v7h-7z"],
-    ["M3 14h7v7H3z"],
-  ],
-  edit: [
-    ["M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"],
-    ["M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"],
-  ],
-  trash: [
-    ["M3 6h18"],
-    ["M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"],
-    ["M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"],
-  ],
-  plus: [["M12 5v14"], ["M5 12h14"]],
-  search: [["M11 11m-6 0a6 6 0 1 0 12 0 6 6 0 0 0-12 0"], ["M21 21l-3.5-3.5"]],
-  dash: [["M22 12h-4l-3 9L9 3l-3 9H2"]],
-  report: [
-    ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],
-    ["M14 2v6h6"],
-    ["M16 13H8"],
-    ["M16 17H8"],
-  ],
-  users: [
-    ["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"],
-    ["M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0"],
-    ["M23 21v-2a4 4 0 0 0-3-3.87"],
-    ["M16 3.13a4 4 0 0 1 0 7.75"],
-  ],
-  log: [
-    [
-      "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z",
-    ],
-    ["M22 6l-10 7L2 6"],
-  ],
-  chevR: [["M9 18l6-6-6-6"]],
-  chevD: [["M6 9l6 6 6-6"]],
-  chevL: [["M15 18l-6-6 6-6"]],
-  reset: [["M1 4v6h6"], ["M3.51 15a9 9 0 1 0 .49-3.2"]],
-  down: [
-    ["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"],
-    ["M7 10l5 5 5-5"],
-    ["M12 15V3"],
-  ],
-  bell: [
-    ["M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"],
-    ["M13.73 21a2 2 0 0 1-3.46 0"],
-  ],
-  lock: [
-    [
-      "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z",
-    ],
-    ["M7 11V7a5 5 0 0 1 10 0v4"],
-  ],
-  layers: [
-    ["M12 2 2 7l10 5 10-5-10-5z"],
-    ["M2 17l10 5 10-5"],
-    ["M2 12l10 5 10-5"],
-  ],
-  file: [
-    ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],
-    ["M14 2v6h6"],
-  ],
-  back: [["M19 12H5"], ["M12 5l-7 7 7 7"]],
+// ── Framer Motion Variants ────────────────────────────────────────────────────────
+const pageVariants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" } },
+  exit:    { opacity: 0, y: -8, transition: { duration: 0.15 } },
+};
+const cardVariants = {
+  initial: { opacity: 0, y: 16 },
+  animate: (i) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.05, duration: 0.28, ease: "easeOut" },
+  }),
+};
+const listStagger = {
+  animate: { transition: { staggerChildren: 0.055 } },
+};
+const listItem = {
+  initial: { opacity: 0, x: -10 },
+  animate: { opacity: 1, x: 0, transition: { duration: 0.22, ease: "easeOut" } },
 };
 
-function Ico({ n, s = 15 }) {
+// ── SVG Icons ────────────────────────────────────────────────────────────────────
+const PATHS = {
+  check:  [["M20 6 9 17 4 12"]],
+  x:      [["M18 6 6 18"], ["M6 6l12 12"]],
+  upload: [["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"], ["M17 8l-5-5-5 5"], ["M12 3v12"]],
+  logout: [["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"], ["M16 17l5-5-5-5"], ["M21 12H9"]],
+  grid:   [["M3 3h7v7H3z"], ["M14 3h7v7h-7z"], ["M14 14h7v7h-7z"], ["M3 14h7v7H3z"]],
+  edit:   [["M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"], ["M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"]],
+  trash:  [["M3 6h18"], ["M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"], ["M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"]],
+  plus:   [["M12 5v14"], ["M5 12h14"]],
+  search: [["M11 11m-6 0a6 6 0 1 0 12 0 6 6 0 0 0-12 0"], ["M21 21l-3.5-3.5"]],
+  dash:   [["M22 12h-4l-3 9L9 3l-3 9H2"]],
+  report: [["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"], ["M14 2v6h6"], ["M16 13H8"], ["M16 17H8"]],
+  users:  [["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"], ["M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0"], ["M23 21v-2a4 4 0 0 0-3-3.87"], ["M16 3.13a4 4 0 0 1 0 7.75"]],
+  log:    [["M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"], ["M22 6l-10 7L2 6"]],
+  chevR:  [["M9 18l6-6-6-6"]],
+  chevD:  [["M6 9l6 6 6-6"]],
+  chevL:  [["M15 18l-6-6 6-6"]],
+  reset:  [["M1 4v6h6"], ["M3.51 15a9 9 0 1 0 .49-3.2"]],
+  down:   [["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"], ["M7 10l5 5 5-5"], ["M12 15V3"]],
+  bell:   [["M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"], ["M13.73 21a2 2 0 0 1-3.46 0"]],
+  lock:   [["M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z"], ["M7 11V7a5 5 0 0 1 10 0v4"]],
+  layers: [["M12 2 2 7l10 5 10-5-10-5z"], ["M2 17l10 5 10-5"], ["M2 12l10 5 10-5"]],
+  file:   [["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"], ["M14 2v6h6"]],
+  back:   [["M19 12H5"], ["M12 5l-7 7 7 7"]],
+};
+function Ico({ n, s = 15, color = "currentColor" }) {
   const paths = PATHS[n] || [["M0 0"]];
   return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ flexShrink: 0 }}
-    >
-      {paths.map((d, i) => (
-        <path key={i} d={d[0]} />
-      ))}
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={color}
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      {paths.map((d, i) => <path key={i} d={d[0]} />)}
     </svg>
   );
 }
 
-// ── Shared UI ──────────────────────────────────────────────────────────────────
-function PBar({ pct, fail }) {
-  return (
-    <div
-      style={{
-        height: 4,
-        background: C.s3,
-        borderRadius: 2,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          height: "100%",
-          width: `${pct}%`,
-          background: fail ? C.am : C.gr,
-          transition: "width .4s",
-          borderRadius: 2,
-        }}
-      />
-    </div>
-  );
-}
-
-function Badge({ type }) {
-  const map = {
-    admin: { bg: "#fff7ed", color: C.ac },
-    tester: { bg: C.amd, color: C.am },
-    active: { bg: C.grd, color: C.gr },
-    inactive: { bg: C.red, color: C.re },
-  };
-  const s = map[type] || { bg: C.s3, color: C.t2 };
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "2px 9px",
-        borderRadius: 20,
-        fontSize: 10,
-        fontFamily: F.mono,
-        fontWeight: 700,
-        textTransform: "uppercase",
-        background: s.bg,
-        color: s.color,
-      }}
-    >
-      {type}
-    </span>
-  );
-}
-
-function Chip({ label, color, bg }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 3,
-        padding: "2px 8px",
-        borderRadius: 12,
-        fontSize: 10,
-        fontFamily: F.mono,
-        background: bg,
-        color,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function Toggle({ on, onClick }) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        width: 34,
-        height: 18,
-        borderRadius: 9,
-        background: on ? "#dcfce7" : C.s3,
-        border: `1px solid ${on ? "#86efac" : C.b2}`,
-        position: "relative",
-        cursor: "pointer",
-        flexShrink: 0,
-        transition: "all .2s",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 2,
-          left: on ? 18 : 2,
-          width: 12,
-          height: 12,
-          borderRadius: "50%",
-          background: on ? C.gr : C.t3,
-          transition: "left .2s",
-        }}
-      />
-    </div>
-  );
-}
-
-// ── Export Menu — dropdown with CSV and PDF options ────────────────────────────
-function ExportMenu({ onCSV, onPDF }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef();
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
-  return (
-    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
-      <button style={smBtn()} onClick={() => setOpen((o) => !o)}>
-        <Ico n="down" s={12} /> Export{" "}
-        <span style={{ fontSize: 9, marginLeft: 2 }}>▾</span>
-      </button>
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            right: 0,
-            background: C.s1,
-            border: `1px solid ${C.b1}`,
-            borderRadius: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,.12)",
-            minWidth: 140,
-            zIndex: 50,
-            overflow: "hidden",
-          }}
-        >
-          <button
-            onClick={() => {
-              onCSV();
-              setOpen(false);
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "9px 14px",
-              border: "none",
-              background: "transparent",
-              color: C.t1,
-              fontFamily: F.sans,
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = C.s2)}
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "transparent")
-            }
-          >
-            <Ico n="down" s={13} /> Export CSV
-          </button>
-          <div style={{ height: 1, background: C.b1 }} />
-          <button
-            onClick={() => {
-              onPDF();
-              setOpen(false);
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "9px 14px",
-              border: "none",
-              background: "transparent",
-              color: C.t1,
-              fontFamily: F.sans,
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = C.s2)}
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "transparent")
-            }
-          >
-            <Ico n="report" s={13} /> Export PDF
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) {
-  return (
-    <div style={{ position: "relative", width }}>
-      <div
-        style={{
-          position: "absolute",
-          left: 10,
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: C.t3,
-          pointerEvents: "none",
-        }}
-      >
-        <Ico n="search" s={13} />
-      </div>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          padding: "8px 12px 8px 30px",
-          background: C.s1,
-          border: `1px solid ${C.b2}`,
-          borderRadius: 7,
-          color: C.t1,
-          fontFamily: F.sans,
-          fontSize: 13,
-          outline: "none",
-          width: "100%",
-          boxShadow: "inset 0 1px 2px rgba(0,0,0,.04)",
-        }}
-      />
-    </div>
-  );
-}
-
-function Topbar({ title, sub, children }) {
-  const isMobile = useIsMobile();
-  const onMenuClick = useContext(MobileMenuCtx);
-  return (
-    <div
-      style={{
-        minHeight: 58,
-        padding: isMobile ? "10px 14px" : "0 22px",
-        flexShrink: 0,
-        background: "rgba(255,255,255,0.82)",
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
-        borderBottom: `1px solid rgba(221,226,234,0.7)`,
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        boxShadow: "0 1px 3px rgba(0,0,0,.06)",
-      }}
-    >
-      {isMobile && onMenuClick && (
-        <button
-          onClick={onMenuClick}
-          style={{ ...iBtn(), padding: "6px 8px", marginLeft: -4, flexShrink: 0 }}
-          title="Menu"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: isMobile ? 15 : 16,
-            fontWeight: 700,
-            color: C.t1,
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          {title}
-        </div>
-        {sub && (
-          <div
-            style={{
-              fontSize: 11,
-              color: C.t3,
-              marginTop: 1,
-              fontFamily: F.mono,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {sub}
-          </div>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-const inputSty = {
-  width: "100%",
-  padding: "10px 13px",
-  background: C.s1,
-  border: `1px solid ${C.b2}`,
-  borderRadius: 7,
-  color: C.t1,
-  fontFamily: F.sans,
-  fontSize: 14,
-  outline: "none",
-  boxShadow: `0 1px 2px rgba(0,0,0,.04)`,
-};
-
-function Modal({ title, sub, onClose, children, width = 460 }) {
-  const isMobile = useIsMobile();
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,.28)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
-        display: "flex",
-        alignItems: isMobile ? "flex-end" : "center",
-        justifyContent: "center",
-        zIndex: 200,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: isMobile ? "100%" : width,
-          background: "rgba(255,255,255,0.92)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          border: `1px solid rgba(221,226,234,0.7)`,
-          borderRadius: isMobile ? "14px 14px 0 0" : 14,
-          padding: isMobile ? "24px 20px" : "28px 30px",
-          boxShadow: "0 8px 40px rgba(0,0,0,.14), 0 1px 0 rgba(255,255,255,.8) inset",
-          maxHeight: isMobile ? "90vh" : "90vh",
-          overflowY: "auto",
-        }}
-      >
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
-          {title}
-        </div>
-        {sub && (
-          <div
-            style={{
-              fontSize: 12,
-              color: C.t2,
-              marginBottom: 20,
-              lineHeight: 1.5,
-            }}
-          >
-            {sub}
-          </div>
-        )}
-        {children}
-      </div>
-    </div>
-  );
-}
-function ModalActions({ children }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 8,
-        justifyContent: "flex-end",
-        marginTop: 22,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-function Field({ label, children }) {
-  return (
-    <div style={{ marginBottom: 18 }}>
-      <label
-        style={{
-          display: "block",
-          fontSize: 10,
-          fontFamily: F.mono,
-          color: C.t2,
-          textTransform: "uppercase",
-          letterSpacing: "1.2px",
-          marginBottom: 7,
-        }}
-      >
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-// ── Toast ──────────────────────────────────────────────────────────────────────
+// ── Toast (MUI Snackbar) ──────────────────────────────────────────────────────────
 function useToast() {
-  const [list, setList] = useState([]);
+  const [queue, setQueue] = useState([]);
   const push = useCallback((msg, type = "info") => {
     const id = Date.now() + Math.random();
-    setList((l) => [...l, { id, msg, type }]);
-    setTimeout(() => setList((l) => l.filter((x) => x.id !== id)), 3000);
+    setQueue(q => [...q, { id, msg, type }]);
+    setTimeout(() => setQueue(q => q.filter(x => x.id !== id)), 3500);
   }, []);
-  const cols = {
-    success: { bg: "rgba(240,253,244,0.88)", border: "rgba(22,163,74,.35)", color: C.gr },
-    error:   { bg: "rgba(254,242,242,0.88)", border: "rgba(220,38,38,.35)",  color: C.re },
-    info:    { bg: "rgba(255,247,237,0.88)", border: "rgba(234,88,12,.35)",  color: C.ac },
-  };
   const Host = () => {
     const isMobile = useIsMobile();
     return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: isMobile ? 66 : 20,
-        right: isMobile ? 12 : 20,
-        left: isMobile ? 12 : "auto",
-        zIndex: 999,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        pointerEvents: "none",
-      }}
-    >
-      {list.map((t) => {
-        const c = cols[t.type] || cols.info;
-        return (
-          <div
-            key={t.id}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 10,
-              border: `1px solid ${c.border}`,
-              background: c.bg,
-              backdropFilter: "blur(16px)",
-              WebkitBackdropFilter: "blur(16px)",
-              color: c.color,
-              fontFamily: F.mono,
-              fontSize: isMobile ? 13 : 12,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              boxShadow: "0 4px 20px rgba(0,0,0,.12)",
-            }}
-          >
-            <Ico n={t.type === "success" ? "check" : t.type === "error" ? "x" : "bell"} s={12} />
-            {t.msg}
-          </div>
-        );
-      })}
-    </div>
+      <Box sx={{ position: "fixed", bottom: isMobile ? 72 : 20, right: isMobile ? 12 : 20,
+        left: isMobile ? 12 : "auto", zIndex: 9999, display: "flex", flexDirection: "column", gap: 1, pointerEvents: "none" }}>
+        <AnimatePresence>
+          {queue.map(t => (
+            <motion.div key={t.id}
+              initial={{ opacity: 0, y: 20, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
+            >
+              <Alert severity={t.type === "info" ? "info" : t.type === "success" ? "success" : "error"}
+                sx={{
+                  borderRadius: 2.5, boxShadow: 4, fontWeight: 500, fontSize: 13,
+                  backdropFilter: "blur(12px)", border: "1px solid",
+                  borderColor: t.type === "success" ? "success.light" : t.type === "error" ? "error.light" : "primary.light",
+                }}
+                icon={<Ico n={t.type === "success" ? "check" : t.type === "error" ? "x" : "bell"} s={14} />}
+              >
+                {t.msg}
+              </Alert>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </Box>
     );
   };
   return { push, Host };
 }
 
-// ── Login ──────────────────────────────────────────────────────────────────────
-const LOGIN_KEYFRAMES = `
-@keyframes gradShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+// ── Shared: SearchBox ─────────────────────────────────────────────────────────────
+function SearchBox({ value, onChange, placeholder = "Search…", width = 200, fullWidth = false }) {
+  return (
+    <TextField
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      size="small"
+      fullWidth={fullWidth}
+      sx={{ width: fullWidth ? undefined : width }}
+      InputProps={{
+        startAdornment: (
+          <InputAdornment position="start">
+            <Ico n="search" s={14} color={C.t3} />
+          </InputAdornment>
+        ),
+        sx: { borderRadius: 2, bgcolor: "background.paper", fontSize: 13 },
+      }}
+    />
+  );
 }
-@keyframes orbA {
-  0%   { transform: translate(0px, 0px) scale(1); }
-  33%  { transform: translate(40px, -30px) scale(1.08); }
-  66%  { transform: translate(-20px, 20px) scale(0.95); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-@keyframes orbB {
-  0%   { transform: translate(0px, 0px) scale(1); }
-  33%  { transform: translate(-35px, 25px) scale(1.05); }
-  66%  { transform: translate(25px, -15px) scale(0.97); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-@keyframes orbC {
-  0%   { transform: translate(0px, 0px) scale(1); }
-  50%  { transform: translate(20px, 30px) scale(1.06); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-@keyframes cardFloat {
-  0%   { transform: translateY(0px); }
-  50%  { transform: translateY(-7px); }
-  100% { transform: translateY(0px); }
-}
-@keyframes shimmerSweep {
-  0%   { transform: translateX(-100%) rotate(25deg); opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { transform: translateX(400%) rotate(25deg); opacity: 0; }
-}
-@keyframes borderPulse {
-  0%,100% { opacity: 0.7; }
-  50%      { opacity: 1; }
-}
-@keyframes logoGlow {
-  0%,100% { box-shadow: 0 4px 14px rgba(234,88,12,.30); }
-  50%      { box-shadow: 0 4px 24px rgba(234,88,12,.55), 0 0 0 6px rgba(234,88,12,.08); }
-}
-@keyframes fadeSlideUp {
-  from { opacity: 0; transform: translateY(18px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-`;
 
+// ── Shared: Topbar ────────────────────────────────────────────────────────────────
+function Topbar({ title, sub, children }) {
+  const isMobile = useIsMobile();
+  const onMenuClick = useContext(MobileMenuCtx);
+  return (
+    <AppBar position="static" elevation={0} sx={{
+      bgcolor: "rgba(255,255,255,0.88)", backdropFilter: "blur(16px)",
+      WebkitBackdropFilter: "blur(16px)", borderBottom: `1px solid ${C.b1}`,
+      color: "text.primary", flexShrink: 0,
+    }}>
+      <Toolbar sx={{ minHeight: 58, gap: 1, px: isMobile ? 1.5 : 2.5 }}>
+        {isMobile && onMenuClick && (
+          <IconButton onClick={onMenuClick} size="small" sx={{ mr: 0.5 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </IconButton>
+        )}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body1" fontWeight={700} sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: isMobile ? 15 : 16 }}>
+            {title}
+          </Typography>
+          {sub && (
+            <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {sub}
+            </Typography>
+          )}
+        </Box>
+        <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
+          {children}
+        </Stack>
+      </Toolbar>
+    </AppBar>
+  );
+}
+
+// ── Shared: Progress Bar ──────────────────────────────────────────────────────────
+function PBar({ pct, fail }) {
+  return (
+    <LinearProgress
+      variant="determinate" value={pct}
+      sx={{ height: 4, borderRadius: 2, bgcolor: C.s3,
+        "& .MuiLinearProgress-bar": { bgcolor: fail ? "warning.main" : "success.main", transition: "transform 0.5s ease" }
+      }}
+    />
+  );
+}
+
+// ── Shared: ExportMenu ────────────────────────────────────────────────────────────
+function ExportMenu({ onCSV, onPDF }) {
+  const [anchor, setAnchor] = useState(null);
+  return (
+    <>
+      <Button size="small" variant="outlined" startIcon={<Ico n="down" s={12} />}
+        onClick={e => setAnchor(e.currentTarget)}
+        sx={{ borderColor: C.b2, color: "text.secondary", bgcolor: "background.paper" }}
+      >
+        Export
+      </Button>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}
+        PaperProps={{ sx: { borderRadius: 2, boxShadow: 4, border: `1px solid ${C.b1}`, minWidth: 150 } }}
+        transformOrigin={{ horizontal: "right", vertical: "top" }}
+        anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+      >
+        <MenuItem onClick={() => { onCSV(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13 }}>
+          <Ico n="down" s={13} /> Export CSV
+        </MenuItem>
+        <MenuItem onClick={() => { onPDF(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13 }}>
+          <Ico n="report" s={13} /> Export PDF
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+
+// ── Shared: Confirm Dialog ────────────────────────────────────────────────────────
+function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmLabel = "Delete", confirmColor = "error" }) {
+  return (
+    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth
+      PaperProps={{ component: motion.div, initial: { scale: 0.92, opacity: 0 }, animate: { scale: 1, opacity: 1 }, transition: { duration: 0.18 }, sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>{title}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary">{description}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+        <Button onClick={onCancel} variant="outlined" sx={{ borderColor: C.b2, color: "text.secondary" }}>Cancel</Button>
+        <Button onClick={onConfirm} variant="contained" color={confirmColor}>{confirmLabel}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Shared: FormDialog ────────────────────────────────────────────────────────────
+function FormDialog({ open, onClose, title, subtitle, children, actions, width = 460 }) {
+  const isMobile = useIsMobile();
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth={false} fullScreen={isMobile}
+      PaperProps={{ component: motion.div, initial: { scale: 0.92, opacity: 0, y: 10 }, animate: { scale: 1, opacity: 1, y: 0 }, transition: { duration: 0.2 },
+        sx: { borderRadius: isMobile ? 0 : 3, width: isMobile ? "100%" : width } }}>
+      <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
+        {title}
+        {subtitle && <Typography variant="caption" display="block" color="text.secondary" sx={{ fontWeight: 400, mt: 0.5 }}>{subtitle}</Typography>}
+      </DialogTitle>
+      <DialogContent sx={{ pt: "8px !important" }}>{children}</DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>{actions}</DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Login Page ────────────────────────────────────────────────────────────────────
 function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [uFocus, setUFocus] = useState(false);
-  const [pFocus, setPFocus] = useState(false);
   const isMobile = useIsMobile();
-  const pwRef = useRef();
 
   const go = () => {
     if (!u.trim() || !p) { setErr("Please enter your username and password."); return; }
     setLoading(true);
     setTimeout(() => {
-      const found = users.find(
-        (x) => x.username === u.trim() && x.password === p && x.active
-      );
-      if (found) {
-        onLogin(found);
-      } else {
-        setErr("Invalid credentials or account inactive.");
-        setLoading(false);
-      }
-    }, 120);
+      const found = users.find(x => x.username === u.trim() && x.password === p && x.active);
+      if (found) { onLogin(found); }
+      else { setErr("Invalid credentials or account inactive."); setLoading(false); }
+    }, 150);
   };
 
-  const EyeIcon = ({ open }) => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {open ? (
-        <>
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </>
-      ) : (
-        <>
-          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-          <line x1="1" y1="1" x2="23" y2="23"/>
-        </>
-      )}
-    </svg>
-  );
-
-  const fieldWrap = { position: "relative", width: "100%", boxSizing: "border-box" };
-  const mdInput = (focused, hasErr) => ({
-    display: "block",
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "16px 14px 6px",
-    background: focused ? "rgba(250,252,255,0.9)" : "rgba(246,248,250,0.7)",
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
-    border: `1.5px solid ${hasErr ? C.re : focused ? C.ac : "rgba(200,208,219,0.8)"}`,
-    borderRadius: 10,
-    color: C.t1,
-    fontFamily: F.sans,
-    fontSize: 16,
-    outline: "none",
-    transition: "border-color .18s, background .18s, box-shadow .18s",
-    lineHeight: 1.4,
-    boxShadow: focused ? `0 0 0 3px ${hasErr ? "rgba(220,38,38,.10)" : "rgba(234,88,12,.12)"}` : "none",
-  });
-  const mdLabel = (focused, filled, hasErr) => ({
-    position: "absolute",
-    left: 14,
-    top: focused || filled ? 6 : "50%",
-    transform: focused || filled ? "none" : "translateY(-50%)",
-    fontSize: focused || filled ? 11 : 15,
-    fontWeight: focused || filled ? 600 : 400,
-    color: hasErr ? C.re : focused ? C.ac : C.t3,
-    fontFamily: F.sans,
-    pointerEvents: "none",
-    transition: "all .18s cubic-bezier(.4,0,.2,1)",
-    letterSpacing: focused || filled ? "0.5px" : 0,
-    lineHeight: 1,
-  });
-
   return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        // Animated shifting gradient background
-        background: "linear-gradient(135deg, #fde8d0, #fddbb4, #fef3e2, #ffe0cc, #fdf0dc)",
-        backgroundSize: "400% 400%",
-        animation: "gradShift 12s ease infinite",
-        padding: isMobile
-          ? `calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 16px)`
-          : "40px 20px",
-        boxSizing: "border-box",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* Inject keyframes once */}
-      <style>{LOGIN_KEYFRAMES}</style>
+    <Box sx={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center",
+      position: "relative", overflow: "hidden",
+      background: "linear-gradient(135deg,#fde8d0 0%,#fddbb4 30%,#fef3e2 60%,#ffe0cc 80%,#fdf0dc 100%)",
+      backgroundSize: "400% 400%",
+      animation: "tpGradShift 12s ease infinite",
+    }}>
+      <style>{`
+        @keyframes tpGradShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+      `}</style>
 
-      {/* ── Floating background orbs ── */}
-      {/* Orb 1 — large blue-purple, top-left */}
-      <div style={{
-        position: "absolute",
-        top: isMobile ? "-10%" : "-15%",
-        left: isMobile ? "-15%" : "-10%",
-        width: isMobile ? 280 : 420,
-        height: isMobile ? 280 : 420,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(251,146,60,0.58) 0%, rgba(249,115,22,0.28) 60%, transparent 100%)",
-        filter: "blur(48px)",
-        animation: "orbA 14s ease-in-out infinite",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
-      }} />
-      {/* Orb 2 — medium violet, bottom-right */}
-      <div style={{
-        position: "absolute",
-        bottom: isMobile ? "-8%" : "-12%",
-        right: isMobile ? "-12%" : "-8%",
-        width: isMobile ? 260 : 380,
-        height: isMobile ? 260 : 380,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(253,186,116,0.52) 0%, rgba(251,146,60,0.24) 60%, transparent 100%)",
-        filter: "blur(52px)",
-        animation: "orbB 17s ease-in-out infinite",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
-      }} />
-      {/* Orb 3 — small cyan, top-right */}
-      <div style={{
-        position: "absolute",
-        top: "20%",
-        right: isMobile ? "-5%" : "8%",
-        width: isMobile ? 150 : 220,
-        height: isMobile ? 150 : 220,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(234,88,12,0.35) 0%, rgba(253,186,116,0.18) 60%, transparent 100%)",
-        filter: "blur(36px)",
-        animation: "orbC 11s ease-in-out infinite",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
-      }} />
-      {/* Orb 4 — tiny warm, bottom-left */}
-      <div style={{
-        position: "absolute",
-        bottom: "15%",
-        left: isMobile ? "5%" : "12%",
-        width: isMobile ? 100 : 160,
-        height: isMobile ? 100 : 160,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(254,215,170,0.55) 0%, transparent 70%)",
-        filter: "blur(28px)",
-        animation: "orbA 19s ease-in-out infinite reverse",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
-      }} />
+      {/* Animated orbs */}
+      {[
+        { top: "-15%", left: "-10%", size: 420, colors: "rgba(251,146,60,0.58),rgba(249,115,22,0.24)", duration: 14 },
+        { bottom: "-12%", right: "-8%", size: 380, colors: "rgba(253,186,116,0.52),rgba(251,146,60,0.20)", duration: 17 },
+        { top: "18%", right: "6%", size: 220, colors: "rgba(234,88,12,0.32),rgba(253,186,116,0.14)", duration: 11 },
+        { bottom: "14%", left: "10%", size: 160, colors: "rgba(254,215,170,0.50),transparent", duration: 19 },
+      ].map((orb, i) => (
+        <motion.div key={i}
+          style={{ position: "absolute", borderRadius: "50%", width: orb.size, height: orb.size,
+            background: `radial-gradient(circle,${orb.colors})`,
+            filter: `blur(${40 + i * 6}px)`, pointerEvents: "none", zIndex: 0,
+            ...orb }}
+          animate={{ x: [0, 30 + i * 10, -15, 0], y: [0, -20 - i * 8, 15, 0], scale: [1, 1.08, 0.95, 1] }}
+          transition={{ duration: orb.duration, repeat: Infinity, ease: "easeInOut" }}
+        />
+      ))}
 
-      {/* ── Background train illustration — full screen ── */}
-      <div style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        zIndex: 0,
-        opacity: 0.13,
-        overflow: "hidden",
-      }}>
-        <img
-          src="/bg_train.svg"
-          alt=""
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            objectPosition: "center center",
-            display: "block",
+      {/* Login Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 32, scale: 0.94 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 420, padding: isMobile ? "0 16px" : 0 }}
+      >
+        {/* Glowing border ring */}
+        <motion.div
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          style={{ position: "absolute", inset: -2, borderRadius: 20,
+            background: "linear-gradient(135deg,#f97316,#ea580c,#dc2626,#f97316)",
+            backgroundSize: "300% 300%", filter: "blur(1px)", zIndex: -1,
+            animation: "tpGradShift 5s ease infinite",
           }}
         />
-      </div>
 
-      {/* ── Card — floats gently up and down ── */}
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          position: "relative",
-          zIndex: 1,
-          animation: "cardFloat 6s ease-in-out infinite, fadeSlideUp 0.5s ease both",
-          willChange: "transform",
-        }}
-      >
-        {/* Animated gradient border ring behind card */}
-        <div style={{
-          position: "absolute",
-          inset: -2,
-          borderRadius: 19,
-          background: "linear-gradient(135deg,#f97316,#ea580c,#dc2626,#f97316)",
-          backgroundSize: "300% 300%",
-          animation: "gradShift 5s ease infinite, borderPulse 3s ease-in-out infinite",
-          zIndex: -1,
-          filter: "blur(1px)",
-        }} />
+        <Paper elevation={0} sx={{
+          borderRadius: "18px", overflow: "hidden", position: "relative",
+          bgcolor: "rgba(255,255,255,0.88)", backdropFilter: "blur(28px)",
+          WebkitBackdropFilter: "blur(28px)", border: "1px solid rgba(255,255,255,0.6)",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.10)",
+        }}>
+          {/* Shimmer sweep */}
+          <motion.div
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+              background: "linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.45) 50%,transparent 60%)",
+              pointerEvents: "none" }}
+            animate={{ x: ["-120%", "220%"] }}
+            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+          />
 
-        {/* Card surface */}
-        <div
-          style={{
-            background: "rgba(255,255,255,0.82)",
-            backdropFilter: "blur(28px)",
-            WebkitBackdropFilter: "blur(28px)",
-            borderRadius: 17,
-            boxShadow: "0 8px 32px rgba(0,0,0,.08), 0 1px 0 rgba(255,255,255,.95) inset",
-            border: "1px solid rgba(255,255,255,0.6)",
-            overflow: "hidden",
-            position: "relative",
+          <Box sx={{ p: isMobile ? 3 : 4, position: "relative", zIndex: 2 }}>
+            {/* Logo */}
+            <motion.div animate={{ boxShadow: ["0 4px 14px rgba(234,88,12,.30)", "0 4px 24px rgba(234,88,12,.55)", "0 4px 14px rgba(234,88,12,.30)"] }}
+              transition={{ duration: 2.5, repeat: Infinity }}>
+              <Box sx={{ width: 52, height: 52, borderRadius: 3, background: "linear-gradient(135deg,#fb923c,#ea580c)",
+                display: "flex", alignItems: "center", justifyContent: "center", mb: 2.5, boxShadow: "0 4px 14px rgba(234,88,12,.30)" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17 4 12"/>
+                </svg>
+              </Box>
+            </motion.div>
+
+            <Typography variant="h5" fontWeight={800} gutterBottom>
+              Sign in to <Box component="span" sx={{ color: "primary.main" }}>TestPro</Box>
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5 }}>
+              Quality management platform
+            </Typography>
+
+            <AnimatePresence>
+              {err && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                  <Alert severity="error" sx={{ mb: 2, borderRadius: 2, fontSize: 13 }}>{err}</Alert>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <Stack gap={2}>
+              <TextField
+                label="Username" value={u}
+                onChange={e => { setU(e.target.value); setErr(""); }}
+                onKeyDown={e => e.key === "Enter" && document.getElementById("tp-pw-input")?.focus()}
+                fullWidth size="medium" autoComplete="username"
+                sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }}
+              />
+              <TextField
+                id="tp-pw-input"
+                label="Password" type={showPw ? "text" : "password"} value={p}
+                onChange={e => { setP(e.target.value); setErr(""); }}
+                onKeyDown={e => e.key === "Enter" && go()}
+                fullWidth size="medium" autoComplete="current-password"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setShowPw(v => !v)} edge="end">
+                        {showPw ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          </svg>
+                        )}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }}
+              />
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button fullWidth size="large" variant="contained" onClick={go} disabled={loading}
+                  sx={{ mt: 0.5, py: 1.5, borderRadius: 2.5, fontSize: 15, fontWeight: 700, boxShadow: "0 4px 16px rgba(234,88,12,.35)" }}>
+                  {loading ? <CircularProgress size={20} sx={{ color: "white" }} /> : "Sign In"}
+                </Button>
+              </motion.div>
+            </Stack>
+          </Box>
+        </Paper>
+      </motion.div>
+    </Box>
+  );
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────────
+function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed, setCollapsed, locked, mobileOpen, onMobileClose, onLogout }) {
+  const isMobile = useIsMobile();
+  const [search, setSearch] = useState("");
+
+  const modList = useMemo(() => Object.values(modules || {})
+    .filter(m => m.name.toLowerCase().includes(search.toLowerCase())), [modules, search]);
+
+  const modStats = useMemo(() => {
+    const out = {};
+    for (const m of Object.values(modules || {})) {
+      const all = m.tests.flatMap(t => t.steps);
+      out[m.id] = { pass: all.filter(s => s.status === "pass").length, fail: all.filter(s => s.status === "fail").length };
+    }
+    return out;
+  }, [modules]);
+
+  const navItems = [
+    { id: "dash", icon: "dash", label: "Dashboard" },
+    { id: "report", icon: "report", label: "Test Report" },
+    ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }, { id: "audit", icon: "log", label: "Audit Log" }] : []),
+  ];
+
+  const navRow = (item) => {
+    const active = view === item.id;
+    return (
+      <motion.div key={item.id} whileHover={{ x: 2 }} transition={{ duration: 0.15 }}>
+        <ListItemButton
+          onClick={() => { setView(item.id); if (onMobileClose) onMobileClose(); }}
+          sx={{
+            borderRadius: 2, mx: 0.75, mb: 0.3, py: 0.9,
+            bgcolor: active ? alpha("#ea580c", 0.10) : "transparent",
+            color: active ? "primary.main" : "text.secondary",
+            borderLeft: active ? "3px solid" : "3px solid transparent",
+            borderLeftColor: active ? "primary.main" : "transparent",
+            "&:hover": { bgcolor: active ? alpha("#ea580c", 0.12) : alpha("#000", 0.04) },
+            transition: "all 0.15s",
           }}
         >
-          {/* Shimmer sweep — runs every 4s */}
-          <div style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 10,
-            pointerEvents: "none",
-            overflow: "hidden",
-            borderRadius: 17,
-          }}>
-            <div style={{
-              position: "absolute",
-              top: "-40%",
-              left: 0,
-              width: "45%",
-              height: "180%",
-              background: "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.38) 50%, transparent 70%)",
-              animation: "shimmerSweep 4.5s ease-in-out 0.8s infinite",
-              willChange: "transform",
-            }} />
-          </div>
+          <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 0 : 36, color: "inherit" }}>
+            <Ico n={item.icon} s={16} />
+          </ListItemIcon>
+          {(!collapsed || isMobile) && (
+            <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 700 : 500 }} />
+          )}
+        </ListItemButton>
+      </motion.div>
+    );
+  };
 
-          {/* Top accent bar — animated gradient */}
-          <div style={{
-            height: 4,
-            background: "linear-gradient(90deg,#fb923c,#ea580c,#dc2626,#ea580c,#fb923c)",
-            backgroundSize: "300% 100%",
-            animation: "gradShift 4s ease infinite",
-          }} />
+  const drawerWidth = isMobile ? 280 : collapsed ? 60 : 256;
 
-          <div style={{ padding: isMobile ? "28px 24px 26px" : "36px 36px 32px", boxSizing: "border-box" }}>
+  const content = (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {/* Header */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 1.5, py: 1.5, borderBottom: `1px solid ${C.b1}`, minHeight: 56, flexShrink: 0 }}>
+        <Box sx={{ width: 30, height: 30, borderRadius: 1.5, background: "linear-gradient(135deg,#fb923c,#ea580c)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <img src="/testpro_logo.svg" width="20" height="20" alt="TestPro" style={{ pointerEvents: "none" }}
+            onError={e => { e.target.style.display = "none"; }} />
+        </Box>
+        {(!collapsed || isMobile) && (
+          <Typography fontWeight={800} sx={{ fontFamily: MONO, fontSize: 14, flex: 1, letterSpacing: "-0.3px" }}>
+            Test<Box component="span" sx={{ color: "primary.main" }}>Pro</Box>
+          </Typography>
+        )}
+        {!isMobile && (
+          <IconButton size="small" onClick={() => setCollapsed(c => !c)} sx={{ ml: "auto", color: "text.disabled" }}>
+            <Ico n={collapsed ? "chevR" : "chevL"} s={13} />
+          </IconButton>
+        )}
+      </Box>
 
-            {/* Logo + heading */}
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
-              <div style={{
-                width: 48,
-                height: 48,
-                borderRadius: 13,
-                background: "linear-gradient(135deg,#fb923c,#ea580c,#c2410c)",
-                backgroundSize: "200% 200%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#fff",
-                flexShrink: 0,
-                animation: "logoGlow 3s ease-in-out infinite, gradShift 6s ease infinite",
-              }}>
-                {/* TestPro logomark — run-chevron + checkmark */}
-                <img src="/testpro_logo.svg" width="34" height="34" alt="TestPro" draggable="false" />
-              </div>
-              <div>
-                <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 700, color: C.t1, letterSpacing: "-0.4px", lineHeight: 1.2 }}>
-                  Test<span style={{ color: C.ac }}>Pro</span>
-                </div>
-                <div style={{ fontSize: 13, color: C.t3, marginTop: 2, fontFamily: F.sans }}>
-                  Sign in to your workspace
-                </div>
-              </div>
-            </div>
+      {/* Nav */}
+      <Box sx={{ pt: 0.75, flexShrink: 0 }}>
+        {(!collapsed || isMobile) && (
+          <Typography variant="caption" sx={{ px: 2, fontFamily: MONO, color: "text.disabled", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", display: "block", mb: 0.5 }}>
+            Navigation
+          </Typography>
+        )}
+        <List dense disablePadding>{navItems.map(navRow)}</List>
+      </Box>
 
-            {/* Error alert */}
-            {err && (
-              <div style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                padding: "11px 14px",
-                borderRadius: 8,
-                background: "rgba(220,38,38,.07)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-                border: `1px solid rgba(220,38,38,.25)`,
-                color: C.re,
-                fontSize: 13,
-                fontFamily: F.sans,
-                marginBottom: 20,
-                lineHeight: 1.45,
-                boxSizing: "border-box",
-                animation: "fadeSlideUp .2s ease both",
-              }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                {err}
-              </div>
-            )}
-
-            {/* Username */}
-            <div style={{ ...fieldWrap, marginBottom: 18 }}>
-              <input
-                value={u}
-                onChange={(e) => { setU(e.target.value); setErr(""); }}
-                onFocus={() => setUFocus(true)}
-                onBlur={() => setUFocus(false)}
-                onKeyDown={(e) => e.key === "Enter" && pwRef.current?.focus()}
-                autoFocus
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder=""
-                style={mdInput(uFocus, !!err)}
-              />
-              <label style={mdLabel(uFocus, !!u, !!err)}>Username</label>
-            </div>
-
-            {/* Password */}
-            <div style={{ ...fieldWrap, marginBottom: 26 }}>
-              <input
-                ref={pwRef}
-                type={showPw ? "text" : "password"}
-                value={p}
-                onChange={(e) => { setP(e.target.value); setErr(""); }}
-                onFocus={() => setPFocus(true)}
-                onBlur={() => setPFocus(false)}
-                onKeyDown={(e) => e.key === "Enter" && go()}
-                autoComplete="current-password"
-                placeholder=""
-                style={{ ...mdInput(pFocus, !!err), paddingRight: 48 }}
-              />
-              <label style={mdLabel(pFocus, !!p, !!err)}>Password</label>
-              <button
-                onClick={() => setShowPw((s) => !s)}
-                tabIndex={-1}
-                style={{
-                  position: "absolute",
-                  right: 12,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: showPw ? C.ac : C.t3,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 6,
-                  borderRadius: 6,
-                  transition: "color .15s",
-                  lineHeight: 0,
-                }}
-                title={showPw ? "Hide password" : "Show password"}
-              >
-                <EyeIcon open={showPw} />
-              </button>
-            </div>
-
-            {/* Sign In button */}
-            <button
-              onClick={go}
-              disabled={loading}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "14px",
-                border: "none",
-                borderRadius: 10,
-                background: loading
-                  ? "linear-gradient(90deg,#fdba74,#fb923c)"
-                  : "linear-gradient(90deg,#fb923c,#ea580c,#fb923c)",
-                backgroundSize: "200% 100%",
-                animation: loading ? "none" : "gradShift 4s ease infinite",
-                color: "#fff",
-                fontFamily: F.sans,
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: loading ? "default" : "pointer",
-                boxShadow: loading ? "none" : "0 4px 20px rgba(234,88,12,.40)",
-                letterSpacing: "0.2px",
-                transition: "box-shadow .2s, transform .1s",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                position: "relative",
-                overflow: "hidden",
+      {(!collapsed || isMobile) && (
+        <>
+          <Divider sx={{ my: 1, borderColor: C.b1 }} />
+          {/* Module list */}
+          <Typography variant="caption" sx={{ px: 2, fontFamily: MONO, color: "text.disabled", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", display: "block", mb: 1 }}>
+            Modules ({modList.length})
+          </Typography>
+          <Box sx={{ px: 1, mb: 1, flexShrink: 0 }}>
+            <TextField value={search} onChange={e => setSearch(e.target.value)} placeholder="Search modules…"
+              size="small" fullWidth
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><Ico n="search" s={12} color={C.t3} /></InputAdornment>,
+                sx: { fontSize: 12, borderRadius: 2, bgcolor: C.s2 },
               }}
-            >
-              {/* Button shimmer */}
-              {!loading && (
-                <div style={{
-                  position: "absolute",
-                  inset: 0,
-                  background: "linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.22) 50%, transparent 65%)",
-                  animation: "shimmerSweep 3s ease-in-out 1.5s infinite",
-                  pointerEvents: "none",
-                }} />
-              )}
-              {loading ? (
-                <>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                    style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                  </svg>
-                  Signing in…
-                </>
-              ) : (
-                <>
-                  Sign In
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
-                </>
-              )}
-            </button>
+            />
+          </Box>
 
-          </div>
-        </div>
-      </div>
+          <Box sx={{ flex: 1, overflowY: "auto", px: 0.75, pb: 1 }}>
+            <motion.div variants={listStagger} initial="initial" animate="animate">
+              {modList.map(m => {
+                const st = modStats[m.id] || {};
+                const active = selMod === m.id && view === "mod";
+                return (
+                  <motion.div key={m.id} variants={listItem}>
+                    <ListItemButton
+                      onClick={() => {
+                        if (locked && !(selMod === m.id && view === "mod")) return;
+                        setSelMod(m.id); setView("mod");
+                        if (onMobileClose) onMobileClose();
+                      }}
+                      disabled={locked && !(selMod === m.id && view === "mod")}
+                      sx={{
+                        borderRadius: 1.5, mb: 0.2, py: 0.75,
+                        bgcolor: active ? alpha("#ea580c", 0.08) : "transparent",
+                        color: active ? "primary.main" : "text.secondary",
+                        borderLeft: active ? "2px solid" : "2px solid transparent",
+                        borderLeftColor: active ? "primary.main" : "transparent",
+                        "&:hover": { bgcolor: active ? alpha("#ea580c", 0.10) : alpha("#000", 0.04) },
+                        "&.Mui-disabled": { opacity: 0.38 },
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 28, color: "inherit", opacity: 0.7 }}>
+                        <Ico n="layers" s={13} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={m.name}
+                        primaryTypographyProps={{ fontSize: 12, fontWeight: active ? 700 : 400, noWrap: true }}
+                      />
+                      {st.fail > 0 && (
+                        <Chip label={`✗${st.fail}`} size="small" sx={{ height: 18, fontSize: 9, fontFamily: MONO, bgcolor: C.red, color: C.re, ml: 0.5 }} />
+                      )}
+                      {!st.fail && st.pass > 0 && (
+                        <Chip label="✓" size="small" sx={{ height: 18, fontSize: 9, fontFamily: MONO, bgcolor: C.grd, color: C.gr, ml: 0.5 }} />
+                      )}
+                    </ListItemButton>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </Box>
+        </>
+      )}
 
       {/* Footer */}
-      <div style={{
-        marginTop: 22,
-        fontSize: 11,
-        fontFamily: F.mono,
-        color: "rgba(71,85,105,.65)",
-        textAlign: "center",
-        letterSpacing: "0.3px",
-        position: "relative",
-        zIndex: 1,
-      }}>
-        TestPro · Internal Testing Tool
-      </div>
-    </div>
-  );
-}
-
-// ── Sidebar ────────────────────────────────────────────────────────────────────
-function Sidebar({
-  session,
-  view,
-  setView,
-  modules,
-  selMod,
-  setSelMod,
-  collapsed,
-  setCollapsed,
-  onLogout,
-  locked,        // true while a tester holds an unreleased lock
-  mobileOpen,    // mobile drawer open state
-  onMobileClose, // close mobile drawer
-}) {
-  const isMobile = useIsMobile();
-  const [search, setSearch] = useState("");
-  const modList = useMemo(() => Object.values(modules), [modules]);
-  const filtered = useMemo(
-    () =>
-      modList.filter((m) =>
-        m.name.toLowerCase().includes(search.toLowerCase())
-      ),
-    [modList, search]
-  );
-
-  // Aggregate pass/fail across all tests→steps for each module
-  const modStats = useMemo(() => {
-    const s = {};
-    modList.forEach((m) => {
-      const allSteps = m.tests.flatMap((t) => t.steps);
-      s[m.id] = {
-        pass: allSteps.filter((s) => s.status === "pass").length,
-        fail: allSteps.filter((s) => s.status === "fail").length,
-        total: allSteps.length,
-      };
-    });
-    return s;
-  }, [modList]);
-
-  const navRow = (id, icon, label) => {
-    const active = view === id;
-    const isLocked = locked && !active; // locked & trying to leave current view
-    return (
-      <div
-        key={id}
-        onClick={() => {
-          if (isLocked) return;
-          setView(id);
-          if (onMobileClose) onMobileClose();
-        }}
-        title={isLocked ? "Finish the current test first to navigate away" : undefined}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 16px",
-          cursor: isLocked ? "not-allowed" : "pointer",
-          fontSize: 13,
-          fontWeight: 500,
-          color: active ? C.ac : isLocked ? C.t3 : C.t2,
-          background: active ? "#fff7ed" : "transparent",
-          borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
-          opacity: isLocked ? 0.45 : 1,
-          transition: "all .15s",
-        }}
-      >
-        <Ico n={icon} s={15} />
-        {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
-        {isLocked && !collapsed && (
-          <Ico n="lock" s={10} />
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <>
-      {/* Mobile overlay backdrop */}
-      {isMobile && mobileOpen && (
-        <div
-          onClick={onMobileClose}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,.25)",
-            backdropFilter: "blur(5px)",
-            WebkitBackdropFilter: "blur(5px)",
-            zIndex: 300,
-          }}
-        />
-      )}
-    <div
-      style={{
-        width: isMobile ? 280 : (collapsed ? 54 : 250),
-        flexShrink: 0,
-        background: "rgba(255,255,255,0.88)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        borderRight: `1px solid rgba(221,226,234,0.7)`,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        transition: isMobile ? "transform .25s" : "width .2s",
-        // Mobile: slide in/out as a drawer
-        ...(isMobile ? {
-          position: "fixed",
-          top: 0,
-          left: 0,
-          height: "100%",
-          zIndex: 301,
-          transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
-        } : {}),
-      }}
-    >
-      <div
-        style={{
-          padding: "14px",
-          borderBottom: `1px solid ${C.b1}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          minHeight: 54,
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
-            background: "linear-gradient(135deg,#fb923c,#ea580c)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#fff",
-            flexShrink: 0,
-          }}
-        >
-          {/* TestPro logomark — run-chevron + checkmark */}
-          <img src="/testpro_logo.svg" width="20" height="20" alt="TestPro" draggable="false" />
-        </div>
-        {!collapsed && (
-          <span
-            style={{
-              fontFamily: F.mono,
-              fontWeight: 700,
-              fontSize: 14,
-              color: C.t1,
-            }}
-          >
-            Test<span style={{ color: C.ac }}>Pro</span>
-          </span>
-        )}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          style={{ ...iBtn(), marginLeft: "auto", padding: 4 }}
-        >
-          <Ico n={collapsed ? "chevR" : "chevL"} s={13} />
-        </button>
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
-        {!collapsed && (
-          <div
-            style={{
-              padding: "5px 16px 3px",
-              fontSize: 10,
-              fontFamily: F.mono,
-              textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              color: C.t3,
-            }}
-          >
-            Navigation
-          </div>
-        )}
-        {navRow("dash", "dash", "Dashboard")}
-        {navRow("report", "report", "Test Report")}
-        {session.role === "admin" && navRow("users", "users", "Users")}
-        {session.role === "admin" && navRow("audit", "log", "Audit Log")}
-
-        {!collapsed && (
+      <Box sx={{ borderTop: `1px solid ${C.b1}`, p: 1.5, flexShrink: 0, display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Avatar sx={{ width: 30, height: 30, background: "linear-gradient(135deg,#dbeafe,#bfdbfe)", color: "#1d4ed8", fontSize: 13, fontWeight: 700 }}>
+          {session.name?.[0]?.toUpperCase()}
+        </Avatar>
+        {(!collapsed || isMobile) && (
           <>
-            <div style={{ height: 1, background: C.b1, margin: "8px 0" }} />
-            <div
-              style={{
-                padding: "5px 16px 4px",
-                fontSize: 10,
-                fontFamily: F.mono,
-                textTransform: "uppercase",
-                letterSpacing: "1.5px",
-                color: C.t3,
-              }}
-            >
-              Modules ({filtered.length})
-            </div>
-            <div style={{ padding: "4px 10px 8px", position: "relative" }}>
-              <div
-                style={{
-                  position: "absolute",
-                  left: 20,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: C.t3,
-                  pointerEvents: "none",
-                }}
-              >
-                <Ico n="search" s={12} />
-              </div>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search modules…"
-                style={{
-                  width: "100%",
-                  padding: "6px 8px 6px 28px",
-                  background: C.s2,
-                  border: `1px solid ${C.b1}`,
-                  borderRadius: 6,
-                  color: C.t1,
-                  fontFamily: F.mono,
-                  fontSize: 11,
-                  outline: "none",
-                }}
-              />
-            </div>
-            {filtered.map((m) => {
-              const st = modStats[m.id] || {};
-              const active = selMod === m.id && view === "mod";
-              return (
-                <div
-                  key={m.id}
-                  onClick={() => {
-                    if (locked && !(selMod === m.id && view === "mod")) return;
-                    setSelMod(m.id);
-                    setView("mod");
-                    if (onMobileClose) onMobileClose();
-                  }}
-                  title={locked && !(selMod === m.id && view === "mod") ? "Finish the current test first" : undefined}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "7px 16px",
-                    cursor: locked && !(selMod === m.id && view === "mod") ? "not-allowed" : "pointer",
-                    fontSize: 13,
-                    color: active ? C.ac : locked && !(selMod === m.id && view === "mod") ? C.t3 : C.t2,
-                    opacity: locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
-                    background: active ? "#fff7ed" : "transparent",
-                    borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
-                    transition: "all .12s",
-                  }}
-                >
-                  <Ico n="layers" s={12} />
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {m.name}
-                  </span>
-                  {st.fail > 0 && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontFamily: F.mono,
-                        background: C.red,
-                        color: C.re,
-                        padding: "1px 5px",
-                        borderRadius: 8,
-                      }}
-                    >
-                      ✗{st.fail}
-                    </span>
-                  )}
-                  {st.fail === 0 && st.pass === st.total && st.pass > 0 && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        background: C.grd,
-                        color: C.gr,
-                        padding: "1px 5px",
-                        borderRadius: 8,
-                        fontFamily: F.mono,
-                      }}
-                    >
-                      ✓
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="caption" fontWeight={600} sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.name}</Typography>
+              <Chip label={session.role} size="small" sx={{ height: 16, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                bgcolor: session.role === "admin" ? "#fff7ed" : C.amd, color: session.role === "admin" ? C.ac : C.am }} />
+            </Box>
+            <Tooltip title="Logout">
+              <IconButton size="small" onClick={onLogout} sx={{ color: "error.main" }}>
+                <Ico n="logout" s={15} />
+              </IconButton>
+            </Tooltip>
           </>
         )}
-      </div>
-
-      <div
-        style={{
-          padding: "12px 14px",
-          borderTop: `1px solid ${C.b1}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg,#dbeafe,#bfdbfe)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: F.mono,
-            fontSize: 12,
-            fontWeight: 700,
-            color: C.ac,
-            flexShrink: 0,
-            border: `1px solid ${C.b1}`,
-          }}
-        >
-          {session.name[0]}
-        </div>
-        {!collapsed && (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {session.name}
-            </div>
-            <div style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}>
-              {session.role}
-            </div>
-          </div>
-        )}
-        <button
-          onClick={onLogout}
-          style={{ ...iBtn(), padding: 5, flexShrink: 0 }}
-          title="Logout"
-        >
-          <Ico n="logout" s={14} />
-        </button>
-      </div>
-    </div>
-    </>
-  );
-}
-
-// ── Dashboard ──────────────────────────────────────────────────────────────────
-function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
-  const isAdmin = session.role === "admin";
-  const isMobile = useIsMobile();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [confirmDel, setConfirmDel] = useState(null); // module id to delete
-  const modList = useMemo(() => Object.values(modules), [modules]);
-
-  const modStats = useMemo(
-    () =>
-      modList.map((m) => {
-        const allSteps = m.tests.flatMap((t) => t.steps);
-        const pass = allSteps.filter((s) => s.status === "pass").length;
-        const fail = allSteps.filter((s) => s.status === "fail").length;
-        return {
-          ...m,
-          pass,
-          fail,
-          total: allSteps.length,
-          testCount: m.tests.length,
-        };
-      }),
-    [modList]
+      </Box>
+    </Box>
   );
 
-  const totalPass = modStats.reduce((a, m) => a + m.pass, 0);
-  const totalFail = modStats.reduce((a, m) => a + m.fail, 0);
-  const total = modStats.reduce((a, m) => a + m.total, 0);
-  const pending = total - totalPass - totalFail;
-
-  const filtered = useMemo(() => {
-    let l = modStats.filter((m) =>
-      m.name.toLowerCase().includes(search.toLowerCase())
-    );
-    if (filter === "pass")
-      l = l.filter((m) => m.pass === m.total && m.total > 0);
-    if (filter === "fail") l = l.filter((m) => m.fail > 0);
-    if (filter === "active")
-      l = l.filter((m) => m.pass + m.fail > 0 && m.pass + m.fail < m.total);
-    if (filter === "empty") l = l.filter((m) => m.pass + m.fail === 0);
-    return l;
-  }, [modStats, search, filter]);
-
-  const addModule = () => {
-    const keys = Object.keys(modules);
-    // Find next available number
-    let n = keys.length + 1;
-    while (modules[`m${n}`]) n++;
-    const modId = `m${n}`;
-    const modName = `Module ${n}`;
-    const tests = Array.from({ length: 5 }, (_, i) =>
-      makeTest(modId, i + 1, 10)
-    );
-    const newMod = { id: modId, name: modName, tests };
-    saveMods({ ...modules, [modId]: newMod }, true);
-    // Save each new test's default steps surgically (saveModules skips empty-step tests)
-    tests.forEach((t) => {
-      store.saveSteps(t.id, modId, t.steps, {
-        moduleName:  modName,
-        serialNo:    t.serialNo ?? 0,
-        name:        t.name,
-        description: t.description ?? "",
-      }).catch((e) => console.error("addModule saveSteps error:", e));
-    });
-    toast(`Module ${n} added`, "success");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Added Module ${n}`,
-      type: "info",
-    });
-  };
-
-  const deleteModule = (id) => {
-    if (Object.keys(modules).length <= 1) {
-      toast("Cannot delete the last module", "error");
-      return;
-    }
-    const updated = { ...modules };
-    delete updated[id];
-    saveMods(updated, true);
-    toast("Module deleted", "info");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Deleted module "${modules[id]?.name}"`,
-      type: "info",
-    });
-    setConfirmDel(null);
-  };
-
-  const sc = (label, val, color, meta) => (
-    <div
-      style={{
-        background: C.s1,
-        border: `1px solid ${C.b1}`,
-        borderRadius: 10,
-        padding: "16px 20px",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: `linear-gradient(90deg,${color},transparent)`,
-        }}
-      />
-      <div
-        style={{
-          fontSize: 12,
-          fontFamily: F.sans,
-          fontWeight: 500,
-          color: C.t2,
-          textTransform: "uppercase",
-          letterSpacing: ".5px",
-          marginBottom: 10,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 32, fontFamily: F.mono, fontWeight: 700, color }}>
-        {val.toLocaleString()}
-      </div>
-      <div style={{ fontSize: 12, color: C.t3, marginTop: 6 }}>{meta}</div>
-    </div>
-  );
-
-  return (
-    <>
-      <Topbar
-        title="Dashboard"
-        sub={`Hello ${
-          session.name.split(" ")[0]
-        } · ${new Date().toLocaleDateString("en-GB", {
-          weekday: "long",
-          day: "numeric",
-          month: "short",
-        })}`}
-      >
-        {!isMobile && (
-          <SearchBox
-            value={search}
-            onChange={setSearch}
-            placeholder="Search modules…"
-            width={200}
-          />
-        )}
-        {isAdmin && (
-          <button style={acBtn(smBtn())} onClick={addModule}>
-            <Ico n="plus" s={12} /> {isMobile ? "" : "Add Module"}
-          </button>
-        )}
-      </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 20 }}>
-        {isMobile && (
-          <div style={{ marginBottom: 12 }}>
-            <SearchBox
-              value={search}
-              onChange={setSearch}
-              placeholder="Search modules…"
-              width="100%"
-            />
-          </div>
-        )}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)",
-            gap: isMobile ? 10 : 14,
-            marginBottom: isMobile ? 14 : 20,
-          }}
-        >
-          {sc("Total Steps", total, C.ac, `Across ${modList.length} modules`)}
-          {sc(
-            "Passed",
-            totalPass,
-            C.gr,
-            `${total ? Math.round((totalPass / total) * 100) : 0}% pass rate`
-          )}
-          {sc(
-            "Failed",
-            totalFail,
-            C.re,
-            `${modStats.filter((m) => m.fail > 0).length} modules affected`
-          )}
-          {sc(
-            "Pending",
-            pending,
-            C.am,
-            `${
-              modStats.filter((m) => m.pass + m.fail === m.total && m.total > 0)
-                .length
-            } modules complete`
-          )}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: isMobile ? "flex-start" : "center",
-            flexDirection: isMobile ? "column" : "row",
-            justifyContent: "space-between",
-            marginBottom: 14,
-            gap: isMobile ? 8 : 0,
-          }}
-        >
-          <div style={{ fontSize: 14, fontWeight: 600 }}>
-            Modules{" "}
-            <span
-              style={{
-                color: C.t3,
-                fontFamily: F.mono,
-                fontWeight: 400,
-                fontSize: 12,
-              }}
-            >
-              ({filtered.length})
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {[
-              ["all", "All"],
-              ["active", "In Progress"],
-              ["pass", "All Pass"],
-              ["fail", "Has Failures"],
-              ["empty", "Not Started"],
-            ].map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                style={{
-                  padding: "5px 10px",
-                  borderRadius: 20,
-                  border: `1px solid ${filter === k ? C.b2 : C.b1}`,
-                  background: filter === k ? C.s3 : "transparent",
-                  color: filter === k ? C.t1 : C.t2,
-                  fontFamily: F.mono,
-                  fontSize: 10,
-                  cursor: "pointer",
-                }}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtered.map((m) => {
-            const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
-            const passW = m.total ? (m.pass / m.total) * 100 : 0;
-            const failW = m.total ? (m.fail / m.total) * 100 : 0;
-            const borderColor =
-              m.fail > 0
-                ? "#fca5a5"
-                : m.pass === m.total && m.total > 0
-                ? "#86efac"
-                : C.b1;
-            return (
-              <div
-                key={m.id}
-                style={{
-                  background: C.s1,
-                  border: `1px solid ${borderColor}`,
-                  borderRadius: 8,
-                  overflow: "hidden",
-                  transition: "border-color .15s",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    cursor: "pointer",
-                  }}
-                  onClick={() => onSelect(m.id)}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {m.name}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        fontFamily: F.mono,
-                        color: C.t3,
-                        marginTop: 2,
-                      }}
-                    >
-                      {m.testCount}t · {m.total}s
-                      {m.pass > 0 && <span style={{ color: C.gr, marginLeft: 6 }}>✓{m.pass}</span>}
-                      {m.fail > 0 && <span style={{ color: C.re, marginLeft: 4 }}>✗{m.fail}</span>}
-                      {m.total - m.pass - m.fail > 0 && <span style={{ color: C.t3, marginLeft: 4 }}>⟳{m.total - m.pass - m.fail}</span>}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontFamily: F.mono,
-                      fontWeight: 600,
-                      color: pct === 100 ? C.gr : m.fail > 0 ? C.am : C.t2,
-                      flexShrink: 0,
-                      minWidth: 34,
-                      textAlign: "right",
-                    }}
-                  >
-                    {pct}%
-                  </div>
-
-                  {isAdmin && (
-                    <button
-                      style={reBtn({ padding: "4px 7px", fontSize: 10 })}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDel(m.id);
-                      }}
-                      title="Delete module"
-                    >
-                      <Ico n="trash" s={11} />
-                    </button>
-                  )}
-                  <Ico n="chevR" s={13} />
-                </div>
-
-                <div style={{ height: 4, background: C.s3, display: "flex" }}>
-                  <div style={{ width: `${passW}%`, background: C.gr, transition: "width .5s" }} />
-                  <div style={{ width: `${failW}%`, background: C.re, transition: "width .5s" }} />
-                </div>
-              </div>
-            );
-          })}
-          {filtered.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "40px 0",
-                color: C.t3,
-                fontFamily: F.mono,
-                fontSize: 12,
-              }}
-            >
-              No modules match.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {confirmDel && (
-        <Modal
-          title="Delete Module?"
-          sub={`Delete "${modules[confirmDel]?.name}"? All its tests and steps will be permanently removed.`}
-          onClose={() => setConfirmDel(null)}
-          width={380}
-        >
-          <ModalActions>
-            <button style={btn()} onClick={() => setConfirmDel(null)}>
-              Cancel
-            </button>
-            <button style={reBtn()} onClick={() => deleteModule(confirmDel)}>
-              <Ico n="trash" s={12} /> Delete
-            </button>
-          </ModalActions>
-        </Modal>
-      )}
-    </>
-  );
-}
-
-
-// ── Divider Row — full-width section separator ($$$ CSV rows) ─────────────────
-function DividerRow({ label }) {
-  return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: "7px 14px",
-      background: "linear-gradient(90deg,#fff7ed,#fef9f5)",
-      borderBottom: `1px solid ${C.b1}`,
-    }}>
-      <div style={{ height: 1, width: 10, background: C.b2, flexShrink: 0 }} />
-      <span style={{
-        fontSize: 10,
-        fontFamily: F.mono,
-        fontWeight: 700,
-        color: C.ac,
-        textTransform: "uppercase",
-        letterSpacing: "1.2px",
-        whiteSpace: "nowrap",
-      }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: C.b2 }} />
-    </div>
-  );
-}
-
-function StepRow({
-  step,
-  idx,
-  onChange,
-  onStatusToggle,
-  isActive,
-  onActivate,
-  rowRef,
-}) {
-  const isMobile = useIsMobile();
-
-  const rowBg =
-    step.status === "fail"
-      ? "#fff5f5"
-      : step.status === "pass"
-      ? "#f0fdf4"
-      : isActive
-      ? "#fff7ed"
-      : "transparent";
-
-  const passBtn = (
-    <button
-      onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        padding: isMobile ? "7px 0" : "4px 10px",
-        borderRadius: 20,
-        border: `1px solid ${step.status === "pass" ? "#86efac" : C.b2}`,
-        background: step.status === "pass" ? C.grd : "transparent",
-        color: step.status === "pass" ? C.gr : C.t3,
-        fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
-        cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
-      }}
-    >
-      <Ico n="check" s={isMobile ? 12 : 10} /> PASS
-    </button>
-  );
-  const failBtn = (
-    <button
-      onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        padding: isMobile ? "7px 0" : "4px 10px",
-        borderRadius: 20,
-        border: `1px solid ${step.status === "fail" ? "#fca5a5" : C.b2}`,
-        background: step.status === "fail" ? C.red : "transparent",
-        color: step.status === "fail" ? C.re : C.t3,
-        fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
-        cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
-      }}
-    >
-      <Ico n="x" s={isMobile ? 12 : 10} /> FAIL
-    </button>
-  );
-
-  // ── Mobile: card layout ──────────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div
-        ref={rowRef}
-        onClick={onActivate}
-        style={{
-          borderBottom: `1px solid ${C.b1}`,
-          background: rowBg,
-          outline: isActive ? `2px solid ${C.ac}` : "none",
-          outlineOffset: -2,
-          transition: "background .15s, outline .15s",
-          padding: "10px 12px",
-        }}
-      >
-        {/* Row 1: serial + status buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span style={{
-            fontFamily: F.mono, fontSize: 11, fontWeight: 700,
-            color: C.t3, minWidth: 28, flexShrink: 0,
-          }}>
-            {isActive && <span style={{ color: C.ac, marginRight: 2 }}>●</span>}
-            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
-          </span>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", gap: 6, width: 160 }}>
-            {passBtn}
-            {failBtn}
-          </div>
-        </div>
-        {/* Row 2: action */}
-        {step.action ? (
-          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5, marginBottom: 4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {step.action}
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", fontFamily: F.mono, marginBottom: 4 }}>No action</div>
-        )}
-        {/* Row 3: expected result */}
-        {step.result ? (
-          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5, marginBottom: 6, paddingLeft: 8, borderLeft: `2px solid ${C.b2}`, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, display: "block", marginBottom: 2 }}>Expected</span>
-            {step.result}
-          </div>
-        ) : null}
-        {/* Row 4: remarks */}
-        <textarea
-          value={step.remarks}
-          onChange={(e) => onChange(idx, "remarks", e.target.value)}
-          placeholder="Add remarks…"
-          rows={2}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: "100%", background: C.s2, border: `1px solid ${C.b1}`,
-            borderRadius: 6, color: C.t2, fontFamily: F.sans,
-            fontSize: 12, resize: "vertical", outline: "none",
-            lineHeight: 1.5, padding: "6px 8px", minHeight: 36,
-          }}
-        />
-      </div>
+      <Drawer anchor="left" open={mobileOpen} onClose={onMobileClose}
+        PaperProps={{ sx: { width: 280, bgcolor: "rgba(255,255,255,0.95)", backdropFilter: "blur(16px)" } }}>
+        {content}
+      </Drawer>
     );
   }
 
-  // ── Desktop: grid table row ──────────────────────────────────────────────────
-  const readonlyCell = (text, color) => (
-    <div style={{ padding: "8px 10px", display: "flex", alignItems: "flex-start", borderRight: `1px solid ${C.b1}`, minHeight: 40 }}>
-      {text ? (
-        <span style={{ fontSize: 12, color, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{text}</span>
-      ) : (
-        <span style={{ fontSize: 11, color: C.t3, fontStyle: "italic", fontFamily: F.mono }}>—</span>
-      )}
-    </div>
-  );
-
   return (
-    <div
-      ref={rowRef}
-      onClick={onActivate}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "50px 1fr 1fr 180px 110px",
-        gap: 0,
-        borderBottom: `1px solid ${C.b1}`,
-        background: rowBg,
-        outline: isActive ? `2px solid ${C.ac}` : "none",
-        outlineOffset: -2,
-        transition: "background .15s, outline .15s",
-        cursor: "default",
-      }}
-    >
-      <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${C.b1}` }}>
-        {isActive && <div style={{ width: 4, height: 4, borderRadius: "50%", background: C.ac, marginRight: 4, flexShrink: 0 }} />}
-        <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 600, color: step.serialNo != null && step.serialNo !== "" ? C.t2 : C.t3 }}>
-          {step.serialNo != null && step.serialNo !== "" ? step.serialNo : "—"}
-        </span>
-      </div>
-      {readonlyCell(step.action, C.t1)}
-      {readonlyCell(step.result, C.t2)}
-      <div style={{ padding: "4px 8px", borderRight: `1px solid ${C.b1}` }}>
-        <textarea
-          value={step.remarks}
-          onChange={(e) => onChange(idx, "remarks", e.target.value)}
-          placeholder="Remarks…"
-          rows={2}
-          onClick={(e) => e.stopPropagation()}
-          style={{ width: "100%", background: "transparent", border: "none", color: C.t2, fontFamily: F.sans, fontSize: 12, resize: "vertical", outline: "none", lineHeight: 1.5, minHeight: 36 }}
-        />
-      </div>
-      <div style={{ padding: "6px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
-        {passBtn}
-        {failBtn}
-      </div>
-    </div>
+    <Box sx={{
+      width: drawerWidth, flexShrink: 0, display: "flex", flexDirection: "column",
+      bgcolor: "rgba(255,255,255,0.90)", backdropFilter: "blur(12px)",
+      borderRight: `1px solid ${C.b1}`, overflow: "hidden",
+      transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
+    }}>
+      {content}
+    </Box>
   );
 }
 
-// ── Test Detail — shown when a single test is open (its steps table) ───────────
-function TestDetail({
-  mod,
-  test,
-  testIdx,
-  allModules,
-  session,
-  saveMods,
-  addLog,
-  toast,
-  onBack,
-  onFinish,
-  modIdx,
-  modTotal,
-  onNav,
-  navLocked,  // true when tester holds lock and must click Finish before navigating
-}) {
+// ── Dashboard ─────────────────────────────────────────────────────────────────────
+function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   const isAdmin = session.role === "admin";
+  const isMobile = useIsMobile();
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [confirmDel, setConfirmDel] = useState(null);
+
+  const modList = useMemo(() => Object.values(modules), [modules]);
+  const modStats = useMemo(() => modList.map(m => {
+    const all = m.tests.flatMap(t => t.steps);
+    const pass = all.filter(s => s.status === "pass").length;
+    const fail = all.filter(s => s.status === "fail").length;
+    return { ...m, pass, fail, total: all.length, testCount: m.tests.length };
+  }), [modList]);
+
+  const total = modStats.reduce((a, m) => a + m.total, 0);
+  const totalPass = modStats.reduce((a, m) => a + m.pass, 0);
+  const totalFail = modStats.reduce((a, m) => a + m.fail, 0);
+  const pending = total - totalPass - totalFail;
+
+  const filtered = useMemo(() => {
+    let l = modStats.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+    if (filter === "active") l = l.filter(m => m.pass + m.fail > 0 && m.pass + m.fail < m.total);
+    else if (filter === "pass") l = l.filter(m => m.pass === m.total && m.total > 0);
+    else if (filter === "fail") l = l.filter(m => m.fail > 0);
+    else if (filter === "empty") l = l.filter(m => m.total === 0 || (m.pass + m.fail === 0));
+    return l;
+  }, [modStats, filter, search]);
+
+  const deleteModule = (id) => {
+    const m = { ...modules }; delete m[id];
+    saveMods(m, true);
+    addLog({ ts: Date.now(), user: session.name, action: `Deleted module "${modules[id].name}"`, type: "warn" });
+    toast(`Module "${modules[id].name}" deleted`, "info");
+    setConfirmDel(null);
+  };
+
+  const addModule = () => {
+    const n = prompt("Module name:");
+    if (!n?.trim()) return;
+    const id = `m_${Date.now()}`;
+    const updated = { ...modules, [id]: { id, name: n.trim(), tests: [makeTest(id, 1, 0)] } };
+    saveMods(updated, true);
+    addLog({ ts: Date.now(), user: session.name, action: `Created module "${n.trim()}"`, type: "info" });
+    toast(`Module "${n.trim()}" created`, "success");
+  };
+
+  const statCards = [
+    { label: "Total Steps", value: total, color: "primary.main", sub: `${modList.length} modules` },
+    { label: "Passed", value: totalPass, color: "success.main", sub: `${total ? Math.round((totalPass / total) * 100) : 0}% rate` },
+    { label: "Failed", value: totalFail, color: "error.main", sub: `${modStats.filter(m => m.fail > 0).length} modules` },
+    { label: "Pending", value: pending, color: "warning.main", sub: `${modStats.filter(m => m.pass + m.fail === m.total && m.total > 0).length} complete` },
+  ];
+
+  return (
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <Topbar title="Dashboard" sub={`Welcome back, ${session.name}`}>
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" />}
+        {isAdmin && <Button variant="contained" size="small" startIcon={<Ico n="plus" s={13} />} onClick={addModule}>Add Module</Button>}
+      </Topbar>
+
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2.5 }}>
+        {/* Search on mobile */}
+        {isMobile && <Box sx={{ mb: 1.5 }}><SearchBox value={search} onChange={setSearch} placeholder="Search modules…" fullWidth /></Box>}
+
+        {/* Stat cards */}
+        <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? 1 : 1.5, mb: isMobile ? 2 : 2.5 }}>
+          {statCards.map((card, i) => (
+            <motion.div key={card.label} custom={i} variants={cardVariants} initial="initial" animate="animate">
+              <motion.div whileHover={{ y: -3, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }} transition={{ duration: 0.18 }}>
+                <Paper elevation={1} sx={{ p: isMobile ? 1.5 : 2, borderRadius: 3, border: `1px solid ${C.b1}`, cursor: "default" }}>
+                  <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", display: "block", mb: 0.5 }}>
+                    {card.label}
+                  </Typography>
+                  <Typography variant="h4" fontWeight={800} sx={{ color: card.color, lineHeight: 1.1, mb: 0.5 }}>{card.value.toLocaleString()}</Typography>
+                  <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO }}>{card.sub}</Typography>
+                </Paper>
+              </motion.div>
+            </motion.div>
+          ))}
+        </Box>
+
+        {/* Filter bar */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
+          <Typography variant="body2" fontWeight={600}>
+            Modules <Box component="span" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 400 }}>({filtered.length})</Box>
+          </Typography>
+          <Stack direction="row" gap={0.75} flexWrap="wrap">
+            {[["all","All"],["active","In Progress"],["pass","All Pass"],["fail","Has Failures"],["empty","Not Started"]].map(([k,l]) => (
+              <Chip key={k} label={l} size="small" clickable
+                onClick={() => setFilter(k)}
+                sx={{
+                  fontFamily: MONO, fontSize: 10, height: 24,
+                  bgcolor: filter === k ? alpha("#ea580c", 0.12) : "transparent",
+                  color: filter === k ? "primary.main" : "text.secondary",
+                  border: `1px solid ${filter === k ? alpha("#ea580c", 0.3) : C.b1}`,
+                  fontWeight: filter === k ? 700 : 400,
+                  "&:hover": { bgcolor: filter === k ? alpha("#ea580c", 0.15) : alpha("#000", 0.04) },
+                }}
+              />
+            ))}
+          </Stack>
+        </Stack>
+
+        {/* Module cards */}
+        <Stack gap={isMobile ? 1 : 1.25}>
+          {filtered.map((m, i) => {
+            const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
+            const passW = m.total ? (m.pass / m.total) * 100 : 0;
+            const failW = m.total ? (m.fail / m.total) * 100 : 0;
+            const borderColor = m.fail > 0 ? "#fca5a5" : m.pass === m.total && m.total > 0 ? "#86efac" : C.b1;
+            return (
+              <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
+                whileHover={{ y: -2 }} transition={{ duration: 0.16 }}>
+                <Paper elevation={0} sx={{ border: `1px solid ${borderColor}`, borderRadius: 2.5, overflow: "hidden", transition: "border-color 0.15s" }}>
+                  <Box sx={{ p: isMobile ? "12px 14px" : "13px 16px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }}
+                    onClick={() => onSelect(m.id)}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography fontWeight={600} sx={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</Typography>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>
+                        {m.testCount}t · {m.total}s
+                        {m.pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 1 }}>✓{m.pass}</Box>}
+                        {m.fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5 }}>✗{m.fail}</Box>}
+                        {m.total - m.pass - m.fail > 0 && <Box component="span" sx={{ color: "text.disabled", ml: 0.5 }}>⟳{m.total - m.pass - m.fail}</Box>}
+                      </Typography>
+                    </Box>
+                    <Typography fontWeight={700} sx={{ fontSize: 13, fontFamily: MONO, color: pct === 100 ? C.gr : m.fail > 0 ? C.am : "text.secondary", flexShrink: 0 }}>
+                      {pct}%
+                    </Typography>
+                    {isAdmin && (
+                      <IconButton size="small" sx={{ color: "error.main", "&:hover": { bgcolor: alpha("#dc2626", 0.08) } }}
+                        onClick={e => { e.stopPropagation(); setConfirmDel(m.id); }}>
+                        <Ico n="trash" s={13} />
+                      </IconButton>
+                    )}
+                    <Ico n="chevR" s={14} color={C.t3} />
+                  </Box>
+                  {/* Dual-color progress strip */}
+                  <Box sx={{ height: 4, display: "flex", bgcolor: C.s3 }}>
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.6, ease: "easeOut" }}
+                      style={{ background: C.gr, minWidth: 0 }} />
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+                      style={{ background: C.re, minWidth: 0 }} />
+                  </Box>
+                </Paper>
+              </motion.div>
+            );
+          })}
+          {filtered.length === 0 && (
+            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 13 }}>
+              No modules match.
+            </Box>
+          )}
+        </Stack>
+      </Box>
+
+      <ConfirmDialog
+        open={Boolean(confirmDel)}
+        title="Delete Module?"
+        description={`Delete "${modules[confirmDel]?.name}"? All its tests and steps will be permanently removed.`}
+        onConfirm={() => deleteModule(confirmDel)}
+        onCancel={() => setConfirmDel(null)}
+      />
+    </motion.div>
+  );
+}
+
+// ── Divider Row ───────────────────────────────────────────────────────────────────
+function DividerRow({ label }) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 0.75,
+      background: "linear-gradient(90deg,#fff7ed,#fef9f5)", borderBottom: `1px solid ${C.b1}` }}>
+      <Box sx={{ width: 10, height: 1, bgcolor: C.b2, flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "1.2px", whiteSpace: "nowrap" }}>
+        {label}
+      </Typography>
+      <Box sx={{ flex: 1, height: 1, bgcolor: C.b2 }} />
+    </Box>
+  );
+}
+
+// ── Step Row ──────────────────────────────────────────────────────────────────────
+function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef }) {
+  const isMobile = useIsMobile();
+  const rowBg = step.status === "fail" ? "#fff5f5" : step.status === "pass" ? "#f0fdf4" : isActive ? "#fff7ed" : "transparent";
+
+  const PassBtn = (
+    <Button size="small" variant={step.status === "pass" ? "contained" : "outlined"}
+      onClick={e => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
+      sx={{
+        borderRadius: 5, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        ...(step.status === "pass"
+          ? { bgcolor: C.grd, color: C.gr, borderColor: "#86efac", boxShadow: "none", "&:hover": { bgcolor: "#dcfce7" } }
+          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.grd, borderColor: "#86efac" } }),
+      }}>
+      <Ico n="check" s={10} /> PASS
+    </Button>
+  );
+  const FailBtn = (
+    <Button size="small" variant={step.status === "fail" ? "contained" : "outlined"}
+      onClick={e => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
+      sx={{
+        borderRadius: 5, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        ...(step.status === "fail"
+          ? { bgcolor: C.red, color: C.re, borderColor: "#fca5a5", boxShadow: "none", "&:hover": { bgcolor: "#fee2e2" } }
+          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.red, borderColor: "#fca5a5" } }),
+      }}>
+      <Ico n="x" s={10} /> FAIL
+    </Button>
+  );
+
+  if (isMobile) {
+    return (
+      <motion.div ref={rowRef} onClick={onActivate} layout
+        style={{ borderBottom: `1px solid ${C.b1}`, background: rowBg, padding: "10px 12px",
+          outline: isActive ? `2px solid ${C.ac}` : "none", outlineOffset: -2 }}>
+        <Stack direction="row" alignItems="center" gap={1} mb={1}>
+          <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.t3, minWidth: 28 }}>
+            {isActive && <Box component="span" sx={{ color: "primary.main", mr: 0.3 }}>●</Box>}
+            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Stack direction="row" gap={0.75} sx={{ width: 160 }}>{PassBtn}{FailBtn}</Stack>
+        </Stack>
+        {step.action
+          ? <Typography variant="body2" sx={{ lineHeight: 1.6, mb: 0.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{step.action}</Typography>
+          : <Typography variant="caption" sx={{ color: C.t3, fontStyle: "italic", fontFamily: MONO, display: "block", mb: 0.5 }}>No action</Typography>}
+        {step.result && (
+          <Box sx={{ pl: 1, borderLeft: `2px solid ${C.b2}`, mb: 0.75 }}>
+            <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3, display: "block", mb: 0.3 }}>Expected</Typography>
+            <Typography variant="caption" sx={{ color: C.t2, lineHeight: 1.5, display: "block", whiteSpace: "pre-wrap" }}>{step.result}</Typography>
+          </Box>
+        )}
+        <TextField
+          value={step.remarks} multiline rows={2} placeholder="Add remarks…" fullWidth size="small"
+          onChange={e => onChange(idx, "remarks", e.target.value)}
+          onClick={e => e.stopPropagation()}
+          InputProps={{ sx: { fontSize: 12, bgcolor: C.s2, borderRadius: 1.5 } }}
+        />
+      </motion.div>
+    );
+  }
+
+  // Desktop grid row
+  const cell = (text, color) => (
+    <Box sx={{ p: "7px 10px", display: "flex", alignItems: "flex-start", borderRight: `1px solid ${C.b1}`, minHeight: 42 }}>
+      {text
+        ? <Typography variant="caption" sx={{ color, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12 }}>{text}</Typography>
+        : <Typography variant="caption" sx={{ color: C.t3, fontStyle: "italic", fontFamily: MONO }}>—</Typography>}
+    </Box>
+  );
+
+  return (
+    <motion.div ref={rowRef} onClick={onActivate} layout
+      style={{ display: "grid", gridTemplateColumns: "50px 1fr 1fr 180px 110px",
+        borderBottom: `1px solid ${C.b1}`, background: rowBg,
+        outline: isActive ? `2px solid ${C.ac}` : "none", outlineOffset: -2, cursor: "default" }}>
+      <Box sx={{ p: "7px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${C.b1}` }}>
+        {isActive && <Box sx={{ width: 4, height: 4, borderRadius: "50%", bgcolor: "primary.main", mr: 0.5, flexShrink: 0 }} />}
+        <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 600, color: step.serialNo != null ? C.t2 : C.t3, fontSize: 12 }}>
+          {step.serialNo != null && step.serialNo !== "" ? step.serialNo : "—"}
+        </Typography>
+      </Box>
+      {cell(step.action, C.t1)}
+      {cell(step.result, C.t2)}
+      <Box sx={{ p: "4px 8px", borderRight: `1px solid ${C.b1}` }}>
+        <TextField
+          value={step.remarks} multiline rows={2} placeholder="Remarks…" fullWidth
+          onChange={e => onChange(idx, "remarks", e.target.value)}
+          onClick={e => e.stopPropagation()}
+          variant="standard"
+          InputProps={{ disableUnderline: true, sx: { fontSize: 12, color: C.t2, bgcolor: "transparent" } }}
+        />
+      </Box>
+      <Box sx={{ p: "6px 8px", display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center", gap: 0.5 }}>
+        {PassBtn}{FailBtn}
+      </Box>
+    </motion.div>
+  );
+}
+
+// ── Test Detail ────────────────────────────────────────────────────────────────────
+function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog, toast, onBack, onFinish, modIdx, modTotal, onNav, navLocked }) {
+  const isAdmin = session.role === "admin";
+  const isMobile = useIsMobile();
   const [steps, setSteps] = useState(test.steps);
   const [search, setSearch] = useState("");
   const [fStat, setFStat] = useState("all");
@@ -2589,1251 +1221,578 @@ function TestDetail({
   const [renaming, setRenaming] = useState(false);
   const [renVal, setRenVal] = useState(test.name);
   const [descVal, setDescVal] = useState(test.description || "");
-  const [activeIdx, setActiveIdx] = useState(0); // tracks the highlighted row (original step index)
+  const [activeIdx, setActiveIdx] = useState(0);
   const renRef = useRef();
-  const rowRefs = useRef({}); // keyed by original step index
+  const rowRefs = useRef({});
   const tableRef = useRef();
-
-  // Track whether the last setSteps came from a local commit (vs RT push).
-  // When it's local we skip the sync-from-parent echo a few ms later.
   const localCommitRef = useRef(false);
+  const stepsTimerRef = useRef(null);
+  const latestStepsRef = useRef(test.steps);
 
-  // Re-sync steps when the parent test identity changes (new test opened).
   useEffect(() => {
-    setSteps(test.steps);
-    setRenVal(test.name);
-    setDescVal(test.description || "");
-    const firstPending = test.steps.findIndex((s) => !s.isDivider && s.status === "pending");
+    setSteps(test.steps); setRenVal(test.name); setDescVal(test.description || "");
+    const firstPending = test.steps.findIndex(s => !s.isDivider && s.status === "pending");
     setActiveIdx(firstPending >= 0 ? firstPending : 0);
     localCommitRef.current = false;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [test.id]);
+  }, [test.id]); // eslint-disable-line
 
-  // Re-sync steps when a remote RT update arrives (different user changed a step).
-  // Skips if we just committed locally (to avoid overwriting in-progress remarks).
   const testStepsFingerprint = useMemo(
-    () =>
-      test.steps
-        .map((s) => s.id + ":" + s.status + ":" + (s.remarks || ""))
-        .join("|"),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [test.steps]
+    () => test.steps.map(s => s.id + ":" + s.status + ":" + (s.remarks || "")).join("|"),
+    [test.steps] // eslint-disable-line
   );
   useEffect(() => {
-    if (localCommitRef.current) {
-      localCommitRef.current = false;
-      return;
-    }
+    if (localCommitRef.current) { localCommitRef.current = false; return; }
     setSteps(test.steps);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testStepsFingerprint]);
+  }, [testStepsFingerprint]); // eslint-disable-line
 
-  // When activeIdx changes, bring that row into prominent view at top of container
   useEffect(() => {
-    const el = rowRefs.current[activeIdx];
-    const container = tableRef.current;
+    const el = rowRefs.current[activeIdx]; const container = tableRef.current;
     if (!el || !container) return;
-    // Use a small delay so React has finished painting the updated rows
     const t = setTimeout(() => {
-      const elRect = el.getBoundingClientRect();
-      const ctRect = container.getBoundingClientRect();
-      const relTop = elRect.top - ctRect.top; // row's position inside the visible container
-      // If row is not already near the top, scroll it to ~60px from the top
+      const elRect = el.getBoundingClientRect(); const ctRect = container.getBoundingClientRect();
+      const relTop = elRect.top - ctRect.top;
       if (relTop < 0 || relTop > container.clientHeight * 0.35) {
-        const target = container.scrollTop + relTop - 60;
-        container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+        container.scrollTo({ top: Math.max(0, container.scrollTop + relTop - 60), behavior: "smooth" });
       }
     }, 30);
     return () => clearTimeout(t);
   }, [activeIdx]);
 
-  // Debounce ref for step saves — keeps DB write rate sane during rapid changes
-  const stepsTimerRef = useRef(null);
-  const latestStepsRef = useRef(test.steps);
-
-  // Reset step ref whenever we open a different test — prevents stale data bleed
   useEffect(() => {
     latestStepsRef.current = test.steps;
-    if (stepsTimerRef.current) {
-      clearTimeout(stepsTimerRef.current);
-      stepsTimerRef.current = null;
-    }
-  }, [test.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (stepsTimerRef.current) { clearTimeout(stepsTimerRef.current); stepsTimerRef.current = null; }
+  }, [test.id]); // eslint-disable-line
 
-  const commit = useCallback(
-    (newSteps, newName, newDesc) => {
-      localCommitRef.current = true; // suppress next RT echo (it's our own save)
-      const updTest = {
-        ...test,
-        steps: newSteps,
-        name: newName ?? test.name,
-        description: newDesc ?? test.description,
-      };
-      const updTests = mod.tests.map((t, i) => (i === testIdx ? updTest : t));
-      const updMod = { ...mod, tests: updTests };
+  const commit = useCallback((newSteps, newName, newDesc) => {
+    localCommitRef.current = true;
+    const updTest = { ...test, steps: newSteps, name: newName ?? test.name, description: newDesc ?? test.description };
+    const updTests = mod.tests.map((t, i) => i === testIdx ? updTest : t);
+    saveMods({ ...allModules, [mod.id]: { ...mod, tests: updTests } });
+    latestStepsRef.current = newSteps;
+    if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
+    stepsTimerRef.current = setTimeout(() => {
+      store.saveSteps(test.id, mod.id, latestStepsRef.current, {
+        moduleName: mod.name, serialNo: test.serialNo ?? test.serial_no ?? 0,
+        name: newName ?? test.name, description: newDesc ?? test.description ?? "",
+      }).catch(e => console.error("saveSteps error:", e));
+    }, 400);
+  }, [mod, test, testIdx, allModules, saveMods]);
 
-      // Update React state immediately (always)
-      saveMods({ ...allModules, [mod.id]: updMod });
-
-      // ── Surgical step save: only write steps for THIS test ──────────────
-      // Debounced so rapid keystrokes / status toggles don't flood Supabase.
-      latestStepsRef.current = newSteps;
-      if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
-      stepsTimerRef.current = setTimeout(() => {
-        store.saveSteps(test.id, mod.id, latestStepsRef.current, {
-          moduleName:  mod.name,
-          serialNo:    test.serialNo ?? test.serial_no ?? 0,
-          name:        newName ?? test.name,
-          description: newDesc ?? test.description ?? "",
-        }).catch((e) => console.error("saveSteps error:", e));
-      }, 400);
-    },
-    [mod, test, testIdx, allModules, saveMods]
-  );
-
-  const setField = (i, f, v) => {
-    const ns = [...steps];
-    ns[i] = { ...ns[i], [f]: v };
-    setSteps(ns);
-    commit(ns);
-  };
+  const setField = (i, f, v) => { const ns = [...steps]; ns[i] = { ...ns[i], [f]: v }; setSteps(ns); commit(ns); };
 
   const setStatusToggle = (i, status) => {
-    const ns = [...steps];
-    const newStatus = ns[i].status === status ? "pending" : status;
-    ns[i] = { ...ns[i], status: newStatus };
-    setSteps(ns);
-    commit(ns);
+    const ns = [...steps]; const newStatus = ns[i].status === status ? "pending" : status;
+    ns[i] = { ...ns[i], status: newStatus }; setSteps(ns); commit(ns);
     if (newStatus !== "pending") {
-      addLog({
-        ts: Date.now(),
-        user: session.name,
-        action: `${mod.name} › ${test.name} · Step ${
-          ns[i].serialNo
-        } → ${newStatus.toUpperCase()}`,
-        type: newStatus,
-      });
+      addLog({ ts: Date.now(), user: session.name, action: `${mod.name} › ${test.name} · Step ${ns[i].serialNo} → ${newStatus.toUpperCase()}`, type: newStatus });
     }
-    // Auto-advance: find next pending step after current in the visible list
     if (newStatus !== "pending") {
-      // Build current visible list from updated steps
-      const updVisible = ns
-        .map((s, idx) => ({ ...s, _i: idx }))
-        .filter((s) => {
-          if (s.isDivider) return false;
-          if (fStat !== "all" && s.status !== fStat) return false;
-          if (search) {
-            const q = search.toLowerCase();
-            return (
-              (s.action || "").toLowerCase().includes(q) ||
-              (s.result || "").toLowerCase().includes(q) ||
-              (s.remarks || "").toLowerCase().includes(q) ||
-              String(s.serialNo).includes(q)
-            );
-          }
-          return true;
-        });
-      // Find current position in visible list
-      const curPos = updVisible.findIndex((s) => s._i === i);
-      // Look for the next pending step after current position
-      const nextPending = updVisible
-        .slice(curPos + 1)
-        .find((s) => s.status === "pending");
-      if (nextPending) {
-        setActiveIdx(nextPending._i);
-      } else {
-        // No more pending after this — wrap to first pending anywhere in visible list
-        const firstPending = updVisible.find((s) => s.status === "pending");
-        if (firstPending) setActiveIdx(firstPending._i);
-        // else all done — keep current
-      }
+      const updVisible = ns.map((s, idx) => ({ ...s, _i: idx })).filter(s => {
+        if (s.isDivider) return false;
+        if (fStat !== "all" && s.status !== fStat) return false;
+        if (search) { const q = search.toLowerCase(); return (s.action||"").toLowerCase().includes(q)||(s.result||"").toLowerCase().includes(q)||(s.remarks||"").toLowerCase().includes(q)||String(s.serialNo).includes(q); }
+        return true;
+      });
+      const curPos = updVisible.findIndex(s => s._i === i);
+      const nextPending = updVisible.slice(curPos + 1).find(s => s.status === "pending");
+      if (nextPending) setActiveIdx(nextPending._i);
+      else { const fp = updVisible.find(s => s.status === "pending"); if (fp) setActiveIdx(fp._i); }
     }
   };
 
   const addSteps = () => {
-    if (steps.length >= 100_000) {
-      toast("Maximum 100,000 steps per test", "error");
-      return;
-    }
+    if (steps.length >= 100_000) { toast("Maximum 100,000 steps per test", "error"); return; }
     const n = Math.min(addCount, 100_000 - steps.length);
     const start = steps.length + 1;
-    const ns = [
-      ...steps,
-      ...Array.from({ length: n }, (_, i) => makeStep(test.id, start + i)),
-    ];
-    setSteps(ns);
-    commit(ns);
-    toast(
-      `Added ${n} step${n > 1 ? "s" : ""}`,
-      steps.length + n >= 100_000 ? "info" : "success"
-    );
+    const ns = [...steps, ...Array.from({ length: n }, (_, i) => makeStep(test.id, start + i))];
+    setSteps(ns); commit(ns); toast(`Added ${n} step${n > 1 ? "s" : ""}`, "success");
   };
 
   const resetAll = () => {
-    const ns = steps.map((s) => s.isDivider ? s : { ...s, status: "pending" });
-    setSteps(ns);
-    commit(ns);
-    setActiveIdx(0);
-    toast("Steps reset", "info");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Reset ${mod.name} › ${test.name}`,
-      type: "info",
-    });
+    const ns = steps.map(s => s.isDivider ? s : { ...s, status: "pending" });
+    setSteps(ns); commit(ns); setActiveIdx(0); toast("Steps reset", "info");
+    addLog({ ts: Date.now(), user: session.name, action: `Reset ${mod.name} › ${test.name}`, type: "info" });
   };
 
   const exportCSV = () => {
     const rows = [["Serial No", "Action", "Result", "Remarks", "Status"]];
-    steps.forEach((s) => {
-      if (s.isDivider) {
-        rows.push([`"$$$${s.action}"`, "", "", "", ""]);
-      } else {
-        rows.push([s.serialNo, `"${s.action}"`, `"${s.result}"`, `"${s.remarks}"`, s.status]);
-      }
+    steps.forEach(s => {
+      if (s.isDivider) rows.push([`"$$$${s.action}"`, "", "", "", ""]);
+      else rows.push([s.serialNo, `"${s.action}"`, `"${s.result}"`, `"${s.remarks}"`, s.status]);
     });
-    const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
-      type: "text/csv",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(b);
-    a.download = `${mod.name}_${test.name}.csv`.replace(/\s+/g, "_");
-    a.click();
+    const b = new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b);
+    a.download = `${mod.name}_${test.name}.csv`.replace(/\s+/g, "_"); a.click();
     toast("CSV exported", "success");
   };
 
   const exportPDF = () => {
-    const statusColor = (s) =>
-      s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
-    const statusBg = (s) =>
-      s === "pass" ? "#f0fdf4" : s === "fail" ? "#fff5f5" : "#f9fafb";
-    const rows = steps
-      .map(
-        (s) => `
-      <tr style="background:${statusBg(s.status)}">
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-family:monospace;font-size:12px;text-align:center;white-space:nowrap">${
-          s.serialNo || "—"
-        }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px">${
-          s.action || ""
-        }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#4b5563">${
-          s.result || ""
-        }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#6b7280">${
-          s.remarks || ""
-        }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;font-weight:700;text-align:center;color:${statusColor(
-          s.status
-        )}">${s.status.toUpperCase()}</td>
-      </tr>`
-      )
-      .join("");
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>${mod.name} — ${test.name}</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;padding:32px}
-        h1{font-size:20px;font-weight:700;margin-bottom:4px}
-        h2{font-size:14px;font-weight:500;color:#6b7280;margin-bottom:16px}
-        .meta{display:flex;gap:20px;font-size:12px;color:#6b7280;font-family:monospace;margin-bottom:20px;padding:10px 14px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb}
-        .meta span{font-weight:600;color:#111827}
-        table{width:100%;border-collapse:collapse}
-        thead th{padding:8px 10px;background:#f3f4f6;border:1px solid #e5e7eb;font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280;text-align:left}
-        @page{margin:16mm}
-        @media print{body{padding:0}}
-      </style></head><body>
-      <h1>${mod.name} — ${test.name}</h1>
-      ${test.description ? `<h2>${test.description}</h2>` : ""}
-      <div class="meta">
-        <div>Total <span>${steps.length}</span></div>
-        <div>Pass <span style="color:#16a34a">${pass}</span></div>
-        <div>Fail <span style="color:#dc2626">${fail}</span></div>
-        <div>Pending <span style="color:#d97706">${pending}</span></div>
-        <div>Progress <span>${pct}%</span></div>
-        <div>Exported <span>${new Date().toLocaleString()}</span></div>
-      </div>
-      <table>
-        <thead><tr><th style="width:60px">S.No</th><th>Action</th><th>Expected Result</th><th>Remarks</th><th style="width:80px">Status</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      </body></html>`;
-
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => {
-      w.print();
-    }, 400);
-    toast("PDF ready — use browser print dialog", "info");
+    const sc = s => s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
+    const sb = s => s === "pass" ? "#f0fdf4" : s === "fail" ? "#fff5f5" : "#ffffff";
+    const stepRows = steps.map(s => s.isDivider
+      ? `<tr><td colspan="5" style="padding:6px 12px;background:#fff7ed;font-size:11px;font-family:monospace;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px">${s.action}</td></tr>`
+      : `<tr style="background:${sb(s.status)}">
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${s.serialNo||"—"}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${s.action||""}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${s.result||""}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${s.remarks||""}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:10px;font-weight:700;text-align:center;color:${sc(s.status)}">${s.status.toUpperCase()}</td>
+        </tr>`
+    ).join("");
+    const pass = steps.filter(s => !s.isDivider && s.status === "pass").length;
+    const fail = steps.filter(s => !s.isDivider && s.status === "fail").length;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${mod.name} — ${test.name}</title>
+      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;color:#111;padding:28px;font-size:14px}h1{font-size:20px;font-weight:700;margin-bottom:4px}.meta{font-family:monospace;font-size:11px;color:#6b7280;margin-bottom:20px}@page{margin:14mm}@media print{body{padding:0}}</style></head>
+      <body><h1>${mod.name} › ${test.name}</h1><div class="meta">✓${pass} ✗${fail} ⟳${steps.length-pass-fail} · Generated ${new Date().toLocaleString()}</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          ${["S.No","Action","Expected Result","Remarks","Status"].map(h=>`<th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">${h}</th>`).join("")}
+        </tr></thead><tbody>${stepRows}</tbody>
+      </table></body></html>`;
+    const w = window.open("", "_blank"); w.document.write(html); w.document.close();
+    w.focus(); setTimeout(() => w.print(), 500); toast("PDF ready", "info");
   };
 
-  const realSteps = useMemo(() => steps.filter((s) => !s.isDivider), [steps]);
-  const pass    = realSteps.filter((s) => s.status === "pass").length;
-  const fail    = realSteps.filter((s) => s.status === "fail").length;
-  const pending = realSteps.length - pass - fail;
-  const pct     = Math.round((pass / Math.max(realSteps.length, 1)) * 100);
-
-  const visible = useMemo(
-    () =>
-      steps
-        .map((s, i) => ({ ...s, _i: i }))
-        .filter((s) => {
-          if (s.isDivider) return true; // always show dividers
-          if (fStat !== "all" && s.status !== fStat) return false;
-          if (search) {
-            const q = search.toLowerCase();
-            return (
-              (s.action || "").toLowerCase().includes(q) ||
-              (s.result || "").toLowerCase().includes(q) ||
-              (s.remarks || "").toLowerCase().includes(q) ||
-              String(s.serialNo).includes(q)
-            );
+  const importCSV = (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const lines = ev.target.result.split("\n").filter(l => l.trim());
+        const start = lines[0]?.toLowerCase().includes("serial") ? 1 : 0;
+        const newSteps = [];
+        let sno = 1;
+        for (let i = start; i < lines.length; i++) {
+          const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
+          if (cols[0]?.startsWith("$$$")) {
+            newSteps.push({ id: `${test.id}_div_${Date.now()}_${i}`, isDivider: true, action: cols[0].slice(3), serialNo: null, result: "", remarks: "", status: "pending" });
+          } else {
+            const sn = parseInt(cols[0]); const serialNo = !isNaN(sn) ? sn : sno;
+            newSteps.push({ id: `${test.id}_s${serialNo}`, serialNo, action: cols[1] || "", result: cols[2] || "", remarks: cols[3] || "", status: cols[4]?.trim() || "pending", isDivider: false });
+            sno++;
           }
-          return true;
-        }),
-    [steps, fStat, search]
-  );
+        }
+        setSteps(newSteps); commit(newSteps);
+        toast(`Imported ${newSteps.filter(s => !s.isDivider).length} steps`, "success");
+        addLog({ ts: Date.now(), user: session.name, action: `Imported CSV → ${mod.name} › ${test.name}`, type: "info" });
+      } catch { toast("CSV parse error", "error"); }
+    };
+    reader.readAsText(file); e.target.value = "";
+  };
 
-  const isMobile = useIsMobile();
-  const onMenuClick = useContext(MobileMenuCtx);
+  const realSteps = steps.filter(s => !s.isDivider);
+  const pass = realSteps.filter(s => s.status === "pass").length;
+  const fail = realSteps.filter(s => s.status === "fail").length;
+  const pending = realSteps.filter(s => s.status === "pending").length;
+  const pct = realSteps.length ? Math.round((pass / realSteps.length) * 100) : 0;
+
+  const visible = steps.map((s, i) => ({ ...s, _i: i })).filter(s => {
+    if (s.isDivider) return true;
+    if (fStat !== "all" && s.status !== fStat) return false;
+    if (search) { const q = search.toLowerCase(); return (s.action||"").toLowerCase().includes(q)||(s.result||"").toLowerCase().includes(q)||(s.remarks||"").toLowerCase().includes(q)||String(s.serialNo).includes(q); }
+    return true;
+  });
 
   return (
-    <div
-      style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
-      {/* ── Test header: redesigned 2-row layout ─────────────────────────── */}
-      <div
-        style={{
-          background: C.s1,
-          borderBottom: `1px solid ${C.b1}`,
-          flexShrink: 0,
-          boxShadow: "0 1px 4px rgba(0,0,0,.06)",
-        }}
-      >
-        {/* Row 1 — breadcrumb + title + progress */}
-        <div
-          style={{
-            padding: isMobile ? "10px 12px 8px" : "12px 22px 10px",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            borderBottom: `1px solid ${C.b1}`,
-            minHeight: 50,
-          }}
-        >
-          {/* Hamburger on mobile */}
-          {isMobile && onMenuClick && (
-            <button onClick={onMenuClick} style={{ ...iBtn(), padding: "5px 6px", marginLeft: -4, flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-              </svg>
-            </button>
-          )}
-
-          {/* Back breadcrumb */}
-          <button
-            onClick={onBack}
-            style={{
-              ...smBtn(),
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: C.s2,
-              borderColor: C.b1,
-              color: C.t2,
-              flexShrink: 0,
-              maxWidth: isMobile ? 90 : 160,
-            }}
-          >
-            <Ico n="chevL" s={11} />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {mod.name}
-            </span>
-          </button>
-
-          <span style={{ color: C.t3, fontSize: 12, flexShrink: 0 }}>›</span>
-
-          {/* Test name (editable) */}
+    <Box sx={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {/* Header */}
+      <Box sx={{ flexShrink: 0, bgcolor: "background.paper", borderBottom: `1px solid ${C.b1}` }}>
+        {/* Row 1: title + nav */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: isMobile ? 1.5 : 2.5, py: 1, minHeight: 52 }}>
+          <Tooltip title="Back to tests">
+            <IconButton size="small" onClick={onBack} sx={{ color: "text.secondary" }}>
+              <Ico n="back" s={16} />
+            </IconButton>
+          </Tooltip>
           {renaming ? (
-            <input
-              ref={renRef}
-              value={renVal}
-              onChange={(e) => setRenVal(e.target.value)}
-              onBlur={() => { commit(steps, renVal || test.name, descVal); setRenaming(false); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { commit(steps, renVal || test.name, descVal); setRenaming(false); }
-                if (e.key === "Escape") setRenaming(false);
-              }}
-              autoFocus
-              style={{
-                background: "none", border: "none",
-                borderBottom: `2px solid ${C.ac}`,
-                color: C.t1, fontFamily: F.sans,
-                fontSize: isMobile ? 14 : 15,
-                fontWeight: 700, padding: "0 2px",
-                outline: "none", minWidth: 0, flex: 1,
-              }}
+            <TextField ref={renRef} value={renVal} onChange={e => setRenVal(e.target.value)} size="small" autoFocus
+              onBlur={() => { setRenaming(false); commit(steps, renVal); }}
+              onKeyDown={e => { if (e.key === "Enter") { setRenaming(false); commit(steps, renVal); } }}
+              InputProps={{ sx: { fontWeight: 700, fontSize: 14, borderRadius: 1.5 } }}
+              sx={{ flex: 1 }}
             />
           ) : (
-            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{
-                fontSize: isMobile ? 14 : 15,
-                fontWeight: 700,
-                color: C.t1,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}>
+            <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Typography fontWeight={700} sx={{ fontSize: isMobile ? 14 : 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {test.name}
-              </span>
+              </Typography>
               {isAdmin && (
-                <button
-                  onClick={() => { setRenaming(true); setTimeout(() => renRef.current?.select(), 20); }}
-                  style={{ ...iBtn(), padding: 3, flexShrink: 0 }}
-                  title="Rename test"
-                >
-                  <Ico n="edit" s={11} />
-                </button>
+                <IconButton size="small" onClick={() => { setRenaming(true); setTimeout(() => renRef.current?.querySelector?.("input")?.select?.(), 20); }} sx={{ color: "text.disabled", flexShrink: 0 }}>
+                  <Ico n="edit" s={12} />
+                </IconButton>
               )}
-            </div>
+            </Box>
           )}
-
-          {/* Progress pill — always visible */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            flexShrink: 0,
-            background: C.s2,
-            border: `1px solid ${C.b1}`,
-            borderRadius: 20,
-            padding: isMobile ? "4px 10px" : "4px 12px",
-          }}>
+          {/* Progress pill */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexShrink: 0, bgcolor: C.s2, border: `1px solid ${C.b1}`, borderRadius: 5, px: 1.5, py: 0.5 }}>
             {!isMobile && (
               <>
-                <span style={{ fontSize: 10, fontFamily: F.mono, color: C.gr, fontWeight: 600 }}>{pass}✓</span>
-                {fail > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.re, fontWeight: 600 }}>{fail}✗</span>}
-                <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>{pending}…</span>
-                <div style={{ width: 1, height: 12, background: C.b2 }} />
+                <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.gr }}>{pass}✓</Typography>
+                {fail > 0 && <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.re }}>{fail}✗</Typography>}
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>{pending}…</Typography>
+                <Box sx={{ width: 1, height: 12, bgcolor: C.b2 }} />
               </>
             )}
-            <span style={{ fontSize: 11, fontFamily: F.mono, fontWeight: 700,
-              color: pct === 100 ? C.gr : fail > 0 ? C.re : C.ac }}>
+            <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 800, color: pct === 100 ? C.gr : fail > 0 ? C.re : "primary.main" }}>
               {pct}%
-            </span>
-          </div>
-
-          {/* Module nav arrows */}
-          {!isMobile && modIdx !== undefined && modTotal !== undefined && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-              <button
-                style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
-                onClick={() => !navLocked && onNav && onNav(-1)}
-                disabled={modIdx === 0 || navLocked}
-                title={navLocked ? "Finish your test first" : "Previous module"}
-              >
-                <Ico n="chevL" s={12} />
-              </button>
-              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, whiteSpace: "nowrap" }}>
-                {modIdx + 1}/{modTotal}
-              </span>
-              <button
-                style={smBtn(navLocked ? { opacity: 0.4, cursor: "not-allowed" } : {})}
-                onClick={() => !navLocked && onNav && onNav(1)}
-                disabled={modIdx === modTotal - 1 || navLocked}
-                title={navLocked ? "Finish your test first" : "Next module"}
-              >
-                <Ico n="chevR" s={12} />
-              </button>
-            </div>
+            </Typography>
+          </Box>
+          {/* Module nav */}
+          {!isMobile && modIdx !== undefined && (
+            <Stack direction="row" alignItems="center" gap={0.5} sx={{ flexShrink: 0 }}>
+              <IconButton size="small" onClick={() => !navLocked && onNav?.(-1)} disabled={modIdx === 0 || navLocked} sx={{ opacity: navLocked ? 0.4 : 1 }}>
+                <Ico n="chevL" s={14} />
+              </IconButton>
+              <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3, whiteSpace: "nowrap", mx: 0.25 }}>{modIdx + 1}/{modTotal}</Typography>
+              <IconButton size="small" onClick={() => !navLocked && onNav?.(1)} disabled={modIdx === modTotal - 1 || navLocked} sx={{ opacity: navLocked ? 0.4 : 1 }}>
+                <Ico n="chevR" s={14} />
+              </IconButton>
+            </Stack>
           )}
-        </div>
+        </Box>
 
-        {/* Row 2 — description + progress bar */}
-        <div style={{
-          padding: isMobile ? "6px 12px" : "6px 22px",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          background: C.s2,
-          borderBottom: `1px solid ${C.b1}`,
-        }}>
-          <input
-            value={descVal}
-            onChange={(e) => { setDescVal(e.target.value); commit(steps, renVal, e.target.value); }}
-            placeholder="Add a description…"
-            style={{
-              flex: 1,
-              background: "transparent",
-              border: "none",
-              color: C.t2,
-              fontFamily: F.sans,
-              fontSize: 12,
-              outline: "none",
-            }}
+        {/* Row 2: description + progress bar */}
+        <Box sx={{ px: isMobile ? 1.5 : 2.5, py: 0.75, display: "flex", alignItems: "center", gap: 1.5, bgcolor: C.s2, borderBottom: `1px solid ${C.b1}` }}>
+          <TextField
+            value={descVal} onChange={e => { setDescVal(e.target.value); commit(steps, renVal, e.target.value); }}
+            placeholder="Add a description…" variant="standard" fullWidth
+            InputProps={{ disableUnderline: true, sx: { fontSize: 12, color: C.t2 } }}
           />
-          <div style={{ width: isMobile ? 80 : 120, flexShrink: 0 }}>
+          <Box sx={{ width: isMobile ? 80 : 120, flexShrink: 0 }}>
             <PBar pct={pct} fail={fail > 0} />
-          </div>
-        </div>
+          </Box>
+        </Box>
 
-        {/* Row 3 — action buttons */}
-        <div style={{
-          padding: isMobile ? "8px 12px" : "8px 22px",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          flexWrap: isMobile ? "wrap" : "nowrap",
-        }}>
+        {/* Row 3: action buttons */}
+        <Box sx={{ px: isMobile ? 1.5 : 2.5, py: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
           {isAdmin && (
-            <button style={reBtn(smBtn())} onClick={resetAll}>
-              <Ico n="reset" s={12} /> Reset
-            </button>
+            <>
+              <Button size="small" variant="outlined" color="error" startIcon={<Ico n="reset" s={12} />} onClick={resetAll}
+                sx={{ borderColor: "#fca5a5", color: "error.main" }}>
+                Reset
+              </Button>
+              <Button size="small" variant="outlined" component="label" startIcon={<Ico n="upload" s={12} />}
+                sx={{ borderColor: C.b2, color: "text.secondary" }}>
+                Import CSV <input type="file" accept=".csv" hidden onChange={importCSV} />
+              </Button>
+            </>
           )}
-          {/* Finish test button — prominent for testers */}
           {!isAdmin && onFinish && (
-            <button
-              style={{
-                ...grBtn(smBtn()),
-                marginLeft: isMobile ? 0 : "auto",
-                flex: isMobile ? 1 : "none",
-                justifyContent: "center",
-                padding: isMobile ? "9px 0" : "6px 14px",
-                fontSize: isMobile ? 14 : 12,
-                fontWeight: 700,
-                boxShadow: "0 2px 8px rgba(22,163,74,.25)",
-              }}
-              onClick={() => {
-                commit(steps);
-                addLog({ ts: Date.now(), user: session.name,
-                  action: `Finished ${mod.name} › ${test.name}`, type: "info" });
-                toast("Test finished — progress saved & lock released", "success");
-                onFinish(steps);
-              }}
-              title="Save progress and release the lock so others can continue"
-            >
-              <Ico n="check" s={14} /> Finish Test
-            </button>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} style={{ marginLeft: "auto", display: isMobile ? "block" : undefined, flex: isMobile ? 1 : undefined }}>
+              <Button variant="contained" color="success" size={isMobile ? "medium" : "small"}
+                startIcon={<Ico n="check" s={13} />}
+                onClick={() => { commit(steps); addLog({ ts: Date.now(), user: session.name, action: `Finished ${mod.name} › ${test.name}`, type: "info" }); toast("Test finished — progress saved & lock released", "success"); onFinish(steps); }}
+                sx={{ fontWeight: 700, boxShadow: "0 3px 10px rgba(22,163,74,.28)", ...(isMobile ? { width: "100%", py: 1.2, fontSize: 14 } : {}) }}>
+                Finish Test
+              </Button>
+            </motion.div>
           )}
-          {/* Spacer if admin (no Finish button) */}
-          {isAdmin && <div style={{ flex: 1 }} />}
-        </div>
-      </div>
+          {isAdmin && <Box sx={{ flex: 1 }} />}
+        </Box>
+      </Box>
 
-      <div
-        style={{
-          padding: isMobile ? "8px 12px" : "8px 16px",
-          background: C.s1,
-          borderBottom: `1px solid ${C.b1}`,
-          display: "flex",
-          alignItems: isMobile ? "flex-start" : "center",
-          flexDirection: isMobile ? "column" : "row",
-          gap: isMobile ? 8 : 8,
-          flexShrink: 0,
-        }}
-      >
-        {/* Filter pills + search row */}
-        <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          {[
-            ["all", "All", realSteps.length],
-            ["pass", "Pass", pass],
-            ["fail", "Fail", fail],
-            ["pending", "Pending", pending],
-          ].map(([k, l, c]) => (
-            <button
-              key={k}
-              onClick={() => setFStat(k)}
-              style={{
-                padding: isMobile ? "6px 11px" : "4px 9px",
-                borderRadius: 20,
-                border: `1px solid ${fStat === k ? C.b2 : C.b1}`,
-                background: fStat === k ? C.s3 : "transparent",
-                color: fStat === k ? C.t1 : C.t2,
-                fontFamily: F.mono,
-                fontSize: isMobile ? 11 : 10,
-                cursor: "pointer",
+      {/* Filter bar */}
+      <Box sx={{ px: isMobile ? 1.5 : 2, py: 1, bgcolor: "background.paper", borderBottom: `1px solid ${C.b1}`,
+        display: "flex", alignItems: isMobile ? "flex-start" : "center", flexDirection: isMobile ? "column" : "row", gap: 1, flexShrink: 0 }}>
+        <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ flex: 1 }}>
+          {[["all","All",realSteps.length],["pass","Pass",pass],["fail","Fail",fail],["pending","Pending",pending]].map(([k,l,c]) => (
+            <Chip key={k} label={`${l} (${c})`} size="small" clickable onClick={() => setFStat(k)}
+              sx={{ fontFamily: MONO, fontSize: isMobile ? 11 : 10, height: isMobile ? 26 : 22,
+                bgcolor: fStat === k ? C.s3 : "transparent", color: fStat === k ? C.t1 : C.t2,
+                border: `1px solid ${fStat === k ? C.b2 : C.b1}`, fontWeight: fStat === k ? 700 : 400,
               }}
-            >
-              {l} ({c})
-            </button>
-          ))}
-          </div>
-          <SearchBox
-            value={search}
-            onChange={setSearch}
-            placeholder="Search steps…"
-            width={isMobile ? "100%" : 170}
-          />
-        </div>
-        {isAdmin && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              width: isMobile ? "100%" : "auto",
-            }}
-          >
-            <select
-              value={addCount}
-              onChange={(e) => setAddCount(Number(e.target.value))}
-              style={{
-                padding: "4px 6px",
-                background: C.s2,
-                border: `1px solid ${C.b1}`,
-                borderRadius: 5,
-                color: C.t1,
-                fontFamily: F.mono,
-                fontSize: 11,
-                outline: "none",
-                flex: isMobile ? 1 : "none",
-              }}
-            >
-              {[1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000].map((n) => (
-                <option key={n} value={n}>
-                  +{n}
-                </option>
-              ))}
-            </select>
-            <button
-              style={isMobile ? grBtn({ ...smBtn(), flex: 1, justifyContent: "center", padding: "8px 0" }) : grBtn(smBtn())}
-              onClick={addSteps}
-              disabled={steps.length >= 100_000}
-            >
-              <Ico n="plus" s={11} /> Add Steps
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div ref={tableRef} style={{ flex: 1, overflowY: "auto", overflowX: isMobile ? "hidden" : "auto" }}>
-        <div style={isMobile ? {} : { minWidth: 680 }}>
-        {/* Desktop column headers */}
-        {!isMobile && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "50px 1fr 1fr 180px 110px",
-            background: "rgba(246,248,250,0.88)",
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
-            borderBottom: `1px solid ${C.b2}`,
-            position: "sticky",
-            top: 0,
-            zIndex: 2,
-          }}
-        >
-          {["S.No", "Action", "Expected Result", "Remarks", "Status"].map(
-            (h, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: "8px 10px",
-                  fontSize: 10,
-                  fontFamily: F.mono,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  color: C.t3,
-                  borderRight: i < 4 ? `1px solid ${C.b1}` : "none",
-                }}
-              >
-                {h}
-              </div>
-            )
-          )}
-        </div>
-        )}
-
-        {visible.length === 0 && (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "48px 0",
-              color: C.t3,
-              fontFamily: F.mono,
-              fontSize: 12,
-            }}
-          >
-            {steps.length === 0
-              ? isAdmin
-                ? "No steps yet — import a CSV to add steps."
-                : "No steps available."
-              : "No steps match."}
-          </div>
-        )}
-        {visible.map((s) =>
-          s.isDivider ? (
-            <DividerRow key={s.id} label={s.action} />
-          ) : (
-            <StepRow
-              key={s.id}
-              step={s}
-              idx={s._i}
-              onChange={setField}
-              onStatusToggle={setStatusToggle}
-              isActive={activeIdx === s._i}
-              onActivate={() => setActiveIdx(s._i)}
-              rowRef={(el) => { rowRefs.current[s._i] = el; }}
             />
-          )
+          ))}
+          <SearchBox value={search} onChange={setSearch} placeholder="Search steps…" width={isMobile ? "100%" : 170} fullWidth={isMobile} />
+        </Stack>
+        {isAdmin && (
+          <Stack direction="row" alignItems="center" gap={0.75} sx={{ width: isMobile ? "100%" : "auto" }}>
+            <FormControl size="small" sx={{ width: isMobile ? "auto" : 90 }}>
+              <Select value={addCount} onChange={e => setAddCount(Number(e.target.value))}
+                sx={{ fontSize: 12, fontFamily: MONO, bgcolor: C.s2, borderRadius: 1.5 }}>
+                {[1,5,10,25,50,100,250,500,1000,5000].map(n => <MenuItem key={n} value={n} sx={{ fontSize: 12, fontFamily: MONO }}>+{n}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <Button size="small" variant="outlined" color="success" startIcon={<Ico n="plus" s={11} />}
+              onClick={addSteps} disabled={steps.length >= 100_000}
+              sx={{ flex: isMobile ? 1 : undefined, borderColor: "#86efac", color: C.gr }}>
+              Add Steps
+            </Button>
+          </Stack>
         )}
-        </div>
-      </div>
+      </Box>
 
-    </div>
+      {/* Step Table */}
+      <Box ref={tableRef} sx={{ flex: 1, overflowY: "auto", overflowX: isMobile ? "hidden" : "auto" }}>
+        <Box sx={{ minWidth: isMobile ? undefined : 680 }}>
+          {!isMobile && (
+            <Box sx={{ display: "grid", gridTemplateColumns: "50px 1fr 1fr 180px 110px",
+              bgcolor: "rgba(246,248,250,0.95)", backdropFilter: "blur(10px)",
+              borderBottom: `1px solid ${C.b2}`, position: "sticky", top: 0, zIndex: 2 }}>
+              {["S.No", "Action", "Expected Result", "Remarks", "Status"].map((h, i) => (
+                <Typography key={i} variant="caption" sx={{ p: "8px 10px", fontFamily: MONO, textTransform: "uppercase", letterSpacing: "1px", color: C.t3, borderRight: i < 4 ? `1px solid ${C.b1}` : "none", display: "block" }}>
+                  {h}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          {visible.length === 0 && (
+            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>
+              {steps.length === 0 ? (isAdmin ? "No steps yet — import a CSV or add steps." : "No steps available.") : "No steps match."}
+            </Box>
+          )}
+          {visible.map(s => s.isDivider ? <DividerRow key={s.id} label={s.action} /> : (
+            <StepRow key={s.id} step={s} idx={s._i} onChange={setField} onStatusToggle={setStatusToggle}
+              isActive={activeIdx === s._i} onActivate={() => setActiveIdx(s._i)}
+              rowRef={el => { rowRefs.current[s._i] = el; }}
+            />
+          ))}
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
-// ── Module View — shows test list for one module, one test at a time ───────────
-function ModuleView({
-  mod,
-  allModules,
-  session,
-  saveMods,
-  addLog,
-  toast,
-  onNav,
-  onLockChange,  // callback(bool) — tells root App when a lock is acquired/released
-  modIdx,
-  modTotal,
-}) {
+// ── Module View ────────────────────────────────────────────────────────────────────
+function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, onLockChange, modIdx, modTotal }) {
   const isAdmin = session.role === "admin";
   const isMobile = useIsMobile();
-  const [selTestIdx, setSelTestIdx] = useState(null); // null = list, number = test detail
+  const [selTestIdx, setSelTestIdx] = useState(null);
   const [search, setSearch] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [renVal, setRenVal] = useState(mod.name);
   const [locks, setLocks] = useState({});
   const renRef = useRef();
-
-  // Refs to always have current values without stale closures
-  const activeTestIdRef  = useRef(null);  // test id currently open (for heartbeat + beforeunload)
-  const selTestIdxRef    = useRef(null);  // mirrors selTestIdx for use inside effects
-  const modTestsRef      = useRef(mod.tests); // mirrors mod.tests for use in cleanup effects
-
-  // Keep refs in sync with state/props on every render
+  const activeTestIdRef = useRef(null);
+  const selTestIdxRef = useRef(null);
+  const modTestsRef = useRef(mod.tests);
   selTestIdxRef.current = selTestIdx;
-  modTestsRef.current   = mod.tests;
-
-  // UI convenience: true while this tester holds an unreleased lock on any test in this module
+  modTestsRef.current = mod.tests;
   const [uiLocked, setUiLocked] = useState(false);
 
-  // Poll locks every 5 seconds so all users see live lock state
   useEffect(() => {
     let alive = true;
-    const poll = async () => {
-      const l = await lockStore.getAll();
-      if (alive) setLocks(l);
-    };
-    poll();
-    const id = setInterval(poll, 5000);
+    const poll = async () => { const l = await lockStore.getAll(); if (alive) setLocks(l); };
+    poll(); const id = setInterval(poll, 5000);
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  // Heartbeat: while a tester has a test open, refresh locked_at every 25s.
-  // activeTestIdRef is NOT cleared here — it persists across goBack() so that
-  // beforeunload can still fire a beacon even when the tester is on the list view.
-  // It is only cleared explicitly by finishTest() or the module-change effect.
   useEffect(() => {
     if (isAdmin || selTestIdx === null) return;
-    const test = mod.tests[selTestIdx];
-    if (!test) return;
-    const beat = setInterval(() => {
-      lockStore.heartbeat(test.id, session.id);
-    }, HEARTBEAT_MS);
+    const test = mod.tests[selTestIdx]; if (!test) return;
+    const beat = setInterval(() => lockStore.heartbeat(test.id, session.id), HEARTBEAT_MS);
     return () => clearInterval(beat);
-  }, [selTestIdx, isAdmin]);
+  }, [selTestIdx, isAdmin]); // eslint-disable-line
 
-  // beforeunload: best-effort release on normal tab/window close (testers only).
-  // Uses activeTestIdRef so it always sees the latest open test id.
   useEffect(() => {
     if (isAdmin) return;
     const onUnload = () => {
-      const testId = activeTestIdRef.current;
-      if (!testId) return;
+      const testId = activeTestIdRef.current; if (!testId) return;
       try {
-        // supabase.supabaseUrl is the correct property on @supabase/supabase-js v2
         const baseUrl = supabase.supabaseUrl || supabase.storageUrl?.replace("/storage/v1", "") || "";
         if (baseUrl) {
           const url = `${baseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
           const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
           if (!sent) lockStore.release(testId, session.id);
-        } else {
-          lockStore.release(testId, session.id);
-        }
-      } catch {
-        lockStore.release(testId, session.id);
-      }
+        } else lockStore.release(testId, session.id);
+      } catch { lockStore.release(testId, session.id); }
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [isAdmin, session.id]);
 
-  // Module change: release lock for whatever test was open, then reset view.
-  // Uses refs so this always sees the latest selTestIdx / mod.tests values
-  // even though the effect only re-runs when mod.id changes.
   useEffect(() => {
     const testId = activeTestIdRef.current;
-    if (!isAdmin && testId) {
-      lockStore.release(testId, session.id);
-      activeTestIdRef.current = null;
-      if (onLockChange) onLockChange(false);
-      setUiLocked(false);
-    }
-    setSelTestIdx(null);
-    setSearch("");
-    setRenVal(mod.name);
-  }, [mod.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!isAdmin && testId) { lockStore.release(testId, session.id); activeTestIdRef.current = null; if (onLockChange) onLockChange(false); setUiLocked(false); }
+    setSelTestIdx(null); setSearch(""); setRenVal(mod.name);
+  }, [mod.id]); // eslint-disable-line
 
-  const openTest = async (realIdx) => {
-    const test = mod.tests[realIdx];
-    if (!test) return;
+  const openTest = async (idx) => {
+    const test = mod.tests[idx]; if (!test) return;
     if (!isAdmin) {
       const result = await lockStore.acquire(test.id, session.id, session.name);
-      if (!result.ok) {
-        toast(`🔒 Locked by ${result.by} — they must click "Finish Test" first`, "error");
-        return;
-      }
-      setLocks(await lockStore.getAll());
-      // Track which test is locked so beforeunload can release it even from list view
-      activeTestIdRef.current = test.id;
-      if (onLockChange) onLockChange(true);
-      setUiLocked(true);
+      if (!result.ok) { toast(`"${test.name}" is in use by ${result.by}`, "error"); return; }
+      activeTestIdRef.current = test.id; setUiLocked(true); if (onLockChange) onLockChange(true);
     }
-    setSelTestIdx(realIdx);
+    setSelTestIdx(idx);
   };
 
-  // Back button: return to test list WITHOUT releasing the lock.
-  // The lock stays alive (heartbeat keeps it fresh) so the tester can come back.
-  const goBack = () => {
-    setSelTestIdx(null);
-  };
-
-  // Finish Test: saves, releases lock, clears ref, returns to test list.
-  // This is the canonical way for a tester to hand off a test.
-  const finishTest = async (finalSteps) => {
-    if (!isAdmin && selTestIdx !== null && mod.tests[selTestIdx]) {
-      await lockStore.release(mod.tests[selTestIdx].id, session.id);
-      activeTestIdRef.current = null; // lock released — no need for beforeunload beacon
-      setLocks(await lockStore.getAll());
-      if (onLockChange) onLockChange(false);
-      setUiLocked(false);
-    }
-    setSelTestIdx(null);
-  };
-
-  const saveModName = (name) => {
-    saveMods({ ...allModules, [mod.id]: { ...mod, name } }, true);
-    toast("Renamed", "success");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Renamed module to "${name}"`,
-      type: "info",
-    });
-  };
-
-  const addTest = () => {
-    const n = mod.tests.length + 1;
-    const nt = makeTest(mod.id, n, 10);
-    const updated = { ...mod, tests: [...mod.tests, nt] };
-    saveMods({ ...allModules, [mod.id]: updated }, true);
-    // saveModules only upserts test rows — save the new test's default steps surgically
-    store.saveSteps(nt.id, mod.id, nt.steps, {
-      moduleName:  mod.name,
-      serialNo:    n,
-      name:        nt.name,
-      description: nt.description ?? "",
-    }).catch((e) => console.error("addTest saveSteps error:", e));
-    toast(`Test ${n} added`, "success");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Added ${mod.name} › Test ${n}`,
-      type: "info",
-    });
+  const finishTest = async (newSteps) => {
+    const testId = activeTestIdRef.current;
+    if (testId) { await lockStore.release(testId, session.id); activeTestIdRef.current = null; }
+    setUiLocked(false); if (onLockChange) onLockChange(false); setSelTestIdx(null);
   };
 
   const deleteTest = (idx) => {
-    if (mod.tests.length <= 1) {
-      toast("Cannot delete the last test", "error");
-      return;
-    }
-    const updated = {
-      ...mod,
-      tests: mod.tests
-        .filter((_, i) => i !== idx)
-        .map((t, i) => ({ ...t, serialNo: i + 1, serial_no: i + 1, name: `Test ${i + 1}` })),
-    };
-    saveMods({ ...allModules, [mod.id]: updated }, true);
-    toast("Test deleted", "info");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Deleted test from ${mod.name}`,
-      type: "info",
-    });
+    const t = mod.tests[idx]; if (!t) return;
+    const updated = { ...allModules, [mod.id]: { ...mod, tests: mod.tests.filter((_, i) => i !== idx) } };
+    saveMods(updated, true);
+    addLog({ ts: Date.now(), user: session.name, action: `Deleted ${mod.name} › ${t.name}`, type: "warn" });
+    toast(`"${t.name}" deleted`, "info");
   };
 
-  // When inside a test, show TestDetail
+  const addTest = () => {
+    const n = prompt("Test name:");
+    if (!n?.trim()) return;
+    const newT = { ...makeTest(mod.id, mod.tests.length + 1, 0), name: n.trim() };
+    const updated = { ...allModules, [mod.id]: { ...mod, tests: [...mod.tests, newT] } };
+    saveMods(updated, true);
+    addLog({ ts: Date.now(), user: session.name, action: `Created test "${n.trim()}" in ${mod.name}`, type: "info" });
+    toast(`Test "${n.trim()}" created`, "success");
+  };
+
+  const filtered = useMemo(() => {
+    if (!search) return mod.tests.map((t, i) => ({ ...t, _i: i }));
+    const q = search.toLowerCase();
+    return mod.tests.map((t, i) => ({ ...t, _i: i })).filter(t => t.name.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q));
+  }, [mod.tests, search]);
+
   if (selTestIdx !== null && mod.tests[selTestIdx]) {
     return (
       <TestDetail
-        mod={mod}
-        test={mod.tests[selTestIdx]}
-        testIdx={selTestIdx}
-        allModules={allModules}
-        session={session}
-        saveMods={saveMods}
-        addLog={addLog}
-        toast={toast}
-        onBack={goBack}
-        onFinish={finishTest}
-        modIdx={modIdx}
-        modTotal={modTotal}
-        onNav={!isAdmin ? null : onNav}
-        navLocked={!isAdmin && uiLocked}
+        mod={mod} test={mod.tests[selTestIdx]} testIdx={selTestIdx} allModules={allModules}
+        session={session} saveMods={saveMods} addLog={addLog} toast={toast}
+        onBack={() => setSelTestIdx(null)} onFinish={!isAdmin ? finishTest : undefined}
+        modIdx={modIdx} modTotal={modTotal} onNav={onNav} navLocked={uiLocked}
       />
     );
   }
 
-  // Otherwise show module's test list
-  const filtered = mod.tests.filter(
-    (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.description.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div
-      style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar
-        title={
-          renaming ? (
-            <input
-              ref={renRef}
-              value={renVal}
-              onChange={(e) => setRenVal(e.target.value)}
-              onBlur={() => {
-                saveModName(renVal || mod.name);
-                setRenaming(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  saveModName(renVal || mod.name);
-                  setRenaming(false);
-                }
-                if (e.key === "Escape") setRenaming(false);
-              }}
-              autoFocus
-              style={{
-                background: "none",
-                border: "none",
-                borderBottom: `1px solid ${C.ac}`,
-                color: C.t1,
-                fontFamily: F.sans,
-                fontSize: 15,
-                fontWeight: 700,
-                padding: "0 2px",
-                outline: "none",
-                width: 220,
-              }}
+        title={renaming
+          ? <TextField ref={renRef} value={renVal} size="small" autoFocus
+              onChange={e => setRenVal(e.target.value)}
+              onBlur={() => { setRenaming(false); const m2 = { ...allModules, [mod.id]: { ...mod, name: renVal.trim() || mod.name } }; saveMods(m2, true); }}
+              onKeyDown={e => { if (e.key === "Enter") { setRenaming(false); const m2 = { ...allModules, [mod.id]: { ...mod, name: renVal.trim() || mod.name } }; saveMods(m2, true); } }}
+              InputProps={{ sx: { fontWeight: 700, fontSize: 15, borderRadius: 1.5 } }}
             />
-          ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" }}>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {mod.name}
-              </span>
-              {isAdmin && (
-                <button
-                  onClick={() => {
-                    setRenaming(true);
-                    setTimeout(() => renRef.current?.select(), 20);
-                  }}
-                  style={{ ...iBtn(), padding: 3, flexShrink: 0 }}
-                  title="Rename module"
-                >
-                  <Ico n="edit" s={12} />
-                </button>
-              )}
-            </span>
-          )
+          : <span onClick={() => isAdmin && setRenaming(true)} style={{ cursor: isAdmin ? "text" : "default" }}>{mod.name}</span>
         }
-        sub={`${modIdx + 1}/${modTotal} · ${mod.tests.length} test${mod.tests.length !== 1 ? "s" : ""}`}
+        sub={`${mod.tests.length} tests · ${mod.tests.flatMap(t => t.steps).filter(s => s.status === "pass").length} passed`}
       >
-        {!isMobile && (
-          <>
-            <button
-              style={smBtn()}
-              onClick={() => onNav(-1)}
-              disabled={modIdx === 0 || uiLocked}
-              title={uiLocked ? "Finish the current test first" : undefined}
-            >
-              <Ico n="chevL" s={12} />
-            </button>
-            <button
-              style={smBtn()}
-              onClick={() => onNav(1)}
-              disabled={modIdx === modTotal - 1 || uiLocked}
-              title={uiLocked ? "Finish the current test first" : undefined}
-            >
-              <Ico n="chevR" s={12} />
-            </button>
-          </>
-        )}
-        {!isMobile && (
-          <SearchBox
-            value={search}
-            onChange={setSearch}
-            placeholder="Search tests…"
-            width={170}
-          />
-        )}
-        {isAdmin && (
-          <button style={grBtn(smBtn())} onClick={addTest}>
-            <Ico n="plus" s={12} /> {isMobile ? "" : "Add Test"}
-          </button>
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" width={190} />}
+        {isAdmin && <Button size="small" variant="contained" startIcon={<Ico n="plus" s={13} />} onClick={addTest}>Add Test</Button>}
+        {!isMobile && modIdx !== undefined && (
+          <Stack direction="row" alignItems="center" gap={0.5}>
+            <IconButton size="small" onClick={() => onNav?.(-1)} disabled={modIdx === 0 || uiLocked}><Ico n="chevL" s={14} /></IconButton>
+            <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>{modIdx+1}/{modTotal}</Typography>
+            <IconButton size="small" onClick={() => onNav?.(1)} disabled={modIdx === modTotal - 1 || uiLocked}><Ico n="chevR" s={14} /></IconButton>
+          </Stack>
         )}
       </Topbar>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 16 }}>
-        {isMobile && (
-          <div style={{ marginBottom: 10 }}>
-            <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" width="100%" />
-          </div>
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 10 : 8 }}>
-          {filtered.map((t, visIdx) => {
-            const realIdx = mod.tests.indexOf(t);
-            const pass = t.steps.filter((s) => s.status === "pass").length;
-            const fail = t.steps.filter((s) => s.status === "fail").length;
-            const pct = Math.round((pass / Math.max(t.steps.length, 1)) * 100);
-            const pending = t.steps.length - pass - fail;
+      {isMobile && (
+        <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" fullWidth />
+        </Box>
+      )}
+
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
+        <Stack gap={isMobile ? 1 : 1.25}>
+          {filtered.map((t, i) => {
+            const realIdx = t._i;
+            const pass = t.steps.filter(s => s.status === "pass").length;
+            const fail = t.steps.filter(s => s.status === "fail").length;
+            const pending = t.steps.filter(s => !s.isDivider && s.status === "pending").length;
+            const pct = t.steps.length ? Math.round((pass / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100) : 0;
             const lock = locks[t.id];
-            const lockedByOther = !isAdmin && lock && lock.userId !== session.id;
-            // This tester went Back from their own test — still holds the lock on it.
-            // Every OTHER test card is blocked until they Finish their test.
-            const myLockedTestId = !isAdmin && uiLocked ? activeTestIdRef.current : null;
-            const blockedByMyLock = !isAdmin && uiLocked && t.id !== myLockedTestId;
-            const isMyLockedTest  = !isAdmin && uiLocked && t.id === myLockedTestId;
-            const lockInfo = lock && lock.userId !== session.id ? lock : null;
-
+            const lockedByOther = lock && lock.userId !== session.id;
+            const isMyLockedTest = !isAdmin && activeTestIdRef.current === t.id;
+            const blockedByMyLock = !isAdmin && uiLocked && !isMyLockedTest;
             const cardBlocked = lockedByOther || blockedByMyLock;
+            const passW = t.steps.length ? (pass / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100 : 0;
+            const failW = t.steps.length ? (fail / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100 : 0;
+
+            const borderColor = lockedByOther ? "#fde68a" : isMyLockedTest ? "#86efac" : blockedByMyLock ? C.b1 : fail > 0 ? "#fca5a5" : pass > 0 && pass === t.steps.filter(s => !s.isDivider).length ? "#bbf7d0" : C.b1;
+            const bgColor = lockedByOther ? "#fefce8" : isMyLockedTest ? "#f0fdf4" : blockedByMyLock ? "#f8fafc" : "background.paper";
+
             return (
-              <div
-                key={t.id}
-                style={{
-                  background: lockedByOther ? "#fefce8"
-                    : isMyLockedTest ? "#f0fdf4"
-                    : blockedByMyLock ? "#f8fafc"
-                    : C.s1,
-                  border: `1px solid ${
-                    lockedByOther ? "#fde68a"
-                      : isMyLockedTest ? "#86efac"
-                      : blockedByMyLock ? C.b1
-                      : fail > 0 ? "#fca5a5"
-                      : pass === t.steps.length && t.steps.length > 0 ? "#bbf7d0"
-                      : C.b1
-                  }`,
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  cursor: cardBlocked ? "not-allowed" : "pointer",
-                  transition: "border-color .15s",
-                  opacity: lockedByOther ? 0.85 : blockedByMyLock ? 0.5 : 1,
-                }}
-                onClick={() => !cardBlocked && openTest(realIdx)}
-              >
-                {/* Test header */}
-                <div
-                  style={{
-                    padding: isMobile ? "12px 14px" : "14px 18px",
-                    display: "flex",
-                    alignItems: isMobile ? "flex-start" : "center",
-                    gap: isMobile ? 10 : 14,
-                    flexDirection: isMobile ? "column" : "row",
-                  }}
-                >
-                  {/* Top row on mobile: badge + name + action */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
-                  {/* Serial badge */}
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 9,
-                      background: lockedByOther ? "#fef3c7" : isMyLockedTest ? "#dcfce7" : C.s3,
-                      border: `1px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontFamily: F.mono,
-                      fontSize: 14,
-                      fontWeight: 700,
-                      color: lockedByOther ? C.am : isMyLockedTest ? C.gr : C.t2,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {lockedByOther ? <Ico n="lock" s={15} />
-                      : isMyLockedTest ? <Ico n="check" s={15} />
-                      : t.serialNo}
-                  </div>
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: C.t1,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {t.name}
-                    </div>
-                    {(lockInfo || isMyLockedTest) && (
-                      <div style={{ marginTop: 3 }}>
-                        {lockInfo && (
-                          <span style={{
-                            fontSize: 10, fontFamily: F.mono, background: "#fef3c7",
-                            color: C.am, padding: "2px 8px", borderRadius: 10,
-                            border: `1px solid #fcd34d`, fontWeight: 700,
-                          }}>
-                            🔒 In use by {lockInfo.userName}
-                          </span>
+              <motion.div key={t.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
+                whileHover={!cardBlocked ? { y: -2 } : {}} transition={{ duration: 0.16 }}>
+                <Paper elevation={0} sx={{ border: `1px solid ${borderColor}`, borderRadius: 2.5, overflow: "hidden",
+                  bgcolor: bgColor, opacity: lockedByOther ? 0.88 : blockedByMyLock ? 0.55 : 1, cursor: cardBlocked ? "not-allowed" : "pointer" }}
+                  onClick={() => !cardBlocked && openTest(realIdx)}>
+                  <Box sx={{ p: isMobile ? "12px 14px" : "14px 18px", display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 1 : 1.5, flexDirection: isMobile ? "column" : "row" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, width: "100%" }}>
+                      {/* Serial badge */}
+                      <Box sx={{ width: 36, height: 36, borderRadius: 2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                        bgcolor: lockedByOther ? "#fef3c7" : isMyLockedTest ? "#dcfce7" : C.s3,
+                        border: `1px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
+                        fontFamily: MONO, fontSize: 14, fontWeight: 700,
+                        color: lockedByOther ? C.am : isMyLockedTest ? C.gr : C.t2 }}>
+                        {lockedByOther ? <Ico n="lock" s={15} /> : isMyLockedTest ? <Ico n="check" s={15} /> : t.serialNo}
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography fontWeight={600} sx={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</Typography>
+                        {(lock && lock.userId !== session.id || isMyLockedTest) && (
+                          <Box mt={0.3}>
+                            {lockedByOther && <Chip label={`🔒 In use by ${lock.userName}`} size="small" sx={{ fontSize: 10, height: 18, bgcolor: "#fef3c7", color: C.am, fontFamily: MONO, fontWeight: 700, border: `1px solid #fcd34d` }} />}
+                            {isMyLockedTest && <Chip label="▶ Your active test" size="small" sx={{ fontSize: 10, height: 18, bgcolor: "#dcfce7", color: C.gr, fontFamily: MONO, fontWeight: 700, border: `1px solid #86efac` }} />}
+                          </Box>
                         )}
-                        {isMyLockedTest && (
-                          <span style={{
-                            fontSize: 10, fontFamily: F.mono, background: "#dcfce7",
-                            color: C.gr, padding: "2px 8px", borderRadius: 10,
-                            border: `1px solid #86efac`, fontWeight: 700,
-                          }}>
-                            ▶ Your active test
-                          </span>
+                        {t.description && <Typography variant="caption" sx={{ color: C.t2, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</Typography>}
+                        <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>
+                          {t.steps.length} steps · {pass}✓ {fail}✗ {pending}…
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" gap={0.75} sx={{ flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                        {isAdmin && !isMobile && (
+                          <Button size="small" variant="outlined" color="error" onClick={() => deleteTest(realIdx)}
+                            sx={{ borderColor: "#fca5a5", color: "error.main", minWidth: 0, px: 1 }}>
+                            <Ico n="trash" s={11} />
+                          </Button>
                         )}
-                      </div>
-                    )}
-                    {t.description && (
-                      <div style={{ fontSize: 11, color: C.t2, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {t.description}
-                      </div>
-                    )}
-                    <div style={{ fontSize: 11, fontFamily: F.mono, color: C.t3, marginTop: 3 }}>
-                      {t.steps.length} step{t.steps.length !== 1 ? "s" : ""} · {pass}✓ {fail}✗ {pending}…
-                    </div>
-                  </div>
-                  {/* Actions — always on the right of the top row */}
-                  <div
-                    style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {isAdmin && !isMobile && (
-                      <button style={reBtn(smBtn())} onClick={() => deleteTest(realIdx)} title="Delete test">
-                        <Ico n="trash" s={11} />
-                      </button>
-                    )}
-                    {lockedByOther ? (
-                      <button style={amBtn(smBtn())} disabled title={`Locked by ${lock.userName}`}>
-                        <Ico n="lock" s={11} /> {!isMobile && "Locked"}
-                      </button>
-                    ) : isMyLockedTest ? (
-                      <button style={grBtn(smBtn())} onClick={() => openTest(realIdx)} title="Return to your test">
-                        <Ico n="back" s={11} /> Return
-                      </button>
-                    ) : blockedByMyLock ? (
-                      <button style={smBtn({ opacity: 0.4, cursor: "not-allowed" })} disabled title="Finish your current test first">
-                        <Ico n="lock" s={11} />
-                      </button>
-                    ) : (
-                      <button style={acBtn(smBtn())} onClick={() => openTest(realIdx)}>
-                        <Ico n="chevR" s={11} /> {!isMobile && "Open"}
-                      </button>
-                    )}
-                    {isAdmin && isMobile && (
-                      <button style={reBtn(smBtn())} onClick={() => deleteTest(realIdx)} title="Delete test">
-                        <Ico n="trash" s={11} />
-                      </button>
-                    )}
-                  </div>
-                  </div>
-
-                  {/* Bottom row: progress bar + chips (only when not locked-by-other on mobile) */}
-                  {!isMobile && (
-                  <>
-                  {/* Progress */}
-                  <div style={{ width: 80, flexShrink: 0 }}>
-                    <PBar pct={pct} fail={fail > 0} />
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: F.mono, textAlign: "right", marginTop: 3 }}>
-                      {pct}%
-                    </div>
-                  </div>
-                  {/* Status chips */}
-                  <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-                    {pass > 0 && <Chip label={`✓${pass}`} color={C.gr} bg={C.grd} />}
-                    {fail > 0 && <Chip label={`✗${fail}`} color={C.re} bg={C.red} />}
-                    {pending > 0 && <Chip label={`⟳${pending}`} color={C.am} bg={C.amd} />}
-                  </div>
-                  </>
-                  )}
-                </div>
-
-                {/* Mini progress strip */}
-                <div style={{ height: 3, background: C.s3, display: "flex" }}>
-                  <div
-                    style={{
-                      width: `${(pass / Math.max(t.steps.length, 1)) * 100}%`,
-                      background: C.gr,
-                      transition: "width .4s",
-                    }}
-                  />
-                  <div
-                    style={{
-                      width: `${(fail / Math.max(t.steps.length, 1)) * 100}%`,
-                      background: C.re,
-                      transition: "width .4s",
-                    }}
-                  />
-                </div>
-              </div>
+                        {lockedByOther ? (
+                          <Button size="small" variant="outlined" disabled sx={{ borderColor: "#fcd34d", color: C.am }}>
+                            <Ico n="lock" s={11} /> {!isMobile && " Locked"}
+                          </Button>
+                        ) : isMyLockedTest ? (
+                          <Button size="small" variant="contained" color="success" onClick={() => openTest(realIdx)}>
+                            <Ico n="back" s={11} /> Return
+                          </Button>
+                        ) : blockedByMyLock ? (
+                          <Button size="small" variant="outlined" disabled sx={{ opacity: 0.4 }}><Ico n="lock" s={11} /></Button>
+                        ) : (
+                          <Button size="small" variant="contained" onClick={() => openTest(realIdx)} endIcon={<Ico n="chevR" s={11} />}>
+                            {!isMobile && "Open"}
+                          </Button>
+                        )}
+                        {isAdmin && isMobile && (
+                          <Button size="small" variant="outlined" color="error" onClick={() => deleteTest(realIdx)} sx={{ borderColor: "#fca5a5", color: "error.main", minWidth: 0, px: 1 }}>
+                            <Ico n="trash" s={11} />
+                          </Button>
+                        )}
+                      </Stack>
+                      {!isMobile && (
+                        <Box sx={{ width: 80, flexShrink: 0 }}>
+                          <PBar pct={pct} fail={fail > 0} />
+                          <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3, display: "block", textAlign: "right", mt: 0.25 }}>{pct}%</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Box>
+                  <Box sx={{ height: 3, display: "flex", bgcolor: C.s3 }}>
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.5, ease: "easeOut" }} style={{ background: C.gr }} />
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }} style={{ background: C.re }} />
+                  </Box>
+                </Paper>
+              </motion.div>
             );
           })}
-
           {filtered.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "48px 0",
-                color: C.t3,
-                fontFamily: F.mono,
-                fontSize: 12,
-              }}
-            >
-              No tests match.
-            </div>
+            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>No tests match.</Box>
           )}
-        </div>
-      </div>
-    </div>
+        </Stack>
+      </Box>
+    </motion.div>
   );
 }
 
-// ── Report View ────────────────────────────────────────────────────────────────
+// ── Report View ────────────────────────────────────────────────────────────────────
 function ReportView({ modules, toast }) {
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
@@ -3841,867 +1800,345 @@ function ReportView({ modules, toast }) {
   const [exp, setExp] = useState(new Set());
   const modList = useMemo(() => Object.values(modules), [modules]);
 
-  const modStats = useMemo(
-    () =>
-      modList.map((m) => {
-        const allSteps = m.tests.flatMap((t) => t.steps);
-        const pass = allSteps.filter((s) => s.status === "pass").length;
-        const fail = allSteps.filter((s) => s.status === "fail").length;
-        return { ...m, pass, fail, total: allSteps.length };
-      }),
-    [modList]
-  );
+  const modStats = useMemo(() => modList.map(m => {
+    const all = m.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
+    return { ...m, pass: all.filter(s => s.status === "pass").length, fail: all.filter(s => s.status === "fail").length, total: all.length };
+  }), [modList]);
 
   const pass = modStats.reduce((a, m) => a + m.pass, 0);
   const fail = modStats.reduce((a, m) => a + m.fail, 0);
   const total = modStats.reduce((a, m) => a + m.total, 0);
 
   const filtered = useMemo(() => {
-    let l = modStats.filter((m) =>
-      m.name.toLowerCase().includes(search.toLowerCase())
-    );
-    if (failOnly) l = l.filter((m) => m.fail > 0);
+    let l = modStats.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+    if (failOnly) l = l.filter(m => m.fail > 0);
     return l;
   }, [modStats, search, failOnly]);
 
   const exportAllCSV = () => {
-    const rows = [
-      ["Module", "Test", "Step", "Action", "Result", "Remarks", "Status"],
-    ];
-    modList.forEach((m) =>
-      m.tests.forEach((t) =>
-        t.steps.forEach((s) =>
-          rows.push([
-            `"${m.name}"`,
-            `"${t.name}"`,
-            s.serialNo,
-            `"${s.action}"`,
-            `"${s.result}"`,
-            `"${s.remarks}"`,
-            s.status,
-          ])
-        )
-      )
-    );
-    const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
-      type: "text/csv",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(b);
-    a.download = `TestPro_Report_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
+    const rows = [["Module","Test","Step","Action","Result","Remarks","Status"]];
+    modList.forEach(m => m.tests.forEach(t => t.steps.forEach(s => rows.push([`"${m.name}"`,`"${t.name}"`,s.serialNo,`"${s.action}"`,`"${s.result}"`,`"${s.remarks}"`,s.status]))));
+    const b = new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b);
+    a.download = `TestPro_Report_${new Date().toISOString().slice(0,10)}.csv`; a.click();
     toast("CSV exported", "success");
   };
 
-  const exportAllPDF = () => {
-    const sc = (s) =>
-      s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
-    const sb = (s) =>
-      s === "pass" ? "#f0fdf4" : s === "fail" ? "#fff5f5" : "#ffffff";
+  const statusColor = s => ({ pass: C.gr, fail: C.re, pending: C.t3 }[s] || C.t3);
+  const statusBg = s => ({ pass: "#f0fdf4", fail: "#fff5f5", pending: "#ffffff" }[s] || "#fff");
 
-    const modRows = filtered
-      .map((m) => {
-        const mp = m.tests
-          .flatMap((t) => t.steps)
-          .filter((s) => s.status === "pass").length;
-        const mf = m.tests
-          .flatMap((t) => t.steps)
-          .filter((s) => s.status === "fail").length;
-        const mt = m.tests.flatMap((t) => t.steps).length;
-        const mpct = Math.round((mp / Math.max(mt, 1)) * 100);
-
-        const testRows = m.tests
-          .map((t) => {
-            const tp = t.steps.filter((s) => s.status === "pass").length;
-            const tf = t.steps.filter((s) => s.status === "fail").length;
-            const stepRows = t.steps
-              .map(
-                (s) => `
-          <tr style="background:${sb(s.status)}">
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${
-              s.serialNo || "—"
-            }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${
-              s.action || ""
-            }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${
-              s.result || ""
-            }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${
-              s.remarks || ""
-            }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:10px;font-weight:700;text-align:center;color:${sc(
-              s.status
-            )}">${s.status.toUpperCase()}</td>
-          </tr>`
-              )
-              .join("");
-            if (!t.steps.length) return "";
-            return `
-          <tr><td colspan="5" style="padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;font-size:12px;font-weight:600">
-            ${t.name}
-            <span style="font-weight:400;color:#6b7280;margin-left:10px;font-family:monospace;font-size:11px">✓${tp} ✗${tf} ⟳${
-              t.steps.length - tp - tf
-            }</span>
-          </td></tr>
-          ${stepRows}`;
-          })
-          .join("");
-
-        return `
-        <div style="margin-bottom:28px;break-inside:avoid">
-          <div style="background:#f3f4f6;padding:10px 14px;border-radius:6px 6px 0 0;border:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:15px;font-weight:700">${m.name}</span>
-            <span style="font-family:monospace;font-size:11px;color:#6b7280">✓${mp} ✗${mf} ⟳${
-          mt - mp - mf
-        } · ${mpct}%</span>
-          </div>
-          ${
-            mt > 0
-              ? `<table style="width:100%;border-collapse:collapse">
-            <thead><tr>
-              <th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280;width:55px">S.No</th>
-              <th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">Action</th>
-              <th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">Expected Result</th>
-              <th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">Remarks</th>
-              <th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280;width:70px">Status</th>
-            </tr></thead>
-            <tbody>${testRows}</tbody>
-          </table>`
-              : "<div style='padding:10px 14px;border:1px solid #e5e7eb;border-top:none;font-size:12px;color:#9ca3af;font-style:italic'>No steps</div>"
-          }
-        </div>`;
-      })
-      .join("");
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>TestPro Report — ${new Date().toLocaleDateString()}</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;padding:32px;font-size:14px}
-        h1{font-size:22px;font-weight:700;margin-bottom:6px}
-        .summary{display:flex;gap:20px;font-size:12px;color:#6b7280;font-family:monospace;margin-bottom:28px;padding:10px 14px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb}
-        .summary span{font-weight:700;color:#111827}
-        @page{margin:14mm}
-        @media print{body{padding:0}}
-      </style></head><body>
-      <h1>Test Report</h1>
-      <div class="summary">
-        <div>Total Steps <span>${total}</span></div>
-        <div>Passed <span style="color:#16a34a">${pass}</span></div>
-        <div>Failed <span style="color:#dc2626">${fail}</span></div>
-        <div>Pending <span style="color:#d97706">${
-          total - pass - fail
-        }</span></div>
-        <div>Pass Rate <span>${
-          total ? Math.round((pass / total) * 100) : 0
-        }%</span></div>
-        <div>Date <span>${new Date().toLocaleString()}</span></div>
-      </div>
-      ${modRows}
-      </body></html>`;
-
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => {
-      w.print();
-    }, 500);
-    toast("PDF ready — use browser print dialog", "info");
-  };
+  const toggleExp = id => setExp(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
-    <>
-      <Topbar
-        title="Test Report"
-        sub={`${pass} passed · ${fail} failed · ${total - pass - fail} pending`}
-      >
-        {!isMobile && (
-          <SearchBox
-            value={search}
-            onChange={setSearch}
-            placeholder="Search modules…"
-            width={190}
-          />
-        )}
-        {!isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Toggle on={failOnly} onClick={() => setFailOnly((f) => !f)} />
-            <span style={{ fontSize: 11, fontFamily: F.mono, color: C.t2, whiteSpace: "nowrap" }}>
-              Failures only
-            </span>
-          </div>
-        )}
-        <ExportMenu onCSV={exportAllCSV} onPDF={exportAllPDF} />
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <Topbar title="Test Report" sub={`${pass} passed · ${fail} failed · ${total - pass - fail} pending`}>
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" />}
+        <Stack direction="row" alignItems="center" gap={1}>
+          <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>Failures only</Typography>
+          <Switch size="small" checked={failOnly} onChange={e => setFailOnly(e.target.checked)} color="primary" />
+        </Stack>
+        <Button size="small" variant="outlined" startIcon={<Ico n="down" s={12} />} onClick={exportAllCSV}
+          sx={{ borderColor: C.b2, color: "text.secondary" }}>
+          Export All
+        </Button>
       </Topbar>
 
-      {/* Mobile-only filter bar */}
       {isMobile && (
-        <div style={{
-          padding: "10px 12px",
-          background: C.s1,
-          borderBottom: `1px solid ${C.b1}`,
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-          flexShrink: 0,
-        }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" width="100%" />
-          <button
-            onClick={() => setFailOnly((f) => !f)}
-            style={{
-              ...smBtn(failOnly ? { background: C.red, borderColor: "#fca5a5", color: C.re } : {}),
-              flexShrink: 0,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <Ico n="x" s={11} /> {failOnly ? "All" : "Failures"}
-          </button>
-        </div>
+        <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" fullWidth />
+        </Box>
       )}
 
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "12px 12px" : 20 }}>
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
+        {/* Summary */}
+        <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)", gap: 1.5, mb: 2.5 }}>
+          {[["Total Steps",total,"primary.main"],["Passed",pass,"success.main"],["Failed",fail,"error.main"],["Pending",total-pass-fail,"warning.main"]].map(([l,v,c],i) => (
+            <motion.div key={l} custom={i} variants={cardVariants} initial="initial" animate="animate">
+              <Paper elevation={1} sx={{ p: isMobile ? 1.5 : 2, borderRadius: 2.5, border: `1px solid ${C.b1}` }}>
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", fontWeight: 600, display: "block" }}>{l}</Typography>
+                <Typography variant="h5" fontWeight={800} sx={{ color: c }}>{v.toLocaleString()}</Typography>
+              </Paper>
+            </motion.div>
+          ))}
+        </Box>
 
-        {/* Summary stats */}
-        {isMobile ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-            {[
-              { label: "Total Steps", val: total.toLocaleString(), color: C.ac, bg: C.acd },
-              { label: "Pass Rate", val: `${total ? Math.round((pass / total) * 100) : 0}%`, color: C.gr, bg: C.grd },
-              { label: `Passed`, val: pass.toLocaleString(), color: C.gr, bg: C.grd },
-              { label: `Failed`, val: fail.toLocaleString(), color: C.re, bg: C.red },
-            ].map(({ label, val, color, bg }) => (
-              <div key={label} style={{
-                background: bg, borderRadius: 10, padding: "12px 14px",
-                border: `1px solid ${color}22`,
-              }}>
-                <div style={{ fontSize: 11, fontFamily: F.mono, color, fontWeight: 600, marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 22, fontFamily: F.mono, fontWeight: 700, color }}>{val}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-            <Chip label={`${total.toLocaleString()} steps`} color={C.ac} bg={C.acd} />
-            <Chip label={`✓ ${pass.toLocaleString()} passed (${total ? Math.round((pass / total) * 100) : 0}%)`} color={C.gr} bg={C.grd} />
-            <Chip label={`✗ ${fail.toLocaleString()} failed (${total ? Math.round((fail / total) * 100) : 0}%)`} color={C.re} bg={C.red} />
-            <Chip label={`⟳ ${(total - pass - fail).toLocaleString()} pending`} color={C.am} bg={C.amd} />
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <button style={smBtn()} onClick={() => setExp(new Set(modList.map((m) => m.id)))}>Expand All</button>
-          <button style={smBtn()} onClick={() => setExp(new Set())}>Collapse All</button>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 8 : 10 }}>
-          {filtered.map((m) => {
+        <Stack gap={1.25}>
+          {filtered.map((m, i) => {
             const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
-            const open = exp.has(m.id);
-            const pendingM = m.total - m.pass - m.fail;
+            const isExp = exp.has(m.id);
             return (
-              <div key={m.id} style={{
-                background: C.s1,
-                border: `1px solid ${m.fail > 0 ? "#fca5a5" : m.pass === m.total && m.total > 0 ? "#86efac" : C.b1}`,
-                borderRadius: 10,
-                overflow: "hidden",
-              }}>
-                {/* Module header */}
-                <div
-                  onClick={() => { const s = new Set(exp); s.has(m.id) ? s.delete(m.id) : s.add(m.id); setExp(s); }}
-                  style={{ padding: isMobile ? "12px 14px" : "11px 16px", cursor: "pointer" }}
-                >
-                  {/* Top line: chevron + name + pct */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Ico n={open ? "chevD" : "chevR"} s={13} />
-                    <div style={{ fontSize: isMobile ? 14 : 13, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {m.name}
-                    </div>
-                    <span style={{ fontSize: 12, fontFamily: F.mono, fontWeight: 700,
-                      color: pct === 100 ? C.gr : m.fail > 0 ? C.re : C.t2, flexShrink: 0 }}>
-                      {pct}%
-                    </span>
-                  </div>
-                  {/* Second line: stats + mini bar */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, paddingLeft: 21 }}>
-                    <span style={{ fontSize: 11, fontFamily: F.mono, color: C.t3 }}>
-                      {m.tests.length}t · {m.total}s
-                    </span>
-                    {m.pass > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.gr }}>✓{m.pass}</span>}
-                    {m.fail > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.re }}>✗{m.fail}</span>}
-                    {pendingM > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.am }}>⟳{pendingM}</span>}
-                    <div style={{ flex: 1 }}>
-                      <PBar pct={pct} fail={m.fail > 0} />
-                    </div>
-                  </div>
-                </div>
-
-                {open && (
-                  <div style={{ borderTop: `1px solid ${C.b1}` }}>
-                    {m.tests.map((t) => {
-                      const tp = t.steps.filter((s) => s.status === "pass").length;
-                      const tf = t.steps.filter((s) => s.status === "fail").length;
-                      const tpct = Math.round((tp / Math.max(t.steps.length, 1)) * 100);
-                      const tpending = t.steps.length - tp - tf;
-                      return (
-                        <div key={t.id}>
-                          {/* Test sub-header */}
-                          <div style={{
-                            padding: isMobile ? "9px 14px 9px 22px" : "8px 16px 8px 28px",
-                            background: C.s2,
-                            borderBottom: `1px solid ${C.b1}`,
-                          }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <Ico n="file" s={11} />
-                              <span style={{ fontSize: 12, fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {t.name}
-                              </span>
-                              <span style={{ fontSize: 11, fontFamily: F.mono, color: C.t3, flexShrink: 0 }}>
-                                {tpct}%
-                              </span>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingLeft: 19 }}>
-                              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>{t.steps.length} steps</span>
-                              {tp > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.gr }}>✓{tp}</span>}
-                              {tf > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.re }}>✗{tf}</span>}
-                              {tpending > 0 && <span style={{ fontSize: 10, fontFamily: F.mono, color: C.am }}>⟳{tpending}</span>}
-                              {t.description && !isMobile && (
-                                <span style={{ fontSize: 11, color: C.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                                  {t.description}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Step rows */}
-                          {t.steps.map((s) => {
-                            const c = s.status === "pass" ? C.gr : s.status === "fail" ? C.re : C.am;
-                            const bg2 = s.status === "pass" ? C.grd : s.status === "fail" ? C.red : C.amd;
-                            const stepBg = s.status === "fail" ? "#fff5f5" : s.status === "pass" ? "#f9fffe" : "transparent";
-
-                            if (isMobile) {
-                              // Mobile: card layout per step
-                              return (
-                                <div key={s.id} style={{
-                                  padding: "9px 14px 9px 22px",
-                                  borderBottom: `1px solid ${C.b1}`,
-                                  background: stepBg,
-                                }}>
-                                  {/* Top: serial + status */}
-                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: s.action ? 5 : 0 }}>
-                                    <span style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, flexShrink: 0, minWidth: 22 }}>
-                                      {s.isDivider ? "" : `#${s.serialNo || "—"}`}
-                                    </span>
-                                    <span style={{
-                                      display: "inline-flex", alignItems: "center",
-                                      padding: "2px 8px", borderRadius: 12,
-                                      fontSize: 10, fontFamily: F.mono, fontWeight: 700,
-                                      background: bg2, color: c, flexShrink: 0,
-                                    }}>
-                                      {s.status.toUpperCase()}
-                                    </span>
-                                    {s.remarks ? (
-                                      <span style={{ fontSize: 11, color: C.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontStyle: "italic" }}>
-                                        {s.remarks}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  {s.action && (
-                                    <div style={{ fontSize: 12, color: C.t1, lineHeight: 1.5, wordBreak: "break-word" }}>
-                                      {s.action}
-                                    </div>
-                                  )}
-                                  {s.result && (
-                                    <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.4, marginTop: 3, paddingLeft: 8, borderLeft: `2px solid ${C.b2}`, wordBreak: "break-word" }}>
-                                      {s.result}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            }
-
-                            // Desktop: horizontal row
-                            return (
-                              <div key={s.id} style={{
-                                padding: "7px 16px 7px 40px",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                borderBottom: `1px solid ${C.b1}`,
-                                fontSize: 12,
-                                background: stepBg,
-                              }}>
-                                <span style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, width: 24, flexShrink: 0 }}>
-                                  {s.serialNo}
-                                </span>
-                                <span style={{ flex: 1 }}>{s.action || <span style={{ color: C.t3 }}>—</span>}</span>
-                                <span style={{ flex: 1, color: C.t2 }}>{s.result || <span style={{ color: C.t3 }}>—</span>}</span>
-                                <span style={{ width: 100, fontSize: 11, color: C.t2 }}>{s.remarks}</span>
-                                <span style={{
-                                  display: "inline-flex", alignItems: "center",
-                                  padding: "2px 8px", borderRadius: 12,
-                                  fontSize: 10, fontFamily: F.mono,
-                                  background: bg2, color: c, flexShrink: 0,
-                                }}>
-                                  {s.status}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate">
+                <Paper elevation={0} sx={{ border: `1px solid ${m.fail > 0 ? "#fca5a5" : m.pass === m.total && m.total > 0 ? "#86efac" : C.b1}`, borderRadius: 2.5, overflow: "hidden" }}>
+                  <Box sx={{ p: "12px 16px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }} onClick={() => toggleExp(m.id)}>
+                    <Ico n={isExp ? "chevD" : "chevR"} s={14} color={C.t3} />
+                    <Typography fontWeight={600} sx={{ flex: 1, fontSize: 14 }}>{m.name}</Typography>
+                    <Stack direction="row" gap={0.5} alignItems="center">
+                      {m.pass > 0 && <Chip label={`✓${m.pass}`} size="small" sx={{ height: 20, fontSize: 10, fontFamily: MONO, bgcolor: C.grd, color: C.gr }} />}
+                      {m.fail > 0 && <Chip label={`✗${m.fail}`} size="small" sx={{ height: 20, fontSize: 10, fontFamily: MONO, bgcolor: C.red, color: C.re }} />}
+                      <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: pct === 100 ? C.gr : m.fail > 0 ? C.am : "text.secondary" }}>{pct}%</Typography>
+                    </Stack>
+                    <Box sx={{ width: 80 }}><PBar pct={pct} fail={m.fail > 0} /></Box>
+                  </Box>
+                  <Collapse in={isExp} timeout="auto">
+                    <Box sx={{ borderTop: `1px solid ${C.b1}` }}>
+                      {m.tests.map(t => {
+                        const tp = t.steps.filter(s => !s.isDivider && s.status === "pass").length;
+                        const tf = t.steps.filter(s => !s.isDivider && s.status === "fail").length;
+                        if (t.steps.length === 0) return null;
+                        return (
+                          <Box key={t.id}>
+                            <Box sx={{ px: 2, py: 0.75, bgcolor: C.s2, display: "flex", alignItems: "center", gap: 1 }}>
+                              <Typography fontWeight={600} sx={{ fontSize: 12, flex: 1 }}>{t.name}</Typography>
+                              <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>✓{tp} ✗{tf} ⟳{t.steps.filter(s => !s.isDivider).length-tp-tf}</Typography>
+                            </Box>
+                            {!isMobile && (
+                              <TableContainer>
+                                <Table size="small" sx={{ tableLayout: "fixed" }}>
+                                  <TableHead>
+                                    <TableRow sx={{ bgcolor: C.s2 }}>
+                                      {["S.No","Action","Expected Result","Remarks","Status"].map(h => <TableCell key={h}>{h}</TableCell>)}
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {t.steps.map(s => s.isDivider ? (
+                                      <TableRow key={s.id} sx={{ bgcolor: "#fff7ed" }}>
+                                        <TableCell colSpan={5} sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "1px" }}>{s.action}</TableCell>
+                                      </TableRow>
+                                    ) : (
+                                      <TableRow key={s.id} sx={{ bgcolor: statusBg(s.status) }}>
+                                        <TableCell sx={{ fontFamily: MONO, fontSize: 11, width: 55, textAlign: "center" }}>{s.serialNo || "—"}</TableCell>
+                                        <TableCell sx={{ fontSize: 12 }}>{s.action}</TableCell>
+                                        <TableCell sx={{ fontSize: 12, color: C.t2 }}>{s.result}</TableCell>
+                                        <TableCell sx={{ fontSize: 12, color: C.t3 }}>{s.remarks}</TableCell>
+                                        <TableCell sx={{ width: 70 }}>
+                                          <Chip label={s.status.toUpperCase()} size="small"
+                                            sx={{ height: 18, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                                              color: statusColor(s.status), bgcolor: statusBg(s.status),
+                                              border: `1px solid ${statusColor(s.status)}30` }} />
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </Collapse>
+                </Paper>
+              </motion.div>
             );
           })}
           {filtered.length === 0 && (
-            <div style={{ textAlign: "center", padding: "48px 0", color: C.t3, fontFamily: F.mono, fontSize: 12 }}>
-              No modules match.
-            </div>
+            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 13 }}>No modules match.</Box>
           )}
-        </div>
-      </div>
-    </>
+        </Stack>
+      </Box>
+    </motion.div>
   );
 }
 
-// ── Audit Log ──────────────────────────────────────────────────────────────────
+// ── Audit View ─────────────────────────────────────────────────────────────────────
 function AuditView({ log }) {
   const isMobile = useIsMobile();
-  const fmt = (ts) =>
-    new Date(ts).toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  const dotColor = { pass: C.gr, fail: C.re, warn: C.am, info: C.ac };
+  const fmt = ts => new Date(ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  const dotColor = { pass: C.gr, fail: C.re, warn: C.am, info: "primary.main" };
+  const alertSeverity = { pass: "success", fail: "error", warn: "warning", info: "info" };
+
   return (
-    <>
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar title="Audit Log" sub={`${log.length} events recorded`} />
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "10px 12px" : "12px 20px" }}>
-        <div
-          style={{
-            background: C.s1,
-            border: `1px solid ${C.b1}`,
-            borderRadius: 10,
-            overflow: "hidden",
-          }}
-        >
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
+        <Paper elevation={0} sx={{ border: `1px solid ${C.b1}`, borderRadius: 3, overflow: "hidden" }}>
           {log.length === 0 && (
-            <div
-              style={{
-                padding: 40,
-                textAlign: "center",
-                color: C.t3,
-                fontFamily: F.mono,
-                fontSize: 12,
-              }}
-            >
-              No events yet.
-            </div>
+            <Box sx={{ p: 5, textAlign: "center", color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>No events yet.</Box>
           )}
           {log.map((e, i) => (
-            <div
-              key={i}
-              style={{
-                padding: "10px 16px",
-                borderBottom: `1px solid ${C.b1}`,
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 12,
-                fontSize: 12,
-              }}
-            >
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: dotColor[e.type] || C.t3,
-                  flexShrink: 0,
-                  marginTop: 4,
-                }}
-              />
-              <div style={{ flex: 1 }}>
-                <div>{e.action}</div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: C.t3,
-                    fontFamily: F.mono,
-                    marginTop: 2,
-                  }}
-                >
-                  {e.user}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: C.t3,
-                  fontFamily: F.mono,
-                  flexShrink: 0,
-                }}
-              >
-                {fmt(e.ts)}
-              </div>
-            </div>
+            <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i * 0.02, 0.4) }}>
+              <Box sx={{ px: 2, py: 1.25, borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: dotColor[e.type] || C.t3, flexShrink: 0, mt: 0.5 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontSize: 12 }}>{e.action}</Typography>
+                  <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>{e.user}</Typography>
+                </Box>
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", flexShrink: 0 }}>{fmt(e.ts)}</Typography>
+              </Box>
+            </motion.div>
           ))}
-        </div>
-      </div>
-    </>
+        </Paper>
+      </Box>
+    </motion.div>
   );
 }
 
-// ── Users Panel ────────────────────────────────────────────────────────────────
+// ── Users Panel ────────────────────────────────────────────────────────────────────
 function UsersPanel({ users, session, saveUsers, addLog, toast }) {
   const isMobile = useIsMobile();
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({
-    name: "",
-    username: "",
-    email: "",
-    password: "",
-    role: "tester",
-    active: true,
-  });
+  const [form, setForm] = useState({ name: "", username: "", email: "", password: "", role: "tester", active: true });
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState(null);
 
-  const filtered = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.username.toLowerCase().includes(search.toLowerCase()) ||
-      (u.email || "").toLowerCase().includes(search.toLowerCase())
+  const filtered = users.filter(u =>
+    u.name.toLowerCase().includes(search.toLowerCase()) ||
+    u.username.toLowerCase().includes(search.toLowerCase()) ||
+    (u.email || "").toLowerCase().includes(search.toLowerCase())
   );
-  const openAdd = () => {
-    setForm({
-      name: "",
-      username: "",
-      email: "",
-      password: "",
-      role: "tester",
-      active: true,
-    });
-    setModal("add");
-  };
-  const openEdit = (u) => {
-    setForm({ ...u });
-    setModal(u);
-  };
+
+  const openAdd = () => { setForm({ name: "", username: "", email: "", password: "", role: "tester", active: true }); setModal("add"); };
+  const openEdit = u => { setForm({ ...u }); setModal(u); };
 
   const save = () => {
-    if (!form.name.trim() || !form.username.trim() || !form.password.trim()) {
-      toast("Name, username & password required", "error");
-      return;
-    }
-    if (
-      modal === "add" &&
-      users.find((u) => u.username === form.username.trim())
-    ) {
-      toast("Username already exists", "error");
-      return;
-    }
-    const updated =
-      modal === "add"
-        ? [...users, { ...form, id: `new_${Date.now()}` }]  // temp id — replaced by Supabase UUID in saveUsers
-        : users.map((u) => (u.id === form.id ? { ...form } : u));
-    saveUsers(updated);
-    setModal(null);
-    toast(
-      modal === "add"
-        ? `User "${form.name}" created`
-        : `"${form.name}" updated`,
-      "success"
-    );
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action:
-        modal === "add"
-          ? `Created user "${form.name}" (${form.role})`
-          : `Updated user "${form.name}"`,
-      type: "info",
-    });
+    if (!form.name.trim() || !form.username.trim() || !form.password.trim()) { toast("Name, username & password required", "error"); return; }
+    if (modal === "add" && users.find(u => u.username === form.username.trim())) { toast("Username already exists", "error"); return; }
+    const updated = modal === "add"
+      ? [...users, { ...form, id: `new_${Date.now()}` }]
+      : users.map(u => u.id === form.id ? { ...form } : u);
+    saveUsers(updated); setModal(null);
+    toast(modal === "add" ? `User "${form.name}" created` : `"${form.name}" updated`, "success");
+    addLog({ ts: Date.now(), user: session.name, action: modal === "add" ? `Created user "${form.name}" (${form.role})` : `Updated user "${form.name}"`, type: "info" });
   };
 
-  const del = (u) => {
-    saveUsers(users.filter((x) => x.id !== u.id));
-    toast(`"${u.name}" deleted`, "info");
-    setConfirm(null);
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Deleted user "${u.name}"`,
-      type: "info",
-    });
+  const del = u => {
+    saveUsers(users.filter(x => x.id !== u.id));
+    toast(`"${u.name}" deleted`, "info"); setConfirm(null);
+    addLog({ ts: Date.now(), user: session.name, action: `Deleted user "${u.name}"`, type: "info" });
   };
-  const toggle = (u) => {
+
+  const toggle = u => {
     if (u.id === session.id) return;
-    saveUsers(
-      users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x))
-    );
+    saveUsers(users.map(x => x.id === u.id ? { ...x, active: !x.active } : x));
     toast(`${u.name} ${u.active ? "deactivated" : "activated"}`, "info");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`,
-      type: "info",
-    });
+    addLog({ ts: Date.now(), user: session.name, action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`, type: "info" });
   };
+
+  const fld = (label, key, type = "text", opts = {}) => (
+    <TextField label={label} type={type} value={form[key] || ""}
+      onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+      fullWidth size="medium" sx={{ mb: 2 }}
+      InputProps={{ sx: { borderRadius: 2 } }}
+      {...opts}
+    />
+  );
 
   return (
-    <>
-      <Topbar
-        title="User Management"
-        sub={`${users.length} users · ${
-          users.filter((u) => u.active).length
-        } active`}
-      >
-        {!isMobile && (
-          <SearchBox
-            value={search}
-            onChange={setSearch}
-            placeholder="Search users…"
-            width={190}
-          />
-        )}
-        <button style={acBtn(smBtn())} onClick={openAdd}>
-          <Ico n="plus" s={13} /> {isMobile ? "" : "Add User"}
-        </button>
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <Topbar title="User Management" sub={`${users.length} users · ${users.filter(u => u.active).length} active`}>
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search users…" />}
+        <Button variant="contained" size="small" startIcon={<Ico n="plus" s={13} />} onClick={openAdd}>
+          {isMobile ? "" : "Add User"}
+        </Button>
       </Topbar>
+
       {isMobile && (
-        <div style={{ padding: "10px 12px", background: C.s1, borderBottom: `1px solid ${C.b1}`, flexShrink: 0 }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search users…" width="100%" />
-        </div>
+        <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search users…" fullWidth />
+        </Box>
       )}
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 20 }}>
-        <div style={{ display: "grid", gap: isMobile ? 8 : 10 }}>
-          {filtered.map((u) => (
-            <div
-              key={u.id}
-              style={{
-                background: C.s1,
-                border: `1px solid ${C.b1}`,
-                borderRadius: 10,
-                padding: isMobile ? "12px 14px" : "14px 18px",
-                display: "flex",
-                alignItems: isMobile ? "flex-start" : "center",
-                gap: isMobile ? 10 : 14,
-                flexDirection: isMobile ? "column" : "row",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14, width: "100%" }}>
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: "50%",
-                  flexShrink: 0,
-                  background: "linear-gradient(135deg,#dbeafe,#bfdbfe)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontFamily: F.mono,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: C.ac,
-                  border: `1px solid ${C.b1}`,
-                }}
-              >
-                {u.name[0].toUpperCase()}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: C.t2,
-                    fontFamily: F.mono,
-                    marginTop: 2,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {u.username}
-                  {u.email ? ` · ${u.email}` : ""}
-                </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                  <Badge type={u.role} />
-                  <Badge type={u.active ? "active" : "inactive"} />
-                  {u.id === session.id && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontFamily: F.mono,
-                        background: C.acd,
-                        color: C.ac,
-                        padding: "2px 9px",
-                        borderRadius: 20,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        border: `1px solid ${C.b2}`,
-                      }}
-                    >
-                      You
-                    </span>
+
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
+        <Stack gap={isMobile ? 1 : 1.25}>
+          {filtered.map((u, i) => (
+            <motion.div key={u.id} custom={i} variants={cardVariants} initial="initial" animate="animate">
+              <Paper elevation={0} sx={{ border: `1px solid ${u.active ? C.b1 : "#fecaca"}`, borderRadius: 2.5, p: isMobile ? 1.5 : 2, opacity: u.active ? 1 : 0.75 }}>
+                <Stack direction={isMobile ? "column" : "row"} alignItems={isMobile ? "flex-start" : "center"} gap={1.5}>
+                  <Stack direction="row" alignItems="center" gap={1.5} sx={{ width: isMobile ? "100%" : undefined }}>
+                    <Avatar sx={{ width: 38, height: 38, background: "linear-gradient(135deg,#dbeafe,#bfdbfe)", color: "#1d4ed8", fontWeight: 700, fontSize: 15, flexShrink: 0 }}>
+                      {u.name?.[0]?.toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Stack direction="row" alignItems="center" gap={0.75} flexWrap="wrap">
+                        <Typography fontWeight={700} sx={{ fontSize: 14 }}>{u.name}</Typography>
+                        <Chip label={u.role} size="small"
+                          sx={{ height: 18, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                            bgcolor: u.role === "admin" ? "#fff7ed" : C.amd, color: u.role === "admin" ? C.ac : C.am }} />
+                        <Chip label={u.active ? "active" : "inactive"} size="small"
+                          sx={{ height: 18, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                            bgcolor: u.active ? C.grd : C.red, color: u.active ? C.gr : C.re }} />
+                      </Stack>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", display: "block" }}>
+                        @{u.username}{u.email ? ` · ${u.email}` : ""}
+                      </Typography>
+                    </Box>
+                    {isMobile && (
+                      <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
+                        <IconButton size="small" onClick={() => openEdit(u)} sx={{ color: "primary.main" }}><Ico n="edit" s={14} /></IconButton>
+                        {u.id !== session.id && <IconButton size="small" onClick={() => setConfirm(u)} sx={{ color: "error.main" }}><Ico n="trash" s={14} /></IconButton>}
+                      </Stack>
+                    )}
+                  </Stack>
+                  {!isMobile && (
+                    <Stack direction="row" alignItems="center" gap={1} sx={{ ml: "auto", flexShrink: 0 }}>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>Active</Typography>
+                      <Switch size="small" checked={u.active} onChange={() => toggle(u)} disabled={u.id === session.id} color="success" />
+                      <Button size="small" variant="outlined" startIcon={<Ico n="edit" s={12} />} onClick={() => openEdit(u)}
+                        sx={{ borderColor: C.b2, color: "text.secondary" }}>Edit</Button>
+                      {u.id !== session.id && (
+                        <Button size="small" variant="outlined" color="error" startIcon={<Ico n="trash" s={12} />} onClick={() => setConfirm(u)}
+                          sx={{ borderColor: "#fca5a5" }}>Delete</Button>
+                      )}
+                    </Stack>
                   )}
-                </div>
-              </div>
-              {!isMobile && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {u.id !== session.id && (
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <Toggle on={u.active} onClick={() => toggle(u)} />
-                    <span
-                      style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}
-                    >
-                      {u.active ? "Active" : "Off"}
-                    </span>
-                  </div>
-                )}
-                <button style={smBtn()} onClick={() => openEdit(u)}>
-                  <Ico n="edit" s={12} /> Edit
-                </button>
-                {u.id !== session.id && (
-                  <button style={reBtn(smBtn())} onClick={() => setConfirm(u)}>
-                    <Ico n="trash" s={12} />
-                  </button>
-                )}
-              </div>
-              )}
-              </div>
-              {isMobile && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
-                {u.id !== session.id && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                    <Toggle on={u.active} onClick={() => toggle(u)} />
-                    <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}>
-                      {u.active ? "Active" : "Off"}
-                    </span>
-                  </div>
-                )}
-                <button style={smBtn({ flex: u.id !== session.id ? "none" : 1, justifyContent: "center" })} onClick={() => openEdit(u)}>
-                  <Ico n="edit" s={12} /> Edit
-                </button>
-                {u.id !== session.id && (
-                  <button style={reBtn(smBtn())} onClick={() => setConfirm(u)}>
-                    <Ico n="trash" s={12} />
-                  </button>
-                )}
-              </div>
-              )}
-            </div>
+                  {isMobile && (
+                    <Stack direction="row" alignItems="center" gap={1} sx={{ width: "100%" }}>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>Active</Typography>
+                      <Switch size="small" checked={u.active} onChange={() => toggle(u)} disabled={u.id === session.id} color="success" />
+                    </Stack>
+                  )}
+                </Stack>
+              </Paper>
+            </motion.div>
           ))}
           {filtered.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: 40,
-                color: C.t3,
-                fontFamily: F.mono,
-                fontSize: 12,
-              }}
-            >
-              No users found.
-            </div>
+            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 13 }}>No users match.</Box>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Box>
 
-      {modal && (
-        <Modal
-          title={modal === "add" ? "Add User" : "Edit User"}
-          sub={
-            modal === "add" ? "Create a new account" : `Editing ${form.name}`
-          }
-          onClose={() => setModal(null)}
-        >
-          <Field label="Full Name">
-            <input
-              style={inputSty}
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              autoFocus
-            />
-          </Field>
-          <Field label="Username">
-            <input
-              style={inputSty}
-              value={form.username}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, username: e.target.value }))
-              }
-            />
-          </Field>
-          <Field label="Email (optional)">
-            <input
-              style={inputSty}
-              value={form.email}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, email: e.target.value }))
-              }
-            />
-          </Field>
-          <Field label="Password">
-            <input
-              style={inputSty}
-              type="password"
-              value={form.password}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, password: e.target.value }))
-              }
-            />
-          </Field>
-          <Field label="Role">
-            <select
-              style={{ ...inputSty, appearance: "none" }}
-              value={form.role}
-              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            >
-              <option value="tester">Tester</option>
-              <option value="admin">Admin</option>
-            </select>
-          </Field>
-          <ModalActions>
-            <button style={btn()} onClick={() => setModal(null)}>
-              Cancel
-            </button>
-            <button style={acBtn()} onClick={save}>
-              {modal === "add" ? "Create User" : "Save Changes"}
-            </button>
-          </ModalActions>
-        </Modal>
-      )}
-      {confirm && (
-        <Modal
-          title="Delete User?"
-          sub={`Delete "${confirm.name}"? This cannot be undone.`}
-          onClose={() => setConfirm(null)}
-          width={360}
-        >
-          <ModalActions>
-            <button style={btn()} onClick={() => setConfirm(null)}>
-              Cancel
-            </button>
-            <button style={reBtn()} onClick={() => del(confirm)}>
-              <Ico n="trash" s={12} /> Delete
-            </button>
-          </ModalActions>
-        </Modal>
-      )}
-    </>
+      {/* Add/Edit Dialog */}
+      <FormDialog
+        open={Boolean(modal)}
+        onClose={() => setModal(null)}
+        title={modal === "add" ? "Add User" : "Edit User"}
+        subtitle={modal === "add" ? "Create a new team member account" : undefined}
+        actions={
+          <>
+            <Button variant="outlined" onClick={() => setModal(null)} sx={{ borderColor: C.b2, color: "text.secondary" }}>Cancel</Button>
+            <Button variant="contained" onClick={save}>{modal === "add" ? "Create User" : "Save Changes"}</Button>
+          </>
+        }
+      >
+        {fld("Full Name", "name", "text", { autoFocus: true })}
+        {fld("Username", "username")}
+        {fld("Email (optional)", "email", "email")}
+        {fld("Password", "password", "password")}
+        <FormControl fullWidth sx={{ mb: 2 }} size="medium">
+          <InputLabel>Role</InputLabel>
+          <Select value={form.role} label="Role" onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+            sx={{ borderRadius: 2 }}>
+            <MenuItem value="tester">Tester</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+          </Select>
+        </FormControl>
+      </FormDialog>
+
+      <ConfirmDialog
+        open={Boolean(confirm)}
+        title="Delete User?"
+        description={`Delete "${confirm?.name}"? This cannot be undone.`}
+        onConfirm={() => del(confirm)}
+        onCancel={() => setConfirm(null)}
+      />
+    </motion.div>
   );
 }
 
-// ── Root ───────────────────────────────────────────────────────────────────────
+// ── App ────────────────────────────────────────────────────────────────────────────
 export default function App() {
   const [users, setUsers] = useState(null);
   const [modules, setModules] = useState(null);
@@ -4718,313 +2155,133 @@ export default function App() {
   useEffect(() => {
     (async () => {
       const { users: dbUsers, modules: dbModules } = await store.loadAll();
-      const log = await store.loadLog();
-
-      // ── Users: seed DB if empty ──────────────────────────────────────────
+      const logData = await store.loadLog();
       let finalUsers = dbUsers;
       if (!dbUsers.length) {
-        // Insert seed users and reload so we get real UUIDs back
-        const { data: inserted, error: seedErr } = await supabase
-          .from("users")
-          .insert(SEED_USERS.map(({ id: _skip, ...rest }) => rest))
-          .select();
-        if (seedErr) {
-          console.error("Seed users error:", seedErr);
-          toast(`DB connection error: ${seedErr.message}`, "error");
-          finalUsers = SEED_USERS; // fall back to local only
-        } else {
-          finalUsers = inserted || SEED_USERS;
-        }
+        const { data: inserted, error: seedErr } = await supabase.from("users").insert(SEED_USERS.map(({ id: _skip, ...rest }) => rest)).select();
+        if (seedErr) { console.error("Seed users error:", seedErr); finalUsers = SEED_USERS; }
+        else finalUsers = inserted || SEED_USERS;
       }
-
-      // ── Modules: seed DB if empty ────────────────────────────────────────
       let finalModules = dbModules;
       if (!Object.keys(dbModules).length) {
         const seedModules = buildModules();
         finalModules = seedModules;
-        // Save seed modules to DB in background (don't block render)
-        store.saveModules(seedModules).catch((e) =>
-          console.error("Seed modules error:", e)
-        );
+        store.saveModules(seedModules).catch(e => console.error("Seed modules error:", e));
       }
-
-      setUsers(finalUsers);
-      setModules(finalModules);
-      setLog(log);
+      setUsers(finalUsers); setModules(finalModules); setLog(logData);
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line
 
-  const saveUsers = useCallback(async (u) => {
-    setUsers(u);
-    await store.saveUsers(u);
-    // Reload from Supabase so new users get their real UUID (replaces temp new_XXXX id)
+  const saveUsers = useCallback(async u => {
+    setUsers(u); await store.saveUsers(u);
     const { data: fresh } = await supabase.from("users").select("*");
     if (fresh && fresh.length) setUsers(fresh);
   }, []);
 
-  // Always keep a ref to the latest modules so the debounced DB write
-  // never uses a stale snapshot captured in an old closure.
-  const latestModulesRef   = useRef(null);
-  const saveModsTimerRef   = useRef(null);
-  const structuralFlagRef  = useRef(false); // true when a structural change needs saveModules
+  const latestModulesRef = useRef(null);
+  const saveModsTimerRef = useRef(null);
+  const structuralFlagRef = useRef(false);
 
-  // saveMods(m)             — step-only change: update React state, skip saveModules
-  // saveMods(m, true)       — structural change (add/rename/delete module or test):
-  //                           update React state AND debounce saveModules
   const saveMods = useCallback((m, structural = false) => {
-    setModules(m);
-    latestModulesRef.current = m;
-    if (structural) structuralFlagRef.current = true; // latch: once set, stays true until timer fires
-
-    // Only schedule a saveModules call when there is a structural change pending.
-    // Step saves are handled surgically by saveSteps in commit().
+    setModules(m); latestModulesRef.current = m;
+    if (structural) structuralFlagRef.current = true;
     if (!structuralFlagRef.current) return;
-
     if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current);
     saveModsTimerRef.current = setTimeout(() => {
       structuralFlagRef.current = false;
-      store.saveModules(latestModulesRef.current); // use ref, never stale closure
+      store.saveModules(latestModulesRef.current);
     }, 400);
   }, []);
 
-  const addLog = useCallback(async (e) => {
-    setLog((l) => [e, ...l].slice(0, 300));
+  const addLog = useCallback(async e => {
+    setLog(l => [e, ...l].slice(0, 300));
     await store.addLog(e);
   }, []);
 
-  // ── Supabase Realtime: live progress for all users ────────────────────────────
-  // Subscribes to INSERT/UPDATE/DELETE on steps, tests, and modules tables.
-  // All derived stats (progress bars, pass/fail counts, dashboard) update
-  // automatically because they read from `modules` state.
-  //
-  // Setup required (once in Supabase dashboard):
-  //   1. Go to Database → Replication → Tables
-  //   2. Enable Realtime for: steps, tests, modules
-  //   OR run in SQL editor:
-  //      ALTER PUBLICATION supabase_realtime ADD TABLE steps, tests, modules;
-  //
+  // Realtime subscriptions
   useEffect(() => {
-    // Don't subscribe until initial load is done
     if (!modules) return;
-
-    // Use a unique suffix so Supabase never gets duplicate channel names
-    // if this effect fires more than once (e.g. in StrictMode double-invoke)
     const uid = Date.now();
-
-    // ── steps changes ─────────────────────────────────────────────────────────
-    const stepsSub = supabase
-      .channel(`rt-steps-${uid}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "steps" },
-        (payload) => {
-          const { eventType, new: row, old: oldRow } = payload;
-          // Always use functional updater — never close over `modules` directly
-          setModules((prev) => {
-            if (!prev) return prev;
-            const next = { ...prev };
-
-            if (eventType === "UPDATE") {
-              for (const modId in next) {
-                const mod = next[modId];
-                const testIdx = mod.tests.findIndex((t) => t.id === row.test_id);
-                if (testIdx === -1) continue;
-                const test = mod.tests[testIdx];
-                const stepIdx = test.steps.findIndex((s) => s.id === row.id);
-                if (stepIdx === -1) continue;
-                const updatedSteps = [...test.steps];
-                updatedSteps[stepIdx] = {
-                  ...updatedSteps[stepIdx],
-                  status:    row.status,
-                  remarks:   row.remarks,
-                  action:    row.action,
-                  result:    row.result,
-                  serialNo:  row.serial_no,
-                  isDivider: row.is_divider ?? false,
-                };
-                const updatedTests = [...mod.tests];
-                updatedTests[testIdx] = { ...test, steps: updatedSteps };
-                next[modId] = { ...mod, tests: updatedTests };
-                break;
-              }
-            }
-
-            if (eventType === "INSERT") {
-              for (const modId in next) {
-                const mod = next[modId];
-                const testIdx = mod.tests.findIndex((t) => t.id === row.test_id);
-                if (testIdx === -1) continue;
-                const test = mod.tests[testIdx];
-                if (test.steps.some((s) => s.id === row.id)) break; // already local
-                const updatedTests = [...mod.tests];
-                const normRow = { ...row, serialNo: row.serial_no, isDivider: row.is_divider ?? false };
-                updatedTests[testIdx] = {
-                  ...test,
-                  steps: [...test.steps, normRow].sort(
-                    (a, b) => (a.serialNo ?? 0) - (b.serialNo ?? 0)
-                  ),
-                };
-                next[modId] = { ...mod, tests: updatedTests };
-                break;
-              }
-            }
-
-            if (eventType === "DELETE") {
-              const deletedId = oldRow?.id;
-              if (!deletedId) return prev;
-              for (const modId in next) {
-                const mod = next[modId];
-                let changed = false;
-                const updatedTests = mod.tests.map((t) => {
-                  if (!t.steps.some((s) => s.id === deletedId)) return t;
-                  changed = true;
-                  return { ...t, steps: t.steps.filter((s) => s.id !== deletedId) };
-                });
-                if (changed) { next[modId] = { ...mod, tests: updatedTests }; break; }
-              }
-            }
-
-            return next;
-          });
+    const stepsSub = supabase.channel(`rt-steps-${uid}`).on("postgres_changes", { event: "*", schema: "public", table: "steps" }, payload => {
+      const { eventType, new: row, old: oldRow } = payload;
+      setModules(prev => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (eventType === "UPDATE") {
+          for (const modId in next) {
+            const mod = next[modId]; const testIdx = mod.tests.findIndex(t => t.id === row.test_id);
+            if (testIdx === -1) continue;
+            const test = mod.tests[testIdx]; const stepIdx = test.steps.findIndex(s => s.id === row.id);
+            if (stepIdx === -1) continue;
+            const updatedSteps = [...test.steps];
+            updatedSteps[stepIdx] = { ...updatedSteps[stepIdx], status: row.status, remarks: row.remarks, action: row.action, result: row.result, serialNo: row.serial_no, isDivider: row.is_divider ?? false };
+            const updatedTests = [...mod.tests]; updatedTests[testIdx] = { ...test, steps: updatedSteps };
+            next[modId] = { ...mod, tests: updatedTests }; break;
+          }
         }
-      )
-      .subscribe();
-
-    // ── tests changes ─────────────────────────────────────────────────────────
-    const testsSub = supabase
-      .channel(`rt-tests-${uid}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tests" },
-        (payload) => {
-          const { eventType, new: row, old: oldRow } = payload;
-          setModules((prev) => {
-            if (!prev) return prev;
-            const next = { ...prev };
-
-            if (eventType === "UPDATE") {
-              const mod = next[row.module_id];
-              if (!mod) return prev;
-              next[row.module_id] = {
-                ...mod,
-                tests: mod.tests.map((t) =>
-                  t.id === row.id
-                    ? {
-                        ...t,
-                        name:        row.name,
-                        description: row.description,
-                        serial_no:   row.serial_no,
-                        serialNo:    row.serial_no, // keep camelCase in sync
-                      }
-                    : t
-                ),
-              };
-            }
-
-            if (eventType === "INSERT") {
-              const mod = next[row.module_id];
-              if (!mod) return prev;
-              if (mod.tests.some((t) => t.id === row.id)) return prev;
-              const normTest = {
-                ...row,
-                serialNo: row.serial_no, // normalise for local usage
-                steps: [],
-              };
-              next[row.module_id] = {
-                ...mod,
-                tests: [...mod.tests, normTest].sort(
-                  (a, b) => (a.serial_no ?? 0) - (b.serial_no ?? 0)
-                ),
-              };
-            }
-
-            if (eventType === "DELETE") {
-              for (const modId in next) {
-                const mod = next[modId];
-                if (!mod.tests.some((t) => t.id === oldRow?.id)) continue;
-                next[modId] = { ...mod, tests: mod.tests.filter((t) => t.id !== oldRow.id) };
-                break;
-              }
-            }
-
-            return next;
-          });
+        if (eventType === "INSERT") {
+          for (const modId in next) {
+            const mod = next[modId]; const testIdx = mod.tests.findIndex(t => t.id === row.test_id);
+            if (testIdx === -1) continue;
+            const test = mod.tests[testIdx];
+            if (test.steps.some(s => s.id === row.id)) break;
+            const updatedTests = [...mod.tests];
+            const normRow = { ...row, serialNo: row.serial_no, isDivider: row.is_divider ?? false };
+            updatedTests[testIdx] = { ...test, steps: [...test.steps, normRow].sort((a,b) => (a.serialNo??0)-(b.serialNo??0)) };
+            next[modId] = { ...mod, tests: updatedTests }; break;
+          }
         }
-      )
-      .subscribe();
-
-    // ── modules changes ───────────────────────────────────────────────────────
-    const modulesSub = supabase
-      .channel(`rt-modules-${uid}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "modules" },
-        (payload) => {
-          const { eventType, new: row, old: oldRow } = payload;
-          setModules((prev) => {
-            if (!prev) return prev;
-            const next = { ...prev };
-
-            if (eventType === "UPDATE") {
-              if (!next[row.id]) return prev;
-              next[row.id] = { ...next[row.id], name: row.name, position: row.position };
-            }
-
-            if (eventType === "INSERT") {
-              if (next[row.id]) return prev;
-              next[row.id] = { ...row, tests: [] };
-            }
-
-            if (eventType === "DELETE") {
-              if (!next[oldRow?.id]) return prev;
-              const n2 = { ...next };
-              delete n2[oldRow.id];
-              return n2;
-            }
-
-            return next;
-          });
+        if (eventType === "DELETE") {
+          const deletedId = oldRow?.id; if (!deletedId) return prev;
+          for (const modId in next) {
+            const mod = next[modId]; let changed = false;
+            const updatedTests = mod.tests.map(t => { if (!t.steps.some(s => s.id === deletedId)) return t; changed = true; return { ...t, steps: t.steps.filter(s => s.id !== deletedId) }; });
+            if (changed) { next[modId] = { ...mod, tests: updatedTests }; break; }
+          }
         }
-      )
-      .subscribe();
+        return next;
+      });
+    }).subscribe();
 
-    return () => {
-      supabase.removeChannel(stepsSub);
-      supabase.removeChannel(testsSub);
-      supabase.removeChannel(modulesSub);
-    };
-  // Run once after initial data load — `!!modules` flips false→true exactly once
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!modules]);
+    const testsSub = supabase.channel(`rt-tests-${uid}`).on("postgres_changes", { event: "*", schema: "public", table: "tests" }, payload => {
+      const { eventType, new: row, old: oldRow } = payload;
+      setModules(prev => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (eventType === "UPDATE") { const mod = next[row.module_id]; if (!mod) return prev; next[row.module_id] = { ...mod, tests: mod.tests.map(t => t.id === row.id ? { ...t, name: row.name, description: row.description, serial_no: row.serial_no, serialNo: row.serial_no } : t) }; }
+        if (eventType === "INSERT") { const mod = next[row.module_id]; if (!mod) return prev; if (mod.tests.some(t => t.id === row.id)) return prev; next[row.module_id] = { ...mod, tests: [...mod.tests, { ...row, serialNo: row.serial_no, steps: [] }].sort((a,b) => (a.serial_no??0)-(b.serial_no??0)) }; }
+        if (eventType === "DELETE") { for (const modId in next) { const mod = next[modId]; if (!mod.tests.some(t => t.id === oldRow?.id)) continue; next[modId] = { ...mod, tests: mod.tests.filter(t => t.id !== oldRow.id) }; break; } }
+        return next;
+      });
+    }).subscribe();
 
-  // ── Session validity: if logged-in user gets deactivated/deleted, auto-logout ──
+    const modulesSub = supabase.channel(`rt-modules-${uid}`).on("postgres_changes", { event: "*", schema: "public", table: "modules" }, payload => {
+      const { eventType, new: row, old: oldRow } = payload;
+      setModules(prev => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (eventType === "UPDATE") { if (!next[row.id]) return prev; next[row.id] = { ...next[row.id], name: row.name, position: row.position }; }
+        if (eventType === "INSERT") { if (next[row.id]) return prev; next[row.id] = { ...row, tests: [] }; }
+        if (eventType === "DELETE") { if (!next[oldRow?.id]) return prev; const n2 = { ...next }; delete n2[oldRow.id]; return n2; }
+        return next;
+      });
+    }).subscribe();
+
+    return () => { supabase.removeChannel(stepsSub); supabase.removeChannel(testsSub); supabase.removeChannel(modulesSub); };
+  }, [!!modules]); // eslint-disable-line
+
   useEffect(() => {
     if (!session || !users) return;
-    if (session.role === "admin") return; // admin cannot be locked out this way
-    const currentUser = users.find((u) => u.id === session.id);
-    if (!currentUser || !currentUser.active) {
-      lockStore.releaseAll(session.id);
-      setSession(null);
-      setView("dash");
-      setSelMod(null);
-      setHasLock(false);
-    }
+    if (session.role === "admin") return;
+    const currentUser = users.find(u => u.id === session.id);
+    if (!currentUser || !currentUser.active) { lockStore.releaseAll(session.id); setSession(null); setView("dash"); setSelMod(null); setHasLock(false); }
   }, [users, session]);
 
-  const handleLogout = useCallback((u) => {
-    // Clear session immediately (synchronous) so UI responds instantly
-    setSession(null);
-    setView("dash");
-    setSelMod(null);
-    setHasLock(false);
-    // Release locks in background only for testers
+  const handleLogout = useCallback(u => {
+    setSession(null); setView("dash"); setSelMod(null); setHasLock(false);
     if (u && u.role !== "admin") lockStore.releaseAll(u.id);
   }, []);
 
-  // Global beforeunload: release all locks if tester closes the window from
-  // anywhere in the app (not just from inside a test). This covers Dashboard,
-  // Report, and other views where ModuleView's own handler is not mounted.
   useEffect(() => {
     if (!session || session.role === "admin") return;
     const onUnload = () => lockStore.releaseAll(session.id);
@@ -5032,278 +2289,147 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [session]);
 
-  if (!users || !modules)
-    return (
-      <div
-        style={{
-          height: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: C.bg,
-          color: C.ac,
-          fontFamily: F.mono,
-          fontSize: 13,
-        }}
-      >
-        Loading TestPro…
-      </div>
-    );
+  // Loading
+  if (!users || !modules) return (
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <Box sx={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default", flexDirection: "column", gap: 2 }}>
+        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: 2, background: "linear-gradient(135deg,#fb923c,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6 9 17 4 12"/></svg>
+          </Box>
+        </motion.div>
+        <Typography variant="body2" sx={{ fontFamily: MONO, color: "text.disabled" }}>Loading TestPro…</Typography>
+      </Box>
+    </ThemeProvider>
+  );
 
-  if (!session)
-    return (
-      <LoginPage
-        users={users}
-        onLogin={(u) => {
-          setSession(u);
-          addLog({
-            ts: Date.now(),
-            user: u.name,
-            action: "Logged in",
-            type: "info",
-          });
-        }}
-      />
-    );
+  if (!session) return (
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <LoginPage users={users} onLogin={u => { setSession(u); addLog({ ts: Date.now(), user: u.name, action: "Logged in", type: "info" }); }} />
+    </ThemeProvider>
+  );
 
   const modKeys = Object.keys(modules);
   const modIdx = selMod ? modKeys.indexOf(selMod) : -1;
 
-  // Mobile bottom nav items
   const mobileNavItems = [
     { id: "dash", icon: "dash", label: "Dashboard" },
     { id: "report", icon: "report", label: "Report" },
-    ...(session.role === "admin" ? [
-      { id: "users", icon: "users", label: "Users" },
-      { id: "audit", icon: "log", label: "Audit" },
-    ] : []),
+    ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }, { id: "audit", icon: "log", label: "Audit" }] : []),
     { id: "_modules", icon: "layers", label: "Modules" },
   ];
 
+  const currentMobileNavVal = view === "mod" ? "_modules" : view;
+
   return (
-    <MobileMenuCtx.Provider value={() => setMobileDrawerOpen(true)}>
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        overflow: "hidden",
-        background: C.bg,
-        color: C.t1,
-        fontFamily: F.sans,
-        fontSize: 14,
-        lineHeight: 1.5,
-      }}
-    >
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}a{-webkit-tap-highlight-color:transparent}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-      {/* Desktop sidebar — hidden on mobile (drawer handles it) */}
-      {!isMobile && (
-        <Sidebar
-          session={session}
-          view={view}
-          setView={setView}
-          modules={modules}
-          selMod={selMod}
-          setSelMod={(id) => {
-            if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
-              toast("Finish the current test first", "error");
-              return;
-            }
-            setSelMod(id);
-            setView("mod");
-          }}
-          collapsed={sideColl}
-          setCollapsed={setSideColl}
-          locked={session.role !== "admin" && hasLock}
-          onLogout={() => {
-            addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
-            handleLogout(session);
-          }}
-        />
-      )}
-      {/* Mobile drawer sidebar */}
-      {isMobile && (
-        <Sidebar
-          session={session}
-          view={view}
-          setView={(v) => { setView(v); setMobileDrawerOpen(false); }}
-          modules={modules}
-          selMod={selMod}
-          setSelMod={(id) => {
-            if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
-              toast("Finish the current test first", "error");
-              return;
-            }
-            setSelMod(id);
-            setView("mod");
-            setMobileDrawerOpen(false);
-          }}
-          collapsed={false}
-          setCollapsed={() => {}}
-          locked={session.role !== "admin" && hasLock}
-          mobileOpen={mobileDrawerOpen}
-          onMobileClose={() => setMobileDrawerOpen(false)}
-          onLogout={() => {
-            addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
-            handleLogout(session);
-          }}
-        />
-      )}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          minWidth: 0,
-          // On mobile, add bottom padding for the nav bar
-          paddingBottom: isMobile ? "calc(58px + env(safe-area-inset-bottom, 0px))" : 0,
-        }}
-      >
-        {view === "dash" && (
-          <Dashboard
-            modules={modules}
-            session={session}
-            onSelect={(id) => {
-              if (session.role !== "admin" && hasLock) {
-                toast("Finish the current test first", "error");
-                return;
-              }
-              setSelMod(id);
-              setView("mod");
-            }}
-            saveMods={saveMods}
-            addLog={addLog}
-            toast={toast}
-          />
-        )}
-        {view === "mod" && selMod && modules[selMod] && (
-          <ModuleView
-            key={selMod}
-            mod={modules[selMod]}
-            allModules={modules}
-            session={session}
-            saveMods={saveMods}
-            addLog={addLog}
-            toast={toast}
-            onLockChange={(locked) => setHasLock(locked)}
-            onNav={(dir) => {
-              if (hasLock) return;
-              const nk = modKeys[modIdx + dir];
-              if (nk) setSelMod(nk);
-            }}
-            modIdx={modIdx}
-            modTotal={modKeys.length}
-          />
-        )}
-        {view === "report" && <ReportView modules={modules} toast={toast} />}
-        {view === "users" && session.role === "admin" && (
-          <UsersPanel
-            users={users}
-            session={session}
-            saveUsers={saveUsers}
-            addLog={addLog}
-            toast={toast}
-          />
-        )}
-        {view === "audit" && session.role === "admin" && (
-          <AuditView log={log} />
-        )}
-      </div>
-      {/* Mobile bottom navigation bar */}
-      {isMobile && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: "rgba(255,255,255,0.80)",
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-            borderTop: `1px solid rgba(221,226,234,0.6)`,
-            display: "flex",
-            alignItems: "stretch",
-            zIndex: 200,
-            boxShadow: "0 -2px 20px rgba(0,0,0,.07)",
-            paddingBottom: "env(safe-area-inset-bottom, 0px)",
-          }}
-        >
-          {mobileNavItems.map(({ id, icon, label }) => {
-            const isActive = id === "_modules"
-              ? view === "mod"
-              : view === id;
-            return (
-              <button
-                key={id}
-                onClick={() => {
-                  if (id === "_modules") {
-                    setMobileDrawerOpen(true);
-                  } else {
-                    if (session.role !== "admin" && hasLock && id !== view) {
-                      toast("Finish the current test first", "error");
-                      return;
-                    }
-                    setView(id);
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 4,
-                  border: "none",
-                  borderTop: `2px solid ${isActive ? C.ac : "transparent"}`,
-                  background: isActive ? "#fff7ed" : "transparent",
-                  color: isActive ? C.ac : C.t3,
-                  fontFamily: F.sans,
-                  fontSize: 10,
-                  fontWeight: isActive ? 700 : 400,
-                  cursor: "pointer",
-                  padding: "10px 0 8px",
-                  minHeight: 58,
-                  transition: "background .15s, color .15s",
-                }}
-              >
-                <Ico n={icon} s={20} />
-                {label}
-              </button>
-            );
-          })}
-          {/* Logout at end of bottom nav */}
-          <button
-            onClick={() => {
-              addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" });
-              handleLogout(session);
-            }}
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
-              border: "none",
-              borderTop: "2px solid transparent",
-              borderLeft: `1px solid ${C.b1}`,
-              background: "transparent",
-              color: C.re,
-              fontFamily: F.sans,
-              fontSize: 10,
-              fontWeight: 400,
-              cursor: "pointer",
-              padding: "10px 0 8px",
-              minHeight: 58,
-            }}
-          >
-            <Ico n="logout" s={20} />
-            Logout
-          </button>
-        </div>
-      )}
-      <ToastHost />
-    </div>
-    </MobileMenuCtx.Provider>
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <MobileMenuCtx.Provider value={() => setMobileDrawerOpen(true)}>
+        <Box sx={{ display: "flex", height: "100vh", overflow: "hidden", bgcolor: "background.default", color: "text.primary" }}>
+          {/* Desktop Sidebar */}
+          {!isMobile && (
+            <Sidebar
+              session={session} view={view} setView={setView} modules={modules}
+              selMod={selMod}
+              setSelMod={id => {
+                if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
+                setSelMod(id); setView("mod");
+              }}
+              collapsed={sideColl} setCollapsed={setSideColl}
+              locked={session.role !== "admin" && hasLock}
+              onLogout={() => { addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" }); handleLogout(session); }}
+            />
+          )}
+
+          {/* Mobile Drawer */}
+          {isMobile && (
+            <Sidebar
+              session={session} view={view}
+              setView={v => { setView(v); setMobileDrawerOpen(false); }}
+              modules={modules} selMod={selMod}
+              setSelMod={id => {
+                if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
+                setSelMod(id); setView("mod"); setMobileDrawerOpen(false);
+              }}
+              collapsed={false} setCollapsed={() => {}}
+              locked={session.role !== "admin" && hasLock}
+              mobileOpen={mobileDrawerOpen} onMobileClose={() => setMobileDrawerOpen(false)}
+              onLogout={() => { addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" }); handleLogout(session); }}
+            />
+          )}
+
+          {/* Main Content */}
+          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0,
+            pb: isMobile ? "calc(58px + env(safe-area-inset-bottom, 0px))" : 0 }}>
+            <AnimatePresence mode="wait">
+              {view === "dash" && (
+                <Dashboard key="dash" modules={modules} session={session}
+                  onSelect={id => {
+                    if (session.role !== "admin" && hasLock) { toast("Finish the current test first", "error"); return; }
+                    setSelMod(id); setView("mod");
+                  }}
+                  saveMods={saveMods} addLog={addLog} toast={toast}
+                />
+              )}
+              {view === "mod" && selMod && modules[selMod] && (
+                <ModuleView key={selMod} mod={modules[selMod]} allModules={modules} session={session}
+                  saveMods={saveMods} addLog={addLog} toast={toast}
+                  onLockChange={locked => setHasLock(locked)}
+                  onNav={dir => { if (hasLock) return; const nk = modKeys[modIdx + dir]; if (nk) setSelMod(nk); }}
+                  modIdx={modIdx} modTotal={modKeys.length}
+                />
+              )}
+              {view === "report" && <ReportView key="report" modules={modules} toast={toast} />}
+              {view === "users" && session.role === "admin" && (
+                <UsersPanel key="users" users={users} session={session} saveUsers={saveUsers} addLog={addLog} toast={toast} />
+              )}
+              {view === "audit" && session.role === "admin" && (
+                <AuditView key="audit" log={log} />
+              )}
+            </AnimatePresence>
+          </Box>
+
+          {/* Mobile Bottom Navigation */}
+          {isMobile && (
+            <Paper elevation={0} sx={{
+              position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
+              bgcolor: "rgba(255,255,255,0.88)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+              borderTop: `1px solid rgba(221,226,234,0.6)`, boxShadow: "0 -2px 20px rgba(0,0,0,.07)",
+              pb: "env(safe-area-inset-bottom, 0px)",
+            }}>
+              <BottomNavigation value={currentMobileNavVal} showLabels
+                sx={{ bgcolor: "transparent", height: 58 }}
+                onChange={(_, newVal) => {
+                  if (newVal === "_modules") { setMobileDrawerOpen(true); return; }
+                  if (session.role !== "admin" && hasLock && newVal !== view) { toast("Finish the current test first", "error"); return; }
+                  setView(newVal);
+                }}>
+                {mobileNavItems.map(item => (
+                  <BottomNavigationAction key={item.id} value={item.id} label={item.label}
+                    icon={<Ico n={item.icon} s={20} />}
+                    sx={{
+                      color: currentMobileNavVal === item.id ? "primary.main" : "text.disabled",
+                      fontFamily: MONO, fontSize: 10, minWidth: 0,
+                      "& .MuiBottomNavigationAction-label": { fontSize: "10px !important", fontFamily: MONO, fontWeight: currentMobileNavVal === item.id ? 700 : 400 },
+                      "&.Mui-selected": { color: "primary.main" },
+                    }}
+                  />
+                ))}
+                <BottomNavigationAction label="Logout" value="_logout"
+                  icon={<Ico n="logout" s={20} color={C.re} />}
+                  onClick={() => { addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" }); handleLogout(session); }}
+                  sx={{ color: "error.main", minWidth: 0, borderLeft: `1px solid ${C.b1}`,
+                    "& .MuiBottomNavigationAction-label": { fontSize: "10px !important", fontFamily: MONO, color: "error.main" } }}
+                />
+              </BottomNavigation>
+            </Paper>
+          )}
+
+          <ToastHost />
+        </Box>
+      </MobileMenuCtx.Provider>
+    </ThemeProvider>
   );
 }
