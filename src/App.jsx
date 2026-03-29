@@ -3977,72 +3977,218 @@ function AuditView({ log }) {
 }
 
 // ── Users Panel ────────────────────────────────────────────────────────────────
-function UsersPanel({ users, session, saveUsers, addLog, toast }) {
-  const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({
-    name: "",
-    username: "",
-    email: "",
-    password: "",
-    role: "tester",
-    active: true,
-  });
-  const [search, setSearch] = useState("");
-  const [confirm, setConfirm] = useState(null);
 
-  const filtered = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.username.toLowerCase().includes(search.toLowerCase()) ||
-      (u.email || "").toLowerCase().includes(search.toLowerCase())
+// Avatar with name-based colour variation
+function UserAvatar({ name, size = 44 }) {
+  const palettes = [
+    ["#dbeafe", "#1d4ed8"],
+    ["#dcfce7", "#15803d"],
+    ["#fef3c7", "#b45309"],
+    ["#fce7f3", "#be185d"],
+    ["#ede9fe", "#6d28d9"],
+    ["#ffedd5", "#c2410c"],
+  ];
+  const [bg, fg] = palettes[name.charCodeAt(0) % palettes.length];
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        flexShrink: 0,
+        background: `linear-gradient(135deg,${bg},${bg}cc)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: Math.round(size * 0.36),
+        fontWeight: 700,
+        color: fg,
+        border: `1.5px solid ${fg}33`,
+        letterSpacing: -0.5,
+      }}
+    >
+      {name[0].toUpperCase()}
+    </div>
   );
+}
+
+// Animated bottom-sheet used on mobile for forms and confirmations
+function BottomSheet({ open, onClose, title, sub, children }) {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  if (!open) return null;
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 900,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex", alignItems: "flex-end",
+        WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)",
+      }}
+    >
+      <div
+        style={{
+          width: "100%", maxHeight: "92dvh",
+          background: C.s1, borderRadius: "20px 20px 0 0",
+          overflow: "hidden", display: "flex", flexDirection: "column",
+          boxShadow: "0 -8px 40px rgba(0,0,0,0.18)",
+          animation: "bsSlideUp 0.25s cubic-bezier(.32,1,.5,1) both",
+        }}
+      >
+        <style>{`@keyframes bsSlideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
+        {/* drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: C.b2 }} />
+        </div>
+        {/* header */}
+        <div style={{ padding: "8px 20px 14px", borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.t1 }}>{title}</div>
+            {sub && <div style={{ fontSize: 13, color: C.t3, marginTop: 2 }}>{sub}</div>}
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: C.s3, border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.t2, flexShrink: 0 }}
+          >
+            <Ico n="x" s={16} />
+          </button>
+        </div>
+        {/* body */}
+        <div style={{ overflowY: "auto", padding: 20, flex: 1, WebkitOverflowScrolling: "touch" }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Floating action button (mobile Add User)
+function UsersFAB({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        position: "fixed",
+        bottom: "calc(70px + env(safe-area-inset-bottom, 0px))",
+        right: 20, zIndex: 300,
+        background: C.ac, color: "#fff",
+        border: "none", borderRadius: 50,
+        height: 52, paddingLeft: 16, paddingRight: 20,
+        display: "flex", alignItems: "center", gap: 8,
+        fontFamily: F.sans, fontSize: 15, fontWeight: 600,
+        cursor: "pointer",
+        boxShadow: "0 4px 20px rgba(0,112,243,0.4)",
+        WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+        transition: "transform .1s",
+      }}
+      onTouchStart={(e) => { e.currentTarget.style.transform = "scale(0.96)"; }}
+      onTouchEnd={(e)   => { e.currentTarget.style.transform = "scale(1)"; }}
+    >
+      <Ico n="plus" s={20} /> Add User
+    </button>
+  );
+}
+
+// Shared add/edit form used inside both Modal (desktop) and BottomSheet (mobile)
+function UserFormFields({ form, setForm, isAdd, onSave, onClose }) {
+  return (
+    <>
+      <Field label="Full Name">
+        <input style={inputSty} value={form.name} autoFocus placeholder="e.g. Jane Smith"
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+      </Field>
+      <Field label="Username">
+        <input style={inputSty} value={form.username} autoCapitalize="none" autoCorrect="off" placeholder="e.g. janesmith"
+          onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
+      </Field>
+      <Field label="Email (optional)">
+        <input style={inputSty} value={form.email} type="email" placeholder="e.g. jane@company.com"
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+      </Field>
+      <Field label="Password">
+        <input style={inputSty} type="password" value={form.password} placeholder="Min. 6 characters"
+          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
+      </Field>
+      <Field label="Role">
+        <select
+          style={{
+            ...inputSty, appearance: "none", WebkitAppearance: "none",
+            backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+            backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center",
+          }}
+          value={form.role}
+          onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+        >
+          <option value="tester">Tester</option>
+          <option value="admin">Admin</option>
+        </select>
+      </Field>
+      <ModalActions>
+        <button style={btn()} onClick={onClose}>Cancel</button>
+        <button
+          style={{ ...acBtn(), flex: 1, justifyContent: "center", padding: "10px 16px", fontSize: 14, borderRadius: 9 }}
+          onClick={onSave}
+        >
+          {isAdd ? "Create User" : "Save Changes"}
+        </button>
+      </ModalActions>
+    </>
+  );
+}
+
+function UsersPanel({ users, session, saveUsers, addLog, toast }) {
+  const isMobile = useIsMobile();
+  const [modal,   setModal]   = useState(null);   // null | "add" | userObj
+  const [form,    setForm]    = useState({ name: "", username: "", email: "", password: "", role: "tester", active: true });
+  const [search,  setSearch]  = useState("");
+  const [confirm, setConfirm] = useState(null);
+  const [filterRole,   setFilterRole]   = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  const totalActive  = users.filter((u) => u.active).length;
+  const totalAdmins  = users.filter((u) => u.role === "admin").length;
+  const totalTesters = users.filter((u) => u.role === "tester").length;
+
+  const filtered = users.filter((u) => {
+    const q = search.toLowerCase();
+    const matchSearch =
+      u.name.toLowerCase().includes(q) ||
+      u.username.toLowerCase().includes(q) ||
+      (u.email || "").toLowerCase().includes(q);
+    const matchRole   = filterRole   === "all" || u.role === filterRole;
+    const matchStatus = filterStatus === "all" || (filterStatus === "active" ? u.active : !u.active);
+    return matchSearch && matchRole && matchStatus;
+  });
+
   const openAdd = () => {
-    setForm({
-      name: "",
-      username: "",
-      email: "",
-      password: "",
-      role: "tester",
-      active: true,
-    });
+    setForm({ name: "", username: "", email: "", password: "", role: "tester", active: true });
     setModal("add");
   };
-  const openEdit = (u) => {
-    setForm({ ...u });
-    setModal(u);
-  };
+  const openEdit = (u) => { setForm({ ...u }); setModal(u); };
 
   const save = () => {
     if (!form.name.trim() || !form.username.trim() || !form.password.trim()) {
-      toast("Name, username & password required", "error");
-      return;
+      toast("Name, username & password required", "error"); return;
     }
-    if (
-      modal === "add" &&
-      users.find((u) => u.username === form.username.trim())
-    ) {
-      toast("Username already exists", "error");
-      return;
+    if (modal === "add" && users.find((u) => u.username === form.username.trim())) {
+      toast("Username already exists", "error"); return;
     }
     const updated =
       modal === "add"
-        ? [...users, { ...form, id: `new_${Date.now()}` }]  // temp id — replaced by Supabase UUID in saveUsers
+        ? [...users, { ...form, id: `new_${Date.now()}` }]
         : users.map((u) => (u.id === form.id ? { ...form } : u));
     saveUsers(updated);
     setModal(null);
-    toast(
-      modal === "add"
-        ? `User "${form.name}" created`
-        : `"${form.name}" updated`,
-      "success"
-    );
+    toast(modal === "add" ? `User "${form.name}" created` : `"${form.name}" updated`, "success");
     addLog({
-      ts: Date.now(),
-      user: session.name,
-      action:
-        modal === "add"
-          ? `Created user "${form.name}" (${form.role})`
-          : `Updated user "${form.name}"`,
+      ts: Date.now(), user: session.name,
+      action: modal === "add" ? `Created user "${form.name}" (${form.role})` : `Updated user "${form.name}"`,
       type: "info",
     });
   };
@@ -4051,234 +4197,244 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
     saveUsers(users.filter((x) => x.id !== u.id));
     toast(`"${u.name}" deleted`, "info");
     setConfirm(null);
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Deleted user "${u.name}"`,
-      type: "info",
-    });
+    addLog({ ts: Date.now(), user: session.name, action: `Deleted user "${u.name}"`, type: "info" });
   };
+
   const toggle = (u) => {
     if (u.id === session.id) return;
-    saveUsers(
-      users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x))
-    );
+    saveUsers(users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x)));
     toast(`${u.name} ${u.active ? "deactivated" : "activated"}`, "info");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`,
-      type: "info",
-    });
+    addLog({ ts: Date.now(), user: session.name, action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`, type: "info" });
   };
+
+  const isModalAdd = modal === "add";
+
+  // ── Filter chip ────────────────────────────────────────────────────────────
+  const Chip = ({ label, active, onClick }) => (
+    <button onClick={onClick} style={{
+      padding: "6px 14px", borderRadius: 20, flexShrink: 0,
+      border: active ? `1.5px solid ${C.ac}` : `1px solid ${C.b2}`,
+      background: active ? "#eff6ff" : C.s1,
+      color: active ? C.ac : C.t2,
+      fontFamily: F.sans, fontSize: 12, fontWeight: active ? 600 : 400,
+      cursor: "pointer", transition: "all .15s",
+      WebkitTapHighlightColor: "transparent",
+    }}>
+      {label}
+    </button>
+  );
+
+  // ── Stat pill (mobile) ─────────────────────────────────────────────────────
+  const StatPill = ({ label, value, color }) => (
+    <div style={{
+      background: C.s1, border: `1px solid ${C.b1}`, borderRadius: 12,
+      padding: "10px 14px", flex: 1, textAlign: "center", minWidth: 0,
+    }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || C.t1, fontFamily: F.mono }}>{value}</div>
+      <div style={{ fontSize: 10, color: C.t3, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
+    </div>
+  );
 
   return (
     <>
-      <Topbar
-        title="User Management"
-        sub={`${users.length} users · ${
-          users.filter((u) => u.active).length
-        } active`}
-      >
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder="Search users…"
-          width={190}
-        />
-        <button style={acBtn(smBtn())} onClick={openAdd}>
-          <Ico n="plus" s={13} /> Add User
-        </button>
+      {/* ── Topbar ── */}
+      <Topbar title="User Management" sub={`${users.length} users · ${totalActive} active`}>
+        {!isMobile && (
+          <>
+            <SearchBox value={search} onChange={setSearch} placeholder="Search users…" width={190} />
+            <button style={acBtn(smBtn())} onClick={openAdd}>
+              <Ico n="plus" s={13} /> Add User
+            </button>
+          </>
+        )}
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-        <div style={{ display: "grid", gap: 10 }}>
-          {filtered.map((u) => (
-            <div
-              key={u.id}
-              style={{
-                background: C.s1,
-                border: `1px solid ${C.b1}`,
-                borderRadius: 10,
-                padding: "14px 18px",
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-              }}
-            >
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: "50%",
-                  flexShrink: 0,
-                  background: "linear-gradient(135deg,#dbeafe,#bfdbfe)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontFamily: F.mono,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: C.ac,
-                  border: `1px solid ${C.b1}`,
-                }}
-              >
-                {u.name[0].toUpperCase()}
+
+      {/* ── Body ── */}
+      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+
+        {/* Mobile: stats + search + filter chips */}
+        {isMobile && (
+          <div style={{ padding: "16px 16px 0" }}>
+            {/* Stats */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <StatPill label="Total"   value={users.length}  />
+              <StatPill label="Active"  value={totalActive}   color={C.gr} />
+              <StatPill label="Admins"  value={totalAdmins}   color={C.ac} />
+              <StatPill label="Testers" value={totalTesters}  color={C.am} />
+            </div>
+            {/* Search */}
+            <div style={{ position: "relative", marginBottom: 12 }}>
+              <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.t3, pointerEvents: "none" }}>
+                <Ico n="search" s={15} />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{u.name}</div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: C.t2,
-                    fontFamily: F.mono,
-                    marginTop: 2,
-                  }}
-                >
-                  {u.username}
-                  {u.email ? ` · ${u.email}` : ""}
+              <input
+                value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, username or email…"
+                style={{ ...inputSty, paddingLeft: 38, borderRadius: 10, fontSize: 15, height: 44 }}
+              />
+            </div>
+            {/* Filter chips */}
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 12 }}>
+              <Chip label="All"      active={filterRole === "all" && filterStatus === "all"} onClick={() => { setFilterRole("all"); setFilterStatus("all"); }} />
+              <Chip label="Admins"   active={filterRole === "admin"}    onClick={() => setFilterRole(filterRole === "admin"   ? "all" : "admin")} />
+              <Chip label="Testers"  active={filterRole === "tester"}   onClick={() => setFilterRole(filterRole === "tester"  ? "all" : "tester")} />
+              <Chip label="Active"   active={filterStatus === "active"} onClick={() => setFilterStatus(filterStatus === "active"   ? "all" : "active")} />
+              <Chip label="Inactive" active={filterStatus === "inactive"} onClick={() => setFilterStatus(filterStatus === "inactive" ? "all" : "inactive")} />
+            </div>
+          </div>
+        )}
+
+        {/* User list */}
+        <div style={{ padding: isMobile ? "0 16px 100px" : 20, display: "grid", gap: 10 }}>
+          {filtered.length === 0 && (
+            <div style={{ textAlign: "center", padding: 48, color: C.t3, fontFamily: F.mono, fontSize: 13 }}>
+              <Ico n="users" s={28} />
+              <div style={{ marginTop: 12 }}>No users found.</div>
+            </div>
+          )}
+
+          {filtered.map((u) => {
+            const isSelf = u.id === session.id;
+
+            // ── Mobile card ──────────────────────────────────────────────────
+            if (isMobile) return (
+              <div key={u.id} style={{
+                background: C.s1, border: `1px solid ${C.b1}`,
+                borderRadius: 14, padding: 16,
+                display: "flex", flexDirection: "column", gap: 12,
+                boxShadow: "0 1px 4px rgba(0,0,0,.04)",
+              }}>
+                {/* Top: avatar + name + badges */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <UserAvatar name={u.name} size={48} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: C.t1 }}>{u.name}</span>
+                      {isSelf && (
+                        <span style={{ fontSize: 9, fontFamily: F.mono, background: "#f3f0ff", color: "#7c3aed", padding: "2px 8px", borderRadius: 20, fontWeight: 700, textTransform: "uppercase", border: "1px solid #ede9fe" }}>You</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.t2, fontFamily: F.mono, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      @{u.username}{u.email ? ` · ${u.email}` : ""}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      <Badge type={u.role} />
+                      <Badge type={u.active ? "active" : "inactive"} />
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <Badge type={u.role} />
-                  <Badge type={u.active ? "active" : "inactive"} />
-                  {u.id === session.id && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontFamily: F.mono,
-                        background: "#f3f0ff",
-                        color: "#7c3aed",
-                        padding: "2px 9px",
-                        borderRadius: 20,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        border: "1px solid #ede9fe",
-                      }}
-                    >
-                      You
-                    </span>
+                {/* Bottom: toggle + actions */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${C.b1}`, paddingTop: 10, gap: 8 }}>
+                  {!isSelf ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => toggle(u)}>
+                      <Toggle on={u.active} onClick={() => toggle(u)} />
+                      <span style={{ fontSize: 12, color: C.t2, fontFamily: F.mono }}>{u.active ? "Active" : "Inactive"}</span>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 12, color: C.t3, fontFamily: F.mono }}>Current session</span>
+                  )}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={{ ...smBtn(), padding: "8px 14px", fontSize: 13, borderRadius: 9, display: "flex", alignItems: "center", gap: 6 }} onClick={() => openEdit(u)}>
+                      <Ico n="edit" s={14} /> Edit
+                    </button>
+                    {!isSelf && (
+                      <button style={{ ...reBtn(smBtn()), padding: "8px 14px", fontSize: 13, borderRadius: 9, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setConfirm(u)}>
+                        <Ico n="trash" s={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+
+            // ── Desktop row (unchanged) ──────────────────────────────────────
+            return (
+              <div key={u.id} style={{ background: C.s1, border: `1px solid ${C.b1}`, borderRadius: 10, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+                <UserAvatar name={u.name} size={40} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{u.name}</div>
+                  <div style={{ fontSize: 11, color: C.t2, fontFamily: F.mono, marginTop: 2 }}>
+                    {u.username}{u.email ? ` · ${u.email}` : ""}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <Badge type={u.role} />
+                    <Badge type={u.active ? "active" : "inactive"} />
+                    {isSelf && (
+                      <span style={{ fontSize: 10, fontFamily: F.mono, background: "#f3f0ff", color: "#7c3aed", padding: "2px 9px", borderRadius: 20, fontWeight: 700, textTransform: "uppercase", border: "1px solid #ede9fe" }}>You</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {!isSelf && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Toggle on={u.active} onClick={() => toggle(u)} />
+                      <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}>{u.active ? "Active" : "Off"}</span>
+                    </div>
+                  )}
+                  <button style={smBtn()} onClick={() => openEdit(u)}>
+                    <Ico n="edit" s={12} /> Edit
+                  </button>
+                  {!isSelf && (
+                    <button style={reBtn(smBtn())} onClick={() => setConfirm(u)}>
+                      <Ico n="trash" s={12} />
+                    </button>
                   )}
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {u.id !== session.id && (
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <Toggle on={u.active} onClick={() => toggle(u)} />
-                    <span
-                      style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}
-                    >
-                      {u.active ? "Active" : "Off"}
-                    </span>
-                  </div>
-                )}
-                <button style={smBtn()} onClick={() => openEdit(u)}>
-                  <Ico n="edit" s={12} /> Edit
-                </button>
-                {u.id !== session.id && (
-                  <button style={reBtn(smBtn())} onClick={() => setConfirm(u)}>
-                    <Ico n="trash" s={12} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: 40,
-                color: C.t3,
-                fontFamily: F.mono,
-                fontSize: 12,
-              }}
-            >
-              No users found.
-            </div>
-          )}
+            );
+          })}
         </div>
       </div>
 
-      {modal && (
-        <Modal
-          title={modal === "add" ? "Add User" : "Edit User"}
-          sub={
-            modal === "add" ? "Create a new account" : `Editing ${form.name}`
-          }
-          onClose={() => setModal(null)}
-        >
-          <Field label="Full Name">
-            <input
-              style={inputSty}
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              autoFocus
-            />
-          </Field>
-          <Field label="Username">
-            <input
-              style={inputSty}
-              value={form.username}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, username: e.target.value }))
-              }
-            />
-          </Field>
-          <Field label="Email (optional)">
-            <input
-              style={inputSty}
-              value={form.email}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, email: e.target.value }))
-              }
-            />
-          </Field>
-          <Field label="Password">
-            <input
-              style={inputSty}
-              type="password"
-              value={form.password}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, password: e.target.value }))
-              }
-            />
-          </Field>
-          <Field label="Role">
-            <select
-              style={{ ...inputSty, appearance: "none" }}
-              value={form.role}
-              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            >
-              <option value="tester">Tester</option>
-              <option value="admin">Admin</option>
-            </select>
-          </Field>
+      {/* FAB — mobile only */}
+      {isMobile && <UsersFAB onClick={openAdd} />}
+
+      {/* ── Add / Edit — Desktop Modal ── */}
+      {!isMobile && modal && (
+        <Modal title={isModalAdd ? "Add User" : "Edit User"} sub={isModalAdd ? "Create a new account" : `Editing ${form.name}`} onClose={() => setModal(null)}>
+          <UserFormFields form={form} setForm={setForm} isAdd={isModalAdd} onSave={save} onClose={() => setModal(null)} />
+        </Modal>
+      )}
+
+      {/* ── Add / Edit — Mobile Bottom Sheet ── */}
+      {isMobile && (
+        <BottomSheet open={!!modal} onClose={() => setModal(null)} title={isModalAdd ? "Add User" : "Edit User"} sub={isModalAdd ? "Create a new account" : `Editing ${form.name}`}>
+          <UserFormFields form={form} setForm={setForm} isAdd={isModalAdd} onSave={save} onClose={() => setModal(null)} />
+        </BottomSheet>
+      )}
+
+      {/* ── Delete confirm — Desktop Modal ── */}
+      {!isMobile && confirm && (
+        <Modal title="Delete User?" sub={`Delete "${confirm.name}"? This cannot be undone.`} onClose={() => setConfirm(null)} width={360}>
           <ModalActions>
-            <button style={btn()} onClick={() => setModal(null)}>
-              Cancel
-            </button>
-            <button style={acBtn()} onClick={save}>
-              {modal === "add" ? "Create User" : "Save Changes"}
-            </button>
+            <button style={btn()} onClick={() => setConfirm(null)}>Cancel</button>
+            <button style={reBtn()} onClick={() => del(confirm)}><Ico n="trash" s={12} /> Delete</button>
           </ModalActions>
         </Modal>
       )}
-      {confirm && (
-        <Modal
-          title="Delete User?"
-          sub={`Delete "${confirm.name}"? This cannot be undone.`}
-          onClose={() => setConfirm(null)}
-          width={360}
-        >
-          <ModalActions>
-            <button style={btn()} onClick={() => setConfirm(null)}>
-              Cancel
-            </button>
-            <button style={reBtn()} onClick={() => del(confirm)}>
-              <Ico n="trash" s={12} /> Delete
-            </button>
-          </ModalActions>
-        </Modal>
+
+      {/* ── Delete confirm — Mobile Bottom Sheet ── */}
+      {isMobile && (
+        <BottomSheet open={!!confirm} onClose={() => setConfirm(null)} title="Delete User?" sub={confirm ? `This will permanently remove "${confirm.name}".` : ""}>
+          {confirm && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.s2, borderRadius: 12, padding: 14 }}>
+                <UserAvatar name={confirm.name} size={44} />
+                <div>
+                  <div style={{ fontWeight: 600, color: C.t1 }}>{confirm.name}</div>
+                  <div style={{ fontSize: 12, color: C.t3, fontFamily: F.mono }}>@{confirm.username}</div>
+                </div>
+              </div>
+              <p style={{ fontSize: 14, color: C.t2, lineHeight: 1.5 }}>This action cannot be undone. The user will lose access immediately.</p>
+              <button style={{ ...reBtn(), width: "100%", justifyContent: "center", padding: "13px 16px", fontSize: 15, borderRadius: 12, fontWeight: 600 }} onClick={() => del(confirm)}>
+                <Ico n="trash" s={16} /> Delete {confirm.name}
+              </button>
+              <button style={{ ...btn(), width: "100%", justifyContent: "center", padding: "13px 16px", fontSize: 15, borderRadius: 12 }} onClick={() => setConfirm(null)}>
+                Cancel
+              </button>
+            </div>
+          )}
+        </BottomSheet>
       )}
     </>
   );
