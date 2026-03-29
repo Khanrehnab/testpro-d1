@@ -318,6 +318,7 @@ const store = {
   },
 };
 
+
 // ── Test Lock System (Supabase-backed, TTL + Heartbeat) ───────────────────────
 //
 // Strategy:
@@ -488,229 +489,129 @@ function buildModules() {
 
 // ── Design Tokens — Orange Theme ───────────────────────────────────────────────
 const C = {
-  bg: "#fdf5ee",
-  s1: "#ffffff",
-  s2: "#fef9f5",
-  s3: "#fdf0e6",
-  b1: "#f5dece",
-  b2: "#ecc9a8",
-  ac: "#ea580c",
-  gr: "#16a34a",
-  re: "#dc2626",
-  am: "#d97706",
-  t1: "#1c0f07",
-  t2: "#57534e",
-  t3: "#a8a29e",
-  grd: "rgba(22,163,74,0.10)",
-  red: "rgba(220,38,38,0.10)",
-  amd: "rgba(217,119,6,0.10)",
-  acd: "rgba(234,88,12,0.10)",
+
+// ── Design Tokens — Dark Mission Control ──────────────────────────────────────
+const C = {
+  bg:  "#070b12",
+  s1:  "#0c1220",
+  s2:  "#101828",
+  s3:  "#162136",
+  b1:  "rgba(30,50,80,0.7)",
+  b2:  "rgba(40,65,100,0.9)",
+  ac:  "#38bdf8",   // sky-400
+  gr:  "#34d399",   // emerald-400
+  re:  "#fb7185",   // rose-400
+  am:  "#fbbf24",   // amber-400
+  t1:  "#e2e8f0",   // slate-200
+  t2:  "#94a3b8",   // slate-400
+  t3:  "#475569",   // slate-600
+  grd: "rgba(52,211,153,0.09)",
+  red: "rgba(251,113,133,0.09)",
+  amd: "rgba(251,191,36,0.09)",
+  acd: "rgba(56,189,248,0.09)",
 };
 
-// ── Style Helpers ──────────────────────────────────────────────────────────────
 const F = {
-  sans: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
-  mono: "'SF Mono','Fira Code','Fira Mono',monospace",
+  sans: "'Plus Jakarta Sans', -apple-system, sans-serif",
+  mono: "'IBM Plex Mono', 'SF Mono', monospace",
+  head: "'Syne', 'Plus Jakarta Sans', sans-serif",
 };
-// ── Mobile detection ───────────────────────────────────────────────────────────
+
+// ── Mobile detection ──────────────────────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
   const [mobile, setMobile] = useState(() => window.innerWidth < breakpoint);
   useEffect(() => {
-    const handler = () => setMobile(window.innerWidth < breakpoint);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
+    const h = () => setMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
   }, [breakpoint]);
   return mobile;
 }
 
-// ── Mobile menu context — avoids prop-drilling onMenuClick to every Topbar ──────
 const MobileMenuCtx = React.createContext(null);
 
+// ── Style Helpers ─────────────────────────────────────────────────────────────
 const btn = (x = {}) => ({
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  padding: "6px 13px",
-  borderRadius: 7,
-  border: `1px solid ${C.b2}`,
-  background: C.s1,
-  color: C.t2,
-  fontFamily: F.sans,
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-  lineHeight: 1,
-  ...x,
+  display: "inline-flex", alignItems: "center", gap: 6,
+  padding: "6px 14px", borderRadius: 8,
+  border: `1px solid ${C.b2}`, background: C.s2,
+  color: C.t2, fontFamily: F.sans, fontSize: 12,
+  fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap",
+  flexShrink: 0, lineHeight: 1, transition: "all .15s", ...x,
 });
-const acBtn = (x = {}) =>
-  btn({ background: "#fff7ed", borderColor: "#fed7aa", color: C.ac, ...x });
-const grBtn = (x = {}) =>
-  btn({ background: C.grd, borderColor: "#bbf7d0", color: C.gr, ...x });
-const reBtn = (x = {}) =>
-  btn({ background: C.red, borderColor: "#fecaca", color: C.re, ...x });
-const amBtn = (x = {}) =>
-  btn({ background: C.amd, borderColor: "#fde68a", color: C.am, ...x });
+const acBtn = (x = {}) => btn({ background: "rgba(56,189,248,0.1)", borderColor: "rgba(56,189,248,0.35)", color: C.ac, ...x });
+const grBtn = (x = {}) => btn({ background: "rgba(52,211,153,0.1)", borderColor: "rgba(52,211,153,0.35)", color: C.gr, ...x });
+const reBtn = (x = {}) => btn({ background: "rgba(251,113,133,0.1)", borderColor: "rgba(251,113,133,0.35)", color: C.re, ...x });
+const amBtn = (x = {}) => btn({ background: "rgba(251,191,36,0.1)",  borderColor: "rgba(251,191,36,0.35)",  color: C.am, ...x });
 const smBtn = (x = {}) => btn({ padding: "4px 10px", fontSize: 11, ...x });
-const iBtn = (x = {}) =>
-  btn({
-    padding: "5px 7px",
-    border: "none",
-    background: "transparent",
-    color: C.t3,
-    ...x,
-  });
+const iBtn  = (x = {}) => btn({ padding: "5px 7px", border: "none", background: "transparent", color: C.t3, ...x });
 
-// ── Icons ──────────────────────────────────────────────────────────────────────
+// ── Icons ─────────────────────────────────────────────────────────────────────
 const PATHS = {
-  check: [["M20 6 9 17 4 12"]],
-  x: [["M18 6 6 18"], ["M6 6l12 12"]],
-  upload: [
-    ["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"],
-    ["M17 8l-5-5-5 5"],
-    ["M12 3v12"],
-  ],
-  logout: [
-    ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"],
-    ["M16 17l5-5-5-5"],
-    ["M21 12H9"],
-  ],
-  grid: [
-    ["M3 3h7v7H3z"],
-    ["M14 3h7v7h-7z"],
-    ["M14 14h7v7h-7z"],
-    ["M3 14h7v7H3z"],
-  ],
-  edit: [
-    ["M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"],
-    ["M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"],
-  ],
-  trash: [
-    ["M3 6h18"],
-    ["M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"],
-    ["M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"],
-  ],
-  plus: [["M12 5v14"], ["M5 12h14"]],
-  search: [["M11 11m-6 0a6 6 0 1 0 12 0 6 6 0 0 0-12 0"], ["M21 21l-3.5-3.5"]],
-  dash: [["M22 12h-4l-3 9L9 3l-3 9H2"]],
-  report: [
-    ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],
-    ["M14 2v6h6"],
-    ["M16 13H8"],
-    ["M16 17H8"],
-  ],
-  users: [
-    ["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"],
-    ["M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0"],
-    ["M23 21v-2a4 4 0 0 0-3-3.87"],
-    ["M16 3.13a4 4 0 0 1 0 7.75"],
-  ],
-  log: [
-    [
-      "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z",
-    ],
-    ["M22 6l-10 7L2 6"],
-  ],
-  chevR: [["M9 18l6-6-6-6"]],
-  chevD: [["M6 9l6 6 6-6"]],
-  chevL: [["M15 18l-6-6 6-6"]],
-  reset: [["M1 4v6h6"], ["M3.51 15a9 9 0 1 0 .49-3.2"]],
-  down: [
-    ["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"],
-    ["M7 10l5 5 5-5"],
-    ["M12 15V3"],
-  ],
-  bell: [
-    ["M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"],
-    ["M13.73 21a2 2 0 0 1-3.46 0"],
-  ],
-  lock: [
-    [
-      "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z",
-    ],
-    ["M7 11V7a5 5 0 0 1 10 0v4"],
-  ],
-  layers: [
-    ["M12 2 2 7l10 5 10-5-10-5z"],
-    ["M2 17l10 5 10-5"],
-    ["M2 12l10 5 10-5"],
-  ],
-  file: [
-    ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],
-    ["M14 2v6h6"],
-  ],
-  back: [["M19 12H5"], ["M12 5l-7 7 7 7"]],
+  check:  [["M20 6 9 17 4 12"]],
+  x:      [["M18 6 6 18"], ["M6 6l12 12"]],
+  upload: [["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"],["M17 8l-5-5-5 5"],["M12 3v12"]],
+  logout: [["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"],["M16 17l5-5-5-5"],["M21 12H9"]],
+  grid:   [["M3 3h7v7H3z"],["M14 3h7v7h-7z"],["M14 14h7v7h-7z"],["M3 14h7v7H3z"]],
+  edit:   [["M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"],["M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"]],
+  trash:  [["M3 6h18"],["M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"],["M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"]],
+  plus:   [["M12 5v14"],["M5 12h14"]],
+  search: [["M11 11m-6 0a6 6 0 1 0 12 0 6 6 0 0 0-12 0"],["M21 21l-3.5-3.5"]],
+  dash:   [["M22 12h-4l-3 9L9 3l-3 9H2"]],
+  report: [["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],["M14 2v6h6"],["M16 13H8"],["M16 17H8"]],
+  users:  [["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"],["M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0"],["M23 21v-2a4 4 0 0 0-3-3.87"],["M16 3.13a4 4 0 0 1 0 7.75"]],
+  log:    [["M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"],["M22 6l-10 7L2 6"]],
+  chevR:  [["M9 18l6-6-6-6"]],
+  chevD:  [["M6 9l6 6 6-6"]],
+  chevL:  [["M15 18l-6-6 6-6"]],
+  reset:  [["M1 4v6h6"],["M3.51 15a9 9 0 1 0 .49-3.2"]],
+  down:   [["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"],["M7 10l5 5 5-5"],["M12 15V3"]],
+  bell:   [["M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"],["M13.73 21a2 2 0 0 1-3.46 0"]],
+  lock:   [["M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z"],["M7 11V7a5 5 0 0 1 10 0v4"]],
+  layers: [["M12 2 2 7l10 5 10-5-10-5z"],["M2 17l10 5 10-5"],["M2 12l10 5 10-5"]],
+  file:   [["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],["M14 2v6h6"]],
+  back:   [["M19 12H5"],["M12 5l-7 7 7 7"]],
 };
-
 function Ico({ n, s = 15 }) {
   const paths = PATHS[n] || [["M0 0"]];
   return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ flexShrink: 0 }}
-    >
-      {paths.map((d, i) => (
-        <path key={i} d={d[0]} />
-      ))}
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      {paths.map((d, i) => <path key={i} d={d[0]} />)}
     </svg>
   );
 }
 
-// ── Shared UI ──────────────────────────────────────────────────────────────────
+// ── Shared UI ─────────────────────────────────────────────────────────────────
 function PBar({ pct, fail }) {
   return (
-    <div
-      style={{
-        height: 4,
-        background: C.s3,
-        borderRadius: 2,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          height: "100%",
-          width: `${pct}%`,
-          background: fail ? C.am : C.gr,
-          transition: "width .4s",
-          borderRadius: 2,
-        }}
-      />
+    <div style={{ height: 4, background: C.s3, borderRadius: 2, overflow: "hidden" }}>
+      <div style={{
+        height: "100%", width: `${pct}%`,
+        background: fail ? C.am : C.gr,
+        transition: "width .4s", borderRadius: 2,
+      }} />
     </div>
   );
 }
 
 function Badge({ type }) {
   const map = {
-    admin: { bg: "#fff7ed", color: C.ac },
-    tester: { bg: C.amd, color: C.am },
-    active: { bg: C.grd, color: C.gr },
-    inactive: { bg: C.red, color: C.re },
+    admin:    { bg: "rgba(56,189,248,0.12)",  color: C.ac, border: "rgba(56,189,248,0.3)" },
+    tester:   { bg: "rgba(251,191,36,0.12)",  color: C.am, border: "rgba(251,191,36,0.3)" },
+    active:   { bg: "rgba(52,211,153,0.12)",  color: C.gr, border: "rgba(52,211,153,0.3)" },
+    inactive: { bg: "rgba(251,113,133,0.12)", color: C.re, border: "rgba(251,113,133,0.3)" },
   };
-  const s = map[type] || { bg: C.s3, color: C.t2 };
+  const s = map[type] || { bg: C.s3, color: C.t2, border: C.b1 };
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "2px 9px",
-        borderRadius: 20,
-        fontSize: 10,
-        fontFamily: F.mono,
-        fontWeight: 700,
-        textTransform: "uppercase",
-        background: s.bg,
-        color: s.color,
-      }}
-    >
+    <span style={{
+      display: "inline-flex", alignItems: "center",
+      padding: "2px 9px", borderRadius: 20,
+      fontSize: 10, fontFamily: F.mono, fontWeight: 700,
+      textTransform: "uppercase", letterSpacing: "0.5px",
+      background: s.bg, color: s.color,
+      border: `1px solid ${s.border}`,
+    }}>
       {type}
     </span>
   );
@@ -718,19 +619,12 @@ function Badge({ type }) {
 
 function Chip({ label, color, bg }) {
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 3,
-        padding: "2px 8px",
-        borderRadius: 12,
-        fontSize: 10,
-        fontFamily: F.mono,
-        background: bg,
-        color,
-      }}
-    >
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 3,
+      padding: "2px 8px", borderRadius: 12,
+      fontSize: 10, fontFamily: F.mono,
+      background: bg, color,
+    }}>
       {label}
     </span>
   );
@@ -738,224 +632,123 @@ function Chip({ label, color, bg }) {
 
 function Toggle({ on, onClick }) {
   return (
-    <div
-      onClick={onClick}
-      style={{
-        width: 34,
-        height: 18,
-        borderRadius: 9,
-        background: on ? "#dcfce7" : C.s3,
-        border: `1px solid ${on ? "#86efac" : C.b2}`,
-        position: "relative",
-        cursor: "pointer",
-        flexShrink: 0,
-        transition: "all .2s",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 2,
-          left: on ? 18 : 2,
-          width: 12,
-          height: 12,
-          borderRadius: "50%",
-          background: on ? C.gr : C.t3,
-          transition: "left .2s",
-        }}
-      />
+    <div onClick={onClick} style={{
+      width: 34, height: 18, borderRadius: 9,
+      background: on ? "rgba(52,211,153,0.2)" : C.s3,
+      border: `1px solid ${on ? "rgba(52,211,153,0.5)" : C.b2}`,
+      position: "relative", cursor: "pointer", flexShrink: 0, transition: "all .2s",
+    }}>
+      <div style={{
+        position: "absolute", top: 2, left: on ? 18 : 2,
+        width: 12, height: 12, borderRadius: "50%",
+        background: on ? C.gr : C.t3, transition: "left .2s",
+      }} />
     </div>
   );
 }
 
-// ── Export Menu — dropdown with CSV and PDF options ────────────────────────────
+// ── Export Menu ───────────────────────────────────────────────────────────────
 function ExportMenu({ onCSV, onPDF }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
-
   useEffect(() => {
     if (!open) return;
-    const close = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
-
   return (
     <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
-      <button style={smBtn()} onClick={() => setOpen((o) => !o)}>
-        <Ico n="down" s={12} /> Export{" "}
-        <span style={{ fontSize: 9, marginLeft: 2 }}>▾</span>
+      <button style={smBtn()} onClick={() => setOpen(o => !o)}>
+        <Ico n="down" s={12} /> Export <span style={{ fontSize: 9, marginLeft: 2 }}>▾</span>
       </button>
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            right: 0,
-            background: C.s1,
-            border: `1px solid ${C.b1}`,
-            borderRadius: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,.12)",
-            minWidth: 140,
-            zIndex: 50,
-            overflow: "hidden",
-          }}
-        >
-          <button
-            onClick={() => {
-              onCSV();
-              setOpen(false);
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", right: 0,
+          background: C.s1, border: `1px solid ${C.b2}`,
+          borderRadius: 10, boxShadow: "0 16px 48px rgba(0,0,0,.5)",
+          overflow: "hidden", minWidth: 140, zIndex: 50,
+        }}>
+          {[["CSV export", onCSV], ["PDF / Print", onPDF]].map(([label, fn]) => (
+            <button key={label} onClick={() => { fn(); setOpen(false); }} style={{
+              display: "flex", alignItems: "center", gap: 8,
+              width: "100%", padding: "10px 16px",
+              background: "transparent", border: "none",
+              color: C.t1, fontFamily: F.sans, fontSize: 12,
+              cursor: "pointer", textAlign: "left",
+              borderBottom: `1px solid ${C.b1}`,
+              transition: "background .1s",
             }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "9px 14px",
-              border: "none",
-              background: "transparent",
-              color: C.t1,
-              fontFamily: F.sans,
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = C.s2)}
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "transparent")
-            }
-          >
-            <Ico n="down" s={13} /> Export CSV
-          </button>
-          <div style={{ height: 1, background: C.b1 }} />
-          <button
-            onClick={() => {
-              onPDF();
-              setOpen(false);
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "9px 14px",
-              border: "none",
-              background: "transparent",
-              color: C.t1,
-              fontFamily: F.sans,
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = C.s2)}
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "transparent")
-            }
-          >
-            <Ico n="report" s={13} /> Export PDF
-          </button>
+              onMouseEnter={e => e.currentTarget.style.background = C.s2}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <Ico n={label.startsWith("CSV") ? "file" : "report"} s={13} />
+              {label}
+            </button>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
+// ── Search Box ────────────────────────────────────────────────────────────────
 function SearchBox({ value, onChange, placeholder = "Search…", width = 190 }) {
   return (
-    <div style={{ position: "relative", width }}>
-      <div
-        style={{
-          position: "absolute",
-          left: 10,
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: C.t3,
-          pointerEvents: "none",
-        }}
-      >
-        <Ico n="search" s={13} />
+    <div style={{ position: "relative", flexShrink: 0, width }}>
+      <div style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: C.t3, pointerEvents: "none" }}>
+        <Ico n="search" s={12} />
       </div>
       <input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         style={{
-          padding: "8px 12px 8px 30px",
-          background: C.s1,
-          border: `1px solid ${C.b2}`,
-          borderRadius: 7,
-          color: C.t1,
-          fontFamily: F.sans,
-          fontSize: 13,
-          outline: "none",
-          width: "100%",
-          boxShadow: "inset 0 1px 2px rgba(0,0,0,.04)",
+          width: "100%", padding: "6px 10px 6px 28px",
+          background: C.s2, border: `1px solid ${C.b1}`,
+          borderRadius: 8, color: C.t1,
+          fontFamily: F.mono, fontSize: 11,
+          outline: "none", transition: "border-color .15s",
         }}
       />
     </div>
   );
 }
 
+// ── Topbar ────────────────────────────────────────────────────────────────────
 function Topbar({ title, sub, children }) {
   const isMobile = useIsMobile();
   const onMenuClick = useContext(MobileMenuCtx);
   return (
-    <div
-      style={{
-        minHeight: 58,
-        padding: isMobile ? "10px 14px" : "0 22px",
-        flexShrink: 0,
-        background: "rgba(255,255,255,0.82)",
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
-        borderBottom: `1px solid rgba(221,226,234,0.7)`,
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        boxShadow: "0 1px 3px rgba(0,0,0,.06)",
-      }}
-    >
+    <div style={{
+      minHeight: 56, padding: isMobile ? "10px 14px" : "0 24px",
+      flexShrink: 0, display: "flex", alignItems: "center", gap: 10,
+      background: "rgba(7,11,18,0.85)",
+      backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      borderBottom: `1px solid ${C.b1}`,
+      boxShadow: "0 1px 0 rgba(56,189,248,0.04)",
+    }}>
       {isMobile && onMenuClick && (
-        <button
-          onClick={onMenuClick}
-          style={{ ...iBtn(), padding: "6px 8px", marginLeft: -4, flexShrink: 0 }}
-          title="Menu"
-        >
+        <button onClick={onMenuClick} style={{ ...iBtn(), padding: "6px 8px", marginLeft: -4, flexShrink: 0 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
           </svg>
         </button>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: isMobile ? 15 : 16,
-            fontWeight: 700,
-            color: C.t1,
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
+        <div style={{
+          fontSize: isMobile ? 14 : 16, fontWeight: 700,
+          color: C.t1, fontFamily: F.head,
+          display: "flex", alignItems: "center", gap: 6, overflow: "hidden",
+        }}>
           {title}
         </div>
         {sub && (
-          <div
-            style={{
-              fontSize: 11,
-              color: C.t3,
-              marginTop: 1,
-              fontFamily: F.mono,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <div style={{
+            fontSize: 11, color: C.t3, marginTop: 1,
+            fontFamily: F.mono, overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
             {sub}
           </div>
         )}
@@ -966,62 +759,40 @@ function Topbar({ title, sub, children }) {
 }
 
 const inputSty = {
-  width: "100%",
-  padding: "10px 13px",
-  background: C.s1,
-  border: `1px solid ${C.b2}`,
-  borderRadius: 7,
-  color: C.t1,
-  fontFamily: F.sans,
-  fontSize: 14,
-  outline: "none",
-  boxShadow: `0 1px 2px rgba(0,0,0,.04)`,
+  width: "100%", padding: "10px 14px",
+  background: C.s2, border: `1px solid ${C.b2}`,
+  borderRadius: 8, color: C.t1,
+  fontFamily: F.sans, fontSize: 14, outline: "none",
+  boxShadow: "inset 0 1px 2px rgba(0,0,0,.2)",
+  transition: "border-color .15s",
 };
 
+// ── Modal ─────────────────────────────────────────────────────────────────────
 function Modal({ title, sub, onClose, children, width = 460 }) {
   const isMobile = useIsMobile();
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,.28)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
-        display: "flex",
-        alignItems: isMobile ? "flex-end" : "center",
-        justifyContent: "center",
-        zIndex: 200,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: isMobile ? "100%" : width,
-          background: "rgba(255,255,255,0.92)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          border: `1px solid rgba(221,226,234,0.7)`,
-          borderRadius: isMobile ? "14px 14px 0 0" : 14,
-          padding: isMobile ? "24px 20px" : "28px 30px",
-          boxShadow: "0 8px 40px rgba(0,0,0,.14), 0 1px 0 rgba(255,255,255,.8) inset",
-          maxHeight: isMobile ? "90vh" : "90vh",
-          overflowY: "auto",
-        }}
-      >
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0,
+      background: "rgba(0,0,0,.65)",
+      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+      display: "flex",
+      alignItems: isMobile ? "flex-end" : "center",
+      justifyContent: "center", zIndex: 200,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: isMobile ? "100%" : width,
+        background: C.s1,
+        border: `1px solid ${C.b2}`,
+        borderRadius: isMobile ? "16px 16px 0 0" : 14,
+        padding: isMobile ? "24px 20px" : "28px 30px",
+        boxShadow: "0 24px 80px rgba(0,0,0,.7)",
+        maxHeight: "90vh", overflowY: "auto",
+      }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.t1, fontFamily: F.head, marginBottom: 4 }}>
           {title}
         </div>
         {sub && (
-          <div
-            style={{
-              fontSize: 12,
-              color: C.t2,
-              marginBottom: 20,
-              lineHeight: 1.5,
-            }}
-          >
+          <div style={{ fontSize: 12, color: C.t3, marginBottom: 20, lineHeight: 1.6 }}>
             {sub}
           </div>
         )}
@@ -1032,14 +803,7 @@ function Modal({ title, sub, onClose, children, width = 460 }) {
 }
 function ModalActions({ children }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 8,
-        justifyContent: "flex-end",
-        marginTop: 22,
-      }}
-    >
+    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 24 }}>
       {children}
     </div>
   );
@@ -1047,17 +811,11 @@ function ModalActions({ children }) {
 function Field({ label, children }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <label
-        style={{
-          display: "block",
-          fontSize: 10,
-          fontFamily: F.mono,
-          color: C.t2,
-          textTransform: "uppercase",
-          letterSpacing: "1.2px",
-          marginBottom: 7,
-        }}
-      >
+      <label style={{
+        display: "block", fontSize: 10, fontFamily: F.mono,
+        color: C.t3, textTransform: "uppercase",
+        letterSpacing: "1.2px", marginBottom: 7,
+      }}>
         {label}
       </label>
       {children}
@@ -1065,114 +823,67 @@ function Field({ label, children }) {
   );
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────────────────────
 function useToast() {
   const [list, setList] = useState([]);
   const push = useCallback((msg, type = "info") => {
     const id = Date.now() + Math.random();
-    setList((l) => [...l, { id, msg, type }]);
-    setTimeout(() => setList((l) => l.filter((x) => x.id !== id)), 3000);
+    setList(l => [...l, { id, msg, type }]);
+    setTimeout(() => setList(l => l.filter(x => x.id !== id)), 3000);
   }, []);
   const cols = {
-    success: { bg: "rgba(240,253,244,0.88)", border: "rgba(22,163,74,.35)", color: C.gr },
-    error:   { bg: "rgba(254,242,242,0.88)", border: "rgba(220,38,38,.35)",  color: C.re },
-    info:    { bg: "rgba(255,247,237,0.88)", border: "rgba(234,88,12,.35)",  color: C.ac },
+    success: { bg: "rgba(52,211,153,0.12)",  border: "rgba(52,211,153,0.35)",  color: C.gr },
+    error:   { bg: "rgba(251,113,133,0.12)", border: "rgba(251,113,133,0.35)", color: C.re },
+    info:    { bg: "rgba(56,189,248,0.12)",  border: "rgba(56,189,248,0.35)",  color: C.ac },
   };
   const Host = () => {
     const isMobile = useIsMobile();
     return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: isMobile ? 66 : 20,
-        right: isMobile ? 12 : 20,
-        left: isMobile ? 12 : "auto",
-        zIndex: 999,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        pointerEvents: "none",
-      }}
-    >
-      {list.map((t) => {
-        const c = cols[t.type] || cols.info;
-        return (
-          <div
-            key={t.id}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 10,
-              border: `1px solid ${c.border}`,
-              background: c.bg,
-              backdropFilter: "blur(16px)",
-              WebkitBackdropFilter: "blur(16px)",
-              color: c.color,
-              fontFamily: F.mono,
+      <div style={{
+        position: "fixed", bottom: isMobile ? 70 : 22,
+        right: isMobile ? 12 : 22, left: isMobile ? 12 : "auto",
+        zIndex: 999, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none",
+      }}>
+        {list.map(t => {
+          const c = cols[t.type] || cols.info;
+          return (
+            <div key={t.id} style={{
+              padding: "10px 16px", borderRadius: 10,
+              border: `1px solid ${c.border}`, background: c.bg,
+              backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+              color: c.color, fontFamily: F.mono,
               fontSize: isMobile ? 13 : 12,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              boxShadow: "0 4px 20px rgba(0,0,0,.12)",
-            }}
-          >
-            <Ico n={t.type === "success" ? "check" : t.type === "error" ? "x" : "bell"} s={12} />
-            {t.msg}
-          </div>
-        );
-      })}
-    </div>
+              display: "flex", alignItems: "center", gap: 8,
+              boxShadow: "0 8px 32px rgba(0,0,0,.4)",
+            }}>
+              <Ico n={t.type === "success" ? "check" : t.type === "error" ? "x" : "bell"} s={12} />
+              {t.msg}
+            </div>
+          );
+        })}
+      </div>
     );
   };
   return { push, Host };
 }
 
-// ── Login ──────────────────────────────────────────────────────────────────────
-const LOGIN_KEYFRAMES = `
-@keyframes gradShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-@keyframes orbA {
-  0%   { transform: translate(0px, 0px) scale(1); }
-  33%  { transform: translate(40px, -30px) scale(1.08); }
-  66%  { transform: translate(-20px, 20px) scale(0.95); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-@keyframes orbB {
-  0%   { transform: translate(0px, 0px) scale(1); }
-  33%  { transform: translate(-35px, 25px) scale(1.05); }
-  66%  { transform: translate(25px, -15px) scale(0.97); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-@keyframes orbC {
-  0%   { transform: translate(0px, 0px) scale(1); }
-  50%  { transform: translate(20px, 30px) scale(1.06); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-@keyframes cardFloat {
-  0%   { transform: translateY(0px); }
-  50%  { transform: translateY(-7px); }
-  100% { transform: translateY(0px); }
-}
-@keyframes shimmerSweep {
-  0%   { transform: translateX(-100%) rotate(25deg); opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { transform: translateX(400%) rotate(25deg); opacity: 0; }
-}
-@keyframes borderPulse {
-  0%,100% { opacity: 0.7; }
-  50%      { opacity: 1; }
-}
-@keyframes logoGlow {
-  0%,100% { box-shadow: 0 4px 14px rgba(234,88,12,.30); }
-  50%      { box-shadow: 0 4px 24px rgba(234,88,12,.55), 0 0 0 6px rgba(234,88,12,.08); }
-}
-@keyframes fadeSlideUp {
-  from { opacity: 0; transform: translateY(18px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+// ── Login ─────────────────────────────────────────────────────────────────────
+const LOGIN_KF = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: #070b12; font-family: 'Plus Jakarta Sans', sans-serif; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(30,50,80,0.8); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(40,65,100,0.9); }
+textarea, input, select { font-family: inherit; box-sizing: border-box; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+@keyframes gridScroll { from { transform:translateY(0); } to { transform:translateY(-60px); } }
+@keyframes orb1 { 0%,100% { transform:translate(0,0) scale(1); } 50% { transform:translate(30px,-20px) scale(1.08); } }
+@keyframes orb2 { 0%,100% { transform:translate(0,0) scale(1); } 33% { transform:translate(-25px,18px) scale(1.05); } 66% { transform:translate(18px,-10px) scale(0.97); } }
+@keyframes orb3 { 0%,100% { transform:translate(0,0) scale(1); } 50% { transform:translate(15px,22px) scale(1.06); } }
+@keyframes scanline { 0% { top:-2px; } 100% { top:100%; } }
+@keyframes pulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }
 `;
 
 function LoginPage({ users, onLogin }) {
@@ -1187,825 +898,374 @@ function LoginPage({ users, onLogin }) {
   const pwRef = useRef();
 
   const go = () => {
-    if (!u.trim() || !p) { setErr("Please enter your username and password."); return; }
+    if (!u.trim() || !p) { setErr("Please enter your credentials."); return; }
     setLoading(true);
     setTimeout(() => {
-      const found = users.find(
-        (x) => x.username === u.trim() && x.password === p && x.active
-      );
-      if (found) {
-        onLogin(found);
-      } else {
-        setErr("Invalid credentials or account inactive.");
-        setLoading(false);
-      }
+      const found = users.find(x => x.username === u.trim() && x.password === p && x.active);
+      if (found) { onLogin(found); }
+      else { setErr("Invalid credentials or account inactive."); setLoading(false); }
     }, 120);
   };
 
   const EyeIcon = ({ open }) => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {open ? (
-        <>
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </>
-      ) : (
-        <>
-          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-          <line x1="1" y1="1" x2="23" y2="23"/>
-        </>
-      )}
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {open ? (<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>) : (<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></>)}
     </svg>
   );
 
-  const fieldWrap = { position: "relative", width: "100%", boxSizing: "border-box" };
-  const mdInput = (focused, hasErr) => ({
-    display: "block",
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "16px 14px 6px",
-    background: focused ? "rgba(250,252,255,0.9)" : "rgba(246,248,250,0.7)",
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
-    border: `1.5px solid ${hasErr ? C.re : focused ? C.ac : "rgba(200,208,219,0.8)"}`,
-    borderRadius: 10,
-    color: C.t1,
-    fontFamily: F.sans,
-    fontSize: 16,
-    outline: "none",
-    transition: "border-color .18s, background .18s, box-shadow .18s",
-    lineHeight: 1.4,
-    boxShadow: focused ? `0 0 0 3px ${hasErr ? "rgba(220,38,38,.10)" : "rgba(234,88,12,.12)"}` : "none",
-  });
-  const mdLabel = (focused, filled, hasErr) => ({
-    position: "absolute",
-    left: 14,
-    top: focused || filled ? 6 : "50%",
-    transform: focused || filled ? "none" : "translateY(-50%)",
-    fontSize: focused || filled ? 11 : 15,
-    fontWeight: focused || filled ? 600 : 400,
-    color: hasErr ? C.re : focused ? C.ac : C.t3,
-    fontFamily: F.sans,
-    pointerEvents: "none",
-    transition: "all .18s cubic-bezier(.4,0,.2,1)",
-    letterSpacing: focused || filled ? "0.5px" : 0,
-    lineHeight: 1,
+  const fld = (focused, hasErr) => ({
+    width: "100%", padding: "13px 14px",
+    background: focused ? "rgba(16,24,40,0.95)" : "rgba(12,18,32,0.8)",
+    border: `1px solid ${hasErr ? "rgba(251,113,133,0.5)" : focused ? "rgba(56,189,248,0.6)" : "rgba(30,50,80,0.9)"}`,
+    borderRadius: 10, color: C.t1, fontFamily: F.sans,
+    fontSize: 15, outline: "none", transition: "all .18s",
+    boxShadow: focused ? `0 0 0 3px ${hasErr ? "rgba(251,113,133,.1)" : "rgba(56,189,248,.1)"}` : "none",
   });
 
   return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        // Animated shifting gradient background
-        background: "linear-gradient(135deg, #fde8d0, #fddbb4, #fef3e2, #ffe0cc, #fdf0dc)",
-        backgroundSize: "400% 400%",
-        animation: "gradShift 12s ease infinite",
-        padding: isMobile
-          ? `calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 16px)`
-          : "40px 20px",
-        boxSizing: "border-box",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* Inject keyframes once */}
-      <style>{LOGIN_KEYFRAMES}</style>
+    <div style={{
+      minHeight: "100dvh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "radial-gradient(ellipse at 20% 50%, rgba(14,30,60,0.8) 0%, #070b12 60%)",
+      padding: isMobile ? "20px 16px" : "40px 20px",
+      position: "relative", overflow: "hidden",
+    }}>
+      <style>{LOGIN_KF}</style>
 
-      {/* ── Floating background orbs ── */}
-      {/* Orb 1 — large blue-purple, top-left */}
+      {/* Grid background */}
       <div style={{
-        position: "absolute",
-        top: isMobile ? "-10%" : "-15%",
-        left: isMobile ? "-15%" : "-10%",
-        width: isMobile ? 280 : 420,
-        height: isMobile ? 280 : 420,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(251,146,60,0.58) 0%, rgba(249,115,22,0.28) 60%, transparent 100%)",
-        filter: "blur(48px)",
-        animation: "orbA 14s ease-in-out infinite",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
-      }} />
-      {/* Orb 2 — medium violet, bottom-right */}
-      <div style={{
-        position: "absolute",
-        bottom: isMobile ? "-8%" : "-12%",
-        right: isMobile ? "-12%" : "-8%",
-        width: isMobile ? 260 : 380,
-        height: isMobile ? 260 : 380,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(253,186,116,0.52) 0%, rgba(251,146,60,0.24) 60%, transparent 100%)",
-        filter: "blur(52px)",
-        animation: "orbB 17s ease-in-out infinite",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
-      }} />
-      {/* Orb 3 — small cyan, top-right */}
-      <div style={{
-        position: "absolute",
-        top: "20%",
-        right: isMobile ? "-5%" : "8%",
-        width: isMobile ? 150 : 220,
-        height: isMobile ? 150 : 220,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(234,88,12,0.35) 0%, rgba(253,186,116,0.18) 60%, transparent 100%)",
-        filter: "blur(36px)",
-        animation: "orbC 11s ease-in-out infinite",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
-      }} />
-      {/* Orb 4 — tiny warm, bottom-left */}
-      <div style={{
-        position: "absolute",
-        bottom: "15%",
-        left: isMobile ? "5%" : "12%",
-        width: isMobile ? 100 : 160,
-        height: isMobile ? 100 : 160,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(254,215,170,0.55) 0%, transparent 70%)",
-        filter: "blur(28px)",
-        animation: "orbA 19s ease-in-out infinite reverse",
-        pointerEvents: "none",
-        willChange: "transform",
-        zIndex: 1,
+        position: "absolute", inset: 0, zIndex: 0, overflow: "hidden",
+        backgroundImage: `linear-gradient(rgba(30,50,80,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(30,50,80,0.15) 1px, transparent 1px)`,
+        backgroundSize: "40px 40px",
+        animation: "gridScroll 8s linear infinite",
+        maskImage: "radial-gradient(ellipse at center, black 30%, transparent 80%)",
       }} />
 
-      {/* ── Background train illustration — full screen ── */}
-      <div style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        zIndex: 0,
-        opacity: 0.13,
-        overflow: "hidden",
-      }}>
-        <img
-          src="/bg_train.svg"
-          alt=""
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            objectPosition: "center center",
-            display: "block",
-          }}
-        />
-      </div>
-
-      {/* ── Card — floats gently up and down ── */}
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          position: "relative",
-          zIndex: 1,
-          animation: "cardFloat 6s ease-in-out infinite, fadeSlideUp 0.5s ease both",
-          willChange: "transform",
-        }}
-      >
-        {/* Animated gradient border ring behind card */}
-        <div style={{
-          position: "absolute",
-          inset: -2,
-          borderRadius: 19,
-          background: "linear-gradient(135deg,#f97316,#ea580c,#dc2626,#f97316)",
-          backgroundSize: "300% 300%",
-          animation: "gradShift 5s ease infinite, borderPulse 3s ease-in-out infinite",
-          zIndex: -1,
-          filter: "blur(1px)",
+      {/* Orbs */}
+      {[
+        { top: "-15%", left: "-10%", w: 500, h: 500, c: "rgba(56,189,248,0.08)", a: "orb1 18s ease-in-out infinite" },
+        { bottom: "-15%", right: "-8%", w: 420, h: 420, c: "rgba(52,211,153,0.06)", a: "orb2 22s ease-in-out infinite" },
+        { top: "30%", right: "5%", w: 240, h: 240, c: "rgba(56,189,248,0.05)", a: "orb3 14s ease-in-out infinite" },
+      ].map((orb, i) => (
+        <div key={i} style={{
+          position: "absolute", width: orb.w, height: orb.h,
+          borderRadius: "50%", background: `radial-gradient(circle, ${orb.c} 0%, transparent 70%)`,
+          filter: "blur(60px)", animation: orb.a, pointerEvents: "none", zIndex: 0,
+          top: orb.top, left: orb.left, bottom: orb.bottom, right: orb.right,
         }} />
+      ))}
 
-        {/* Card surface */}
-        <div
-          style={{
-            background: "rgba(255,255,255,0.82)",
-            backdropFilter: "blur(28px)",
-            WebkitBackdropFilter: "blur(28px)",
-            borderRadius: 17,
-            boxShadow: "0 8px 32px rgba(0,0,0,.08), 0 1px 0 rgba(255,255,255,.95) inset",
-            border: "1px solid rgba(255,255,255,0.6)",
-            overflow: "hidden",
-            position: "relative",
-          }}
-        >
-          {/* Shimmer sweep — runs every 4s */}
+      {/* Card */}
+      <div style={{
+        width: "100%", maxWidth: 420, position: "relative", zIndex: 2,
+        background: "rgba(10,16,28,0.85)",
+        border: `1px solid rgba(56,189,248,0.15)`,
+        borderRadius: 20, padding: isMobile ? "32px 24px" : "40px 40px",
+        backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+        boxShadow: "0 0 0 1px rgba(56,189,248,0.05), 0 32px 80px rgba(0,0,0,.7)",
+        animation: "fadeUp .5s ease both",
+      }}>
+        {/* Scanline accent */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "20px 20px 0 0", overflow: "hidden" }}>
+          <div style={{ height: "100%", background: "linear-gradient(90deg, transparent, rgba(56,189,248,0.8), rgba(52,211,153,0.6), transparent)", animation: "pulse 3s ease-in-out infinite" }} />
+        </div>
+
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
           <div style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 10,
-            pointerEvents: "none",
-            overflow: "hidden",
-            borderRadius: 17,
+            width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+            background: "linear-gradient(135deg, rgba(56,189,248,0.15), rgba(52,211,153,0.1))",
+            border: "1px solid rgba(56,189,248,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <div style={{
-              position: "absolute",
-              top: "-40%",
-              left: 0,
-              width: "45%",
-              height: "180%",
-              background: "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.38) 50%, transparent 70%)",
-              animation: "shimmerSweep 4.5s ease-in-out 0.8s infinite",
-              willChange: "transform",
-            }} />
+            <img src="/testpro_logo.svg" width="22" height="22" alt="TestPro" draggable="false" />
           </div>
-
-          {/* Top accent bar — animated gradient */}
-          <div style={{
-            height: 4,
-            background: "linear-gradient(90deg,#fb923c,#ea580c,#dc2626,#ea580c,#fb923c)",
-            backgroundSize: "300% 100%",
-            animation: "gradShift 4s ease infinite",
-          }} />
-
-          <div style={{ padding: isMobile ? "28px 24px 26px" : "36px 36px 32px", boxSizing: "border-box" }}>
-
-            {/* Logo + heading */}
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
-              <div style={{
-                width: 48,
-                height: 48,
-                borderRadius: 13,
-                background: "linear-gradient(135deg,#fb923c,#ea580c,#c2410c)",
-                backgroundSize: "200% 200%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#fff",
-                flexShrink: 0,
-                animation: "logoGlow 3s ease-in-out infinite, gradShift 6s ease infinite",
-              }}>
-                {/* TestPro logomark — run-chevron + checkmark */}
-                <img src="/testpro_logo.svg" width="34" height="34" alt="TestPro" draggable="false" />
-              </div>
-              <div>
-                <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 700, color: C.t1, letterSpacing: "-0.4px", lineHeight: 1.2 }}>
-                  Test<span style={{ color: C.ac }}>Pro</span>
-                </div>
-                <div style={{ fontSize: 13, color: C.t3, marginTop: 2, fontFamily: F.sans }}>
-                  Sign in to your workspace
-                </div>
-              </div>
+          <div>
+            <div style={{ fontFamily: F.head, fontWeight: 800, fontSize: 20, color: C.t1, letterSpacing: "-0.5px" }}>
+              Test<span style={{ color: C.ac }}>Pro</span>
             </div>
-
-            {/* Error alert */}
-            {err && (
-              <div style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                padding: "11px 14px",
-                borderRadius: 8,
-                background: "rgba(220,38,38,.07)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-                border: `1px solid rgba(220,38,38,.25)`,
-                color: C.re,
-                fontSize: 13,
-                fontFamily: F.sans,
-                marginBottom: 20,
-                lineHeight: 1.45,
-                boxSizing: "border-box",
-                animation: "fadeSlideUp .2s ease both",
-              }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                {err}
-              </div>
-            )}
-
-            {/* Username */}
-            <div style={{ ...fieldWrap, marginBottom: 18 }}>
-              <input
-                value={u}
-                onChange={(e) => { setU(e.target.value); setErr(""); }}
-                onFocus={() => setUFocus(true)}
-                onBlur={() => setUFocus(false)}
-                onKeyDown={(e) => e.key === "Enter" && pwRef.current?.focus()}
-                autoFocus
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder=""
-                style={mdInput(uFocus, !!err)}
-              />
-              <label style={mdLabel(uFocus, !!u, !!err)}>Username</label>
+            <div style={{ fontFamily: F.mono, fontSize: 10, color: C.t3, letterSpacing: "1.5px", marginTop: 1 }}>
+              QA MANAGEMENT PLATFORM
             </div>
-
-            {/* Password */}
-            <div style={{ ...fieldWrap, marginBottom: 26 }}>
-              <input
-                ref={pwRef}
-                type={showPw ? "text" : "password"}
-                value={p}
-                onChange={(e) => { setP(e.target.value); setErr(""); }}
-                onFocus={() => setPFocus(true)}
-                onBlur={() => setPFocus(false)}
-                onKeyDown={(e) => e.key === "Enter" && go()}
-                autoComplete="current-password"
-                placeholder=""
-                style={{ ...mdInput(pFocus, !!err), paddingRight: 48 }}
-              />
-              <label style={mdLabel(pFocus, !!p, !!err)}>Password</label>
-              <button
-                onClick={() => setShowPw((s) => !s)}
-                tabIndex={-1}
-                style={{
-                  position: "absolute",
-                  right: 12,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: showPw ? C.ac : C.t3,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 6,
-                  borderRadius: 6,
-                  transition: "color .15s",
-                  lineHeight: 0,
-                }}
-                title={showPw ? "Hide password" : "Show password"}
-              >
-                <EyeIcon open={showPw} />
-              </button>
-            </div>
-
-            {/* Sign In button */}
-            <button
-              onClick={go}
-              disabled={loading}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "14px",
-                border: "none",
-                borderRadius: 10,
-                background: loading
-                  ? "linear-gradient(90deg,#fdba74,#fb923c)"
-                  : "linear-gradient(90deg,#fb923c,#ea580c,#fb923c)",
-                backgroundSize: "200% 100%",
-                animation: loading ? "none" : "gradShift 4s ease infinite",
-                color: "#fff",
-                fontFamily: F.sans,
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: loading ? "default" : "pointer",
-                boxShadow: loading ? "none" : "0 4px 20px rgba(234,88,12,.40)",
-                letterSpacing: "0.2px",
-                transition: "box-shadow .2s, transform .1s",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                position: "relative",
-                overflow: "hidden",
-              }}
-            >
-              {/* Button shimmer */}
-              {!loading && (
-                <div style={{
-                  position: "absolute",
-                  inset: 0,
-                  background: "linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.22) 50%, transparent 65%)",
-                  animation: "shimmerSweep 3s ease-in-out 1.5s infinite",
-                  pointerEvents: "none",
-                }} />
-              )}
-              {loading ? (
-                <>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                    style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                  </svg>
-                  Signing in…
-                </>
-              ) : (
-                <>
-                  Sign In
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
-                </>
-              )}
-            </button>
-
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div style={{
-        marginTop: 22,
-        fontSize: 11,
-        fontFamily: F.mono,
-        color: "rgba(71,85,105,.65)",
-        textAlign: "center",
-        letterSpacing: "0.3px",
-        position: "relative",
-        zIndex: 1,
-      }}>
-        TestPro · Internal Testing Tool
+        <div style={{ fontFamily: F.head, fontSize: 22, fontWeight: 700, color: C.t1, marginBottom: 6 }}>
+          Sign in
+        </div>
+        <div style={{ fontFamily: F.sans, fontSize: 13, color: C.t3, marginBottom: 28 }}>
+          Enter your credentials to continue
+        </div>
+
+        {/* Username */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 11, fontFamily: F.mono, color: C.t3, letterSpacing: "0.8px", marginBottom: 7 }}>
+            USERNAME
+          </label>
+          <input
+            value={u} onChange={e => setU(e.target.value)}
+            onFocus={() => setUFocus(true)} onBlur={() => setUFocus(false)}
+            onKeyDown={e => e.key === "Enter" && pwRef.current?.focus()}
+            placeholder="your_username"
+            style={fld(uFocus, !!err)}
+            autoComplete="username"
+          />
+        </div>
+
+        {/* Password */}
+        <div style={{ marginBottom: 24, position: "relative" }}>
+          <label style={{ display: "block", fontSize: 11, fontFamily: F.mono, color: C.t3, letterSpacing: "0.8px", marginBottom: 7 }}>
+            PASSWORD
+          </label>
+          <div style={{ position: "relative" }}>
+            <input
+              ref={pwRef}
+              value={p} onChange={e => setP(e.target.value)}
+              type={showPw ? "text" : "password"}
+              onFocus={() => setPFocus(true)} onBlur={() => setPFocus(false)}
+              onKeyDown={e => e.key === "Enter" && go()}
+              placeholder="••••••••"
+              style={{ ...fld(pFocus, !!err), paddingRight: 44 }}
+              autoComplete="current-password"
+            />
+            <button onClick={() => setShowPw(v => !v)} style={{
+              position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+              background: "none", border: "none", color: C.t3, cursor: "pointer", padding: 4,
+            }}>
+              <EyeIcon open={showPw} />
+            </button>
+          </div>
+        </div>
+
+        {err && (
+          <div style={{
+            padding: "10px 14px", borderRadius: 8, marginBottom: 20,
+            background: "rgba(251,113,133,0.1)", border: "1px solid rgba(251,113,133,0.3)",
+            color: C.re, fontFamily: F.mono, fontSize: 12,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <Ico n="x" s={12} /> {err}
+          </div>
+        )}
+
+        <button
+          onClick={go}
+          disabled={loading}
+          style={{
+            width: "100%", padding: "13px 0",
+            background: loading ? C.s2 : "linear-gradient(135deg, rgba(56,189,248,0.2), rgba(52,211,153,0.15))",
+            border: `1px solid ${loading ? C.b1 : "rgba(56,189,248,0.4)"}`,
+            borderRadius: 10, color: loading ? C.t3 : C.ac,
+            fontFamily: F.head, fontSize: 15, fontWeight: 700,
+            cursor: loading ? "not-allowed" : "pointer",
+            letterSpacing: "0.3px",
+            transition: "all .2s",
+          }}
+        >
+          {loading ? "Signing in…" : "Sign In"}
+        </button>
+
+        <div style={{
+          marginTop: 28, paddingTop: 20,
+          borderTop: `1px solid ${C.b1}`,
+          fontFamily: F.mono, fontSize: 10,
+          color: C.t3, textAlign: "center", letterSpacing: "0.5px",
+        }}>
+          TESTPRO · SECURE QA PLATFORM
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Sidebar ────────────────────────────────────────────────────────────────────
-function Sidebar({
-  session,
-  view,
-  setView,
-  modules,
-  selMod,
-  setSelMod,
-  collapsed,
-  setCollapsed,
-  onLogout,
-  locked,        // true while a tester holds an unreleased lock
-  mobileOpen,    // mobile drawer open state
-  onMobileClose, // close mobile drawer
-}) {
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed, setCollapsed, onLogout, locked, mobileOpen, onMobileClose }) {
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const modList = useMemo(() => Object.values(modules), [modules]);
   const filtered = useMemo(
-    () =>
-      modList.filter((m) =>
-        m.name.toLowerCase().includes(search.toLowerCase())
-      ),
+    () => modList.filter(m => m.name.toLowerCase().includes(search.toLowerCase())),
     [modList, search]
   );
-
-  // Aggregate pass/fail across all tests→steps for each module
   const modStats = useMemo(() => {
     const s = {};
-    modList.forEach((m) => {
-      const allSteps = m.tests.flatMap((t) => t.steps);
-      s[m.id] = {
-        pass: allSteps.filter((s) => s.status === "pass").length,
-        fail: allSteps.filter((s) => s.status === "fail").length,
-        total: allSteps.length,
-      };
+    modList.forEach(m => {
+      const all = m.tests.flatMap(t => t.steps);
+      s[m.id] = { pass: all.filter(s => s.status === "pass").length, fail: all.filter(s => s.status === "fail").length, total: all.length };
     });
     return s;
   }, [modList]);
 
   const navRow = (id, icon, label) => {
     const active = view === id;
-    const isLocked = locked && !active; // locked & trying to leave current view
+    const isLocked = locked && !active;
     return (
-      <div
-        key={id}
-        onClick={() => {
-          if (isLocked) return;
-          setView(id);
-          if (onMobileClose) onMobileClose();
-        }}
-        title={isLocked ? "Finish the current test first to navigate away" : undefined}
+      <div key={id} onClick={() => { if (isLocked) return; setView(id); if (onMobileClose) onMobileClose(); }}
+        title={isLocked ? "Finish the current test first" : undefined}
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 16px",
-          cursor: isLocked ? "not-allowed" : "pointer",
-          fontSize: 13,
-          fontWeight: 500,
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "9px 16px", cursor: isLocked ? "not-allowed" : "pointer",
+          fontSize: 13, fontWeight: 500, fontFamily: F.sans,
           color: active ? C.ac : isLocked ? C.t3 : C.t2,
-          background: active ? "#fff7ed" : "transparent",
+          background: active ? "rgba(56,189,248,0.08)" : "transparent",
           borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
-          opacity: isLocked ? 0.45 : 1,
-          transition: "all .15s",
+          opacity: isLocked ? 0.4 : 1, transition: "all .15s",
         }}
       >
         <Ico n={icon} s={15} />
         {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
-        {isLocked && !collapsed && (
-          <Ico n="lock" s={10} />
-        )}
+        {isLocked && !collapsed && <Ico n="lock" s={10} />}
       </div>
     );
   };
 
   return (
     <>
-      {/* Mobile overlay backdrop */}
       {isMobile && mobileOpen && (
-        <div
-          onClick={onMobileClose}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,.25)",
-            backdropFilter: "blur(5px)",
-            WebkitBackdropFilter: "blur(5px)",
-            zIndex: 300,
-          }}
-        />
+        <div onClick={onMobileClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 300 }} />
       )}
-    <div
-      style={{
-        width: isMobile ? 280 : (collapsed ? 54 : 250),
+      <div style={{
+        width: isMobile ? 280 : (collapsed ? 54 : 256),
         flexShrink: 0,
-        background: "rgba(255,255,255,0.88)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        borderRight: `1px solid rgba(221,226,234,0.7)`,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        transition: isMobile ? "transform .25s" : "width .2s",
-        // Mobile: slide in/out as a drawer
+        background: "rgba(8,12,20,0.96)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderRight: `1px solid ${C.b1}`,
+        display: "flex", flexDirection: "column",
+        overflow: "hidden", transition: isMobile ? "transform .25s" : "width .2s",
         ...(isMobile ? {
-          position: "fixed",
-          top: 0,
-          left: 0,
-          height: "100%",
-          zIndex: 301,
+          position: "fixed", top: 0, left: 0, height: "100%", zIndex: 301,
           transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
         } : {}),
-      }}
-    >
-      <div
-        style={{
-          padding: "14px",
-          borderBottom: `1px solid ${C.b1}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          minHeight: 54,
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
-            background: "linear-gradient(135deg,#fb923c,#ea580c)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#fff",
-            flexShrink: 0,
-          }}
-        >
-          {/* TestPro logomark — run-chevron + checkmark */}
-          <img src="/testpro_logo.svg" width="20" height="20" alt="TestPro" draggable="false" />
-        </div>
-        {!collapsed && (
-          <span
-            style={{
-              fontFamily: F.mono,
-              fontWeight: 700,
-              fontSize: 14,
-              color: C.t1,
-            }}
-          >
-            Test<span style={{ color: C.ac }}>Pro</span>
-          </span>
-        )}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          style={{ ...iBtn(), marginLeft: "auto", padding: 4 }}
-        >
-          <Ico n={collapsed ? "chevR" : "chevL"} s={13} />
-        </button>
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
-        {!collapsed && (
-          <div
-            style={{
-              padding: "5px 16px 3px",
-              fontSize: 10,
-              fontFamily: F.mono,
-              textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              color: C.t3,
-            }}
-          >
-            Navigation
+      }}>
+        {/* Header */}
+        <div style={{ padding: "14px 14px", borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 10, minHeight: 56 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+            background: "linear-gradient(135deg, rgba(56,189,248,0.15), rgba(52,211,153,0.1))",
+            border: "1px solid rgba(56,189,248,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <img src="/testpro_logo.svg" width="20" height="20" alt="" draggable="false" />
           </div>
-        )}
-        {navRow("dash", "dash", "Dashboard")}
-        {navRow("report", "report", "Test Report")}
-        {session.role === "admin" && navRow("users", "users", "Users")}
-        {session.role === "admin" && navRow("audit", "log", "Audit Log")}
+          {!collapsed && (
+            <span style={{ fontFamily: F.head, fontWeight: 800, fontSize: 15, color: C.t1, letterSpacing: "-0.3px" }}>
+              Test<span style={{ color: C.ac }}>Pro</span>
+            </span>
+          )}
+          <button onClick={() => setCollapsed(c => !c)} style={{ ...iBtn(), marginLeft: "auto", padding: 4 }}>
+            <Ico n={collapsed ? "chevR" : "chevL"} s={13} />
+          </button>
+        </div>
 
-        {!collapsed && (
-          <>
-            <div style={{ height: 1, background: C.b1, margin: "8px 0" }} />
-            <div
-              style={{
-                padding: "5px 16px 4px",
-                fontSize: 10,
-                fontFamily: F.mono,
-                textTransform: "uppercase",
-                letterSpacing: "1.5px",
-                color: C.t3,
-              }}
-            >
-              Modules ({filtered.length})
+        <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
+          {!collapsed && (
+            <div style={{ padding: "5px 16px 3px", fontSize: 9, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "2px", color: C.t3 }}>
+              Navigation
             </div>
-            <div style={{ padding: "4px 10px 8px", position: "relative" }}>
-              <div
-                style={{
-                  position: "absolute",
-                  left: 20,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: C.t3,
-                  pointerEvents: "none",
-                }}
-              >
-                <Ico n="search" s={12} />
+          )}
+          {navRow("dash", "dash", "Dashboard")}
+          {navRow("report", "report", "Test Report")}
+          {session.role === "admin" && navRow("users", "users", "Users")}
+          {session.role === "admin" && navRow("audit", "log", "Audit Log")}
+
+          {!collapsed && (
+            <>
+              <div style={{ height: 1, background: C.b1, margin: "8px 0" }} />
+              <div style={{ padding: "5px 16px 4px", fontSize: 9, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "2px", color: C.t3 }}>
+                Modules ({filtered.length})
               </div>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search modules…"
-                style={{
-                  width: "100%",
-                  padding: "6px 8px 6px 28px",
-                  background: C.s2,
-                  border: `1px solid ${C.b1}`,
-                  borderRadius: 6,
-                  color: C.t1,
-                  fontFamily: F.mono,
-                  fontSize: 11,
-                  outline: "none",
-                }}
-              />
-            </div>
-            {filtered.map((m) => {
-              const st = modStats[m.id] || {};
-              const active = selMod === m.id && view === "mod";
-              return (
-                <div
-                  key={m.id}
-                  onClick={() => {
-                    if (locked && !(selMod === m.id && view === "mod")) return;
-                    setSelMod(m.id);
-                    setView("mod");
-                    if (onMobileClose) onMobileClose();
-                  }}
-                  title={locked && !(selMod === m.id && view === "mod") ? "Finish the current test first" : undefined}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "7px 16px",
-                    cursor: locked && !(selMod === m.id && view === "mod") ? "not-allowed" : "pointer",
-                    fontSize: 13,
-                    color: active ? C.ac : locked && !(selMod === m.id && view === "mod") ? C.t3 : C.t2,
-                    opacity: locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
-                    background: active ? "#fff7ed" : "transparent",
-                    borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
-                    transition: "all .12s",
-                  }}
-                >
-                  <Ico n="layers" s={12} />
-                  <span
+              <div style={{ padding: "4px 10px 8px", position: "relative" }}>
+                <div style={{ position: "absolute", left: 20, top: "50%", transform: "translateY(-50%)", color: C.t3, pointerEvents: "none" }}>
+                  <Ico n="search" s={12} />
+                </div>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search modules…" style={{
+                  width: "100%", padding: "6px 8px 6px 28px",
+                  background: C.s2, border: `1px solid ${C.b1}`,
+                  borderRadius: 6, color: C.t1,
+                  fontFamily: F.mono, fontSize: 11, outline: "none",
+                }} />
+              </div>
+              {filtered.map(m => {
+                const st = modStats[m.id] || {};
+                const active = selMod === m.id && view === "mod";
+                const isLocked = locked && !(selMod === m.id && view === "mod");
+                return (
+                  <div key={m.id}
+                    onClick={() => { if (isLocked) return; setSelMod(m.id); setView("mod"); if (onMobileClose) onMobileClose(); }}
+                    title={isLocked ? "Finish the current test first" : undefined}
                     style={{
-                      flex: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "7px 16px", cursor: isLocked ? "not-allowed" : "pointer",
+                      fontSize: 12, fontFamily: F.sans,
+                      color: active ? C.ac : isLocked ? C.t3 : C.t2,
+                      opacity: isLocked ? 0.4 : 1,
+                      background: active ? "rgba(56,189,248,0.07)" : "transparent",
+                      borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
+                      transition: "all .12s",
                     }}
                   >
-                    {m.name}
-                  </span>
-                  {st.fail > 0 && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontFamily: F.mono,
-                        background: C.red,
-                        color: C.re,
-                        padding: "1px 5px",
-                        borderRadius: 8,
-                      }}
-                    >
-                      ✗{st.fail}
+                    <Ico n="layers" s={12} />
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.name}
                     </span>
-                  )}
-                  {st.fail === 0 && st.pass === st.total && st.pass > 0 && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        background: C.grd,
-                        color: C.gr,
-                        padding: "1px 5px",
-                        borderRadius: 8,
-                        fontFamily: F.mono,
-                      }}
-                    >
-                      ✓
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </>
-        )}
-      </div>
-
-      <div
-        style={{
-          padding: "12px 14px",
-          borderTop: `1px solid ${C.b1}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg,#dbeafe,#bfdbfe)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: F.mono,
-            fontSize: 12,
-            fontWeight: 700,
-            color: C.ac,
-            flexShrink: 0,
-            border: `1px solid ${C.b1}`,
-          }}
-        >
-          {session.name[0]}
+                    {st.fail > 0 && (
+                      <span style={{ fontSize: 9, fontFamily: F.mono, background: C.red, color: C.re, padding: "1px 5px", borderRadius: 8, border: `1px solid rgba(251,113,133,0.2)` }}>✗{st.fail}</span>
+                    )}
+                    {st.fail === 0 && st.pass === st.total && st.pass > 0 && (
+                      <span style={{ fontSize: 9, background: C.grd, color: C.gr, padding: "1px 5px", borderRadius: 8, fontFamily: F.mono, border: `1px solid rgba(52,211,153,0.2)` }}>✓</span>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
-        {!collapsed && (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {session.name}
-            </div>
-            <div style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}>
-              {session.role}
-            </div>
+
+        {/* Footer */}
+        <div style={{ padding: "12px 14px", borderTop: `1px solid ${C.b1}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+            background: "linear-gradient(135deg, rgba(56,189,248,0.15), rgba(56,189,248,0.05))",
+            border: `1px solid rgba(56,189,248,0.25)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: F.mono, fontSize: 12, fontWeight: 700, color: C.ac,
+          }}>
+            {session.name[0]}
           </div>
-        )}
-        <button
-          onClick={onLogout}
-          style={{ ...iBtn(), padding: 5, flexShrink: 0 }}
-          title="Logout"
-        >
-          <Ico n="logout" s={14} />
-        </button>
+          {!collapsed && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {session.name}
+              </div>
+              <div style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>{session.role}</div>
+            </div>
+          )}
+          <button onClick={onLogout} style={{ ...iBtn(), padding: 5, flexShrink: 0 }} title="Logout">
+            <Ico n="logout" s={14} />
+          </button>
+        </div>
       </div>
-    </div>
     </>
   );
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────────
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
 function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   const isAdmin = session.role === "admin";
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [confirmDel, setConfirmDel] = useState(null); // module id to delete
+  const [confirmDel, setConfirmDel] = useState(null);
   const modList = useMemo(() => Object.values(modules), [modules]);
 
-  const modStats = useMemo(
-    () =>
-      modList.map((m) => {
-        const allSteps = m.tests.flatMap((t) => t.steps);
-        const pass = allSteps.filter((s) => s.status === "pass").length;
-        const fail = allSteps.filter((s) => s.status === "fail").length;
-        return {
-          ...m,
-          pass,
-          fail,
-          total: allSteps.length,
-          testCount: m.tests.length,
-        };
-      }),
-    [modList]
-  );
+  const modStats = useMemo(() => modList.map(m => {
+    const all = m.tests.flatMap(t => t.steps);
+    const pass = all.filter(s => s.status === "pass").length;
+    const fail = all.filter(s => s.status === "fail").length;
+    return { ...m, pass, fail, total: all.length, testCount: m.tests.length };
+  }), [modList]);
 
   const totalPass = modStats.reduce((a, m) => a + m.pass, 0);
   const totalFail = modStats.reduce((a, m) => a + m.fail, 0);
@@ -2013,316 +1273,122 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   const pending = total - totalPass - totalFail;
 
   const filtered = useMemo(() => {
-    let l = modStats.filter((m) =>
-      m.name.toLowerCase().includes(search.toLowerCase())
-    );
-    if (filter === "pass")
-      l = l.filter((m) => m.pass === m.total && m.total > 0);
-    if (filter === "fail") l = l.filter((m) => m.fail > 0);
-    if (filter === "active")
-      l = l.filter((m) => m.pass + m.fail > 0 && m.pass + m.fail < m.total);
-    if (filter === "empty") l = l.filter((m) => m.pass + m.fail === 0);
+    let l = modStats.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+    if (filter === "pass") l = l.filter(m => m.pass === m.total && m.total > 0);
+    if (filter === "fail") l = l.filter(m => m.fail > 0);
+    if (filter === "active") l = l.filter(m => m.pass + m.fail > 0 && m.pass + m.fail < m.total);
+    if (filter === "empty") l = l.filter(m => m.pass + m.fail === 0);
     return l;
   }, [modStats, search, filter]);
 
   const addModule = () => {
     const keys = Object.keys(modules);
-    // Find next available number
     let n = keys.length + 1;
     while (modules[`m${n}`]) n++;
-    const modId = `m${n}`;
-    const modName = `Module ${n}`;
-    const tests = Array.from({ length: 5 }, (_, i) =>
-      makeTest(modId, i + 1, 10)
-    );
+    const modId = `m${n}`, modName = `Module ${n}`;
+    const tests = Array.from({ length: 5 }, (_, i) => makeTest(modId, i + 1, 10));
     const newMod = { id: modId, name: modName, tests };
     saveMods({ ...modules, [modId]: newMod }, true);
-    // Save each new test's default steps surgically (saveModules skips empty-step tests)
-    tests.forEach((t) => {
-      store.saveSteps(t.id, modId, t.steps, {
-        moduleName:  modName,
-        serialNo:    t.serialNo ?? 0,
-        name:        t.name,
-        description: t.description ?? "",
-      }).catch((e) => console.error("addModule saveSteps error:", e));
-    });
+    tests.forEach(t => store.saveSteps(t.id, modId, t.steps, { moduleName: modName, serialNo: t.serialNo ?? 0, name: t.name, description: t.description ?? "" }).catch(e => console.error(e)));
     toast(`Module ${n} added`, "success");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Added Module ${n}`,
-      type: "info",
-    });
+    addLog({ ts: Date.now(), user: session.name, action: `Added Module ${n}`, type: "info" });
   };
 
   const deleteModule = (id) => {
-    if (Object.keys(modules).length <= 1) {
-      toast("Cannot delete the last module", "error");
-      return;
-    }
+    if (Object.keys(modules).length <= 1) { toast("Cannot delete the last module", "error"); return; }
     const updated = { ...modules };
     delete updated[id];
     saveMods(updated, true);
     toast("Module deleted", "info");
-    addLog({
-      ts: Date.now(),
-      user: session.name,
-      action: `Deleted module "${modules[id]?.name}"`,
-      type: "info",
-    });
+    addLog({ ts: Date.now(), user: session.name, action: `Deleted module "${modules[id]?.name}"`, type: "info" });
     setConfirmDel(null);
   };
 
-  const sc = (label, val, color, meta) => (
-    <div
-      style={{
-        background: C.s1,
-        border: `1px solid ${C.b1}`,
-        borderRadius: 10,
-        padding: "16px 20px",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: `linear-gradient(90deg,${color},transparent)`,
-        }}
-      />
-      <div
-        style={{
-          fontSize: 12,
-          fontFamily: F.sans,
-          fontWeight: 500,
-          color: C.t2,
-          textTransform: "uppercase",
-          letterSpacing: ".5px",
-          marginBottom: 10,
-        }}
-      >
-        {label}
+  const StatCard = ({ label, val, color, meta, icon }) => (
+    <div style={{
+      background: C.s1, border: `1px solid ${C.b1}`,
+      borderRadius: 12, padding: "18px 20px",
+      position: "relative", overflow: "hidden",
+    }}>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${color}, transparent)` }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontFamily: F.mono, color: C.t3, textTransform: "uppercase", letterSpacing: "1.5px" }}>{label}</div>
+        <div style={{ width: 28, height: 28, borderRadius: 7, background: `${color}15`, border: `1px solid ${color}30`, display: "flex", alignItems: "center", justifyContent: "center", color }}>
+          <Ico n={icon} s={13} />
+        </div>
       </div>
-      <div style={{ fontSize: 32, fontFamily: F.mono, fontWeight: 700, color }}>
-        {val.toLocaleString()}
-      </div>
-      <div style={{ fontSize: 12, color: C.t3, marginTop: 6 }}>{meta}</div>
+      <div style={{ fontSize: 30, fontFamily: F.mono, fontWeight: 700, color, lineHeight: 1 }}>{val.toLocaleString()}</div>
+      <div style={{ fontSize: 11, color: C.t3, marginTop: 8, fontFamily: F.sans }}>{meta}</div>
     </div>
   );
 
   return (
     <>
-      <Topbar
-        title="Dashboard"
-        sub={`Hello ${
-          session.name.split(" ")[0]
-        } · ${new Date().toLocaleDateString("en-GB", {
-          weekday: "long",
-          day: "numeric",
-          month: "short",
-        })}`}
-      >
-        {!isMobile && (
-          <SearchBox
-            value={search}
-            onChange={setSearch}
-            placeholder="Search modules…"
-            width={200}
-          />
-        )}
+      <Topbar title="Dashboard" sub={`Hello ${session.name.split(" ")[0]} · ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}`}>
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" width={200} />}
         {isAdmin && (
           <button style={acBtn(smBtn())} onClick={addModule}>
             <Ico n="plus" s={12} /> {isMobile ? "" : "Add Module"}
           </button>
         )}
       </Topbar>
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 20 }}>
-        {isMobile && (
-          <div style={{ marginBottom: 12 }}>
-            <SearchBox
-              value={search}
-              onChange={setSearch}
-              placeholder="Search modules…"
-              width="100%"
-            />
-          </div>
-        )}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)",
-            gap: isMobile ? 10 : 14,
-            marginBottom: isMobile ? 14 : 20,
-          }}
-        >
-          {sc("Total Steps", total, C.ac, `Across ${modList.length} modules`)}
-          {sc(
-            "Passed",
-            totalPass,
-            C.gr,
-            `${total ? Math.round((totalPass / total) * 100) : 0}% pass rate`
-          )}
-          {sc(
-            "Failed",
-            totalFail,
-            C.re,
-            `${modStats.filter((m) => m.fail > 0).length} modules affected`
-          )}
-          {sc(
-            "Pending",
-            pending,
-            C.am,
-            `${
-              modStats.filter((m) => m.pass + m.fail === m.total && m.total > 0)
-                .length
-            } modules complete`
-          )}
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 22 }}>
+        {isMobile && <div style={{ marginBottom: 12 }}><SearchBox value={search} onChange={setSearch} placeholder="Search modules…" width="100%" /></div>}
+
+        {/* Stat cards */}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 16 : 24 }}>
+          <StatCard label="Total Steps" val={total}     color={C.ac} meta={`Across ${modList.length} modules`} icon="layers" />
+          <StatCard label="Passed"      val={totalPass} color={C.gr} meta={`${total ? Math.round((totalPass/total)*100) : 0}% pass rate`} icon="check" />
+          <StatCard label="Failed"      val={totalFail} color={C.re} meta={`${modStats.filter(m => m.fail > 0).length} modules affected`} icon="x" />
+          <StatCard label="Pending"     val={pending}   color={C.am} meta={`${modStats.filter(m => m.pass+m.fail===m.total && m.total>0).length} modules complete`} icon="reset" />
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: isMobile ? "flex-start" : "center",
-            flexDirection: isMobile ? "column" : "row",
-            justifyContent: "space-between",
-            marginBottom: 14,
-            gap: isMobile ? 8 : 0,
-          }}
-        >
-          <div style={{ fontSize: 14, fontWeight: 600 }}>
-            Modules{" "}
-            <span
-              style={{
-                color: C.t3,
-                fontFamily: F.mono,
-                fontWeight: 400,
-                fontSize: 12,
-              }}
-            >
-              ({filtered.length})
-            </span>
+        {/* Filter row */}
+        <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", marginBottom: 14, gap: isMobile ? 8 : 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, fontFamily: F.head, color: C.t1 }}>
+            Modules <span style={{ color: C.t3, fontFamily: F.mono, fontWeight: 400, fontSize: 12 }}>({filtered.length})</span>
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {[
-              ["all", "All"],
-              ["active", "In Progress"],
-              ["pass", "All Pass"],
-              ["fail", "Has Failures"],
-              ["empty", "Not Started"],
-            ].map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                style={{
-                  padding: "5px 10px",
-                  borderRadius: 20,
-                  border: `1px solid ${filter === k ? C.b2 : C.b1}`,
-                  background: filter === k ? C.s3 : "transparent",
-                  color: filter === k ? C.t1 : C.t2,
-                  fontFamily: F.mono,
-                  fontSize: 10,
-                  cursor: "pointer",
-                }}
-              >
-                {l}
-              </button>
+            {[["all","All"],["active","In Progress"],["pass","All Pass"],["fail","Has Failures"],["empty","Not Started"]].map(([k, l]) => (
+              <button key={k} onClick={() => setFilter(k)} style={{
+                padding: "5px 11px", borderRadius: 20,
+                border: `1px solid ${filter===k ? "rgba(56,189,248,0.35)" : C.b1}`,
+                background: filter===k ? "rgba(56,189,248,0.08)" : "transparent",
+                color: filter===k ? C.ac : C.t3,
+                fontFamily: F.mono, fontSize: 10, cursor: "pointer",
+              }}>{l}</button>
             ))}
           </div>
         </div>
 
+        {/* Module list */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtered.map((m) => {
+          {filtered.map(m => {
             const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
             const passW = m.total ? (m.pass / m.total) * 100 : 0;
             const failW = m.total ? (m.fail / m.total) * 100 : 0;
-            const borderColor =
-              m.fail > 0
-                ? "#fca5a5"
-                : m.pass === m.total && m.total > 0
-                ? "#86efac"
-                : C.b1;
+            const borderCol = m.fail > 0 ? "rgba(251,113,133,0.25)" : m.pass===m.total && m.total>0 ? "rgba(52,211,153,0.25)" : C.b1;
             return (
-              <div
-                key={m.id}
-                style={{
-                  background: C.s1,
-                  border: `1px solid ${borderColor}`,
-                  borderRadius: 8,
-                  overflow: "hidden",
-                  transition: "border-color .15s",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    cursor: "pointer",
-                  }}
-                  onClick={() => onSelect(m.id)}
-                >
+              <div key={m.id} style={{ background: C.s1, border: `1px solid ${borderCol}`, borderRadius: 10, overflow: "hidden", transition: "border-color .15s" }}>
+                <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={() => onSelect(m.id)}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {m.name}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        fontFamily: F.mono,
-                        color: C.t3,
-                        marginTop: 2,
-                      }}
-                    >
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.t1, fontFamily: F.sans, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
+                    <div style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, marginTop: 3 }}>
                       {m.testCount}t · {m.total}s
                       {m.pass > 0 && <span style={{ color: C.gr, marginLeft: 6 }}>✓{m.pass}</span>}
                       {m.fail > 0 && <span style={{ color: C.re, marginLeft: 4 }}>✗{m.fail}</span>}
-                      {m.total - m.pass - m.fail > 0 && <span style={{ color: C.t3, marginLeft: 4 }}>⟳{m.total - m.pass - m.fail}</span>}
+                      {m.total - m.pass - m.fail > 0 && <span style={{ color: C.t3, marginLeft: 4 }}>⟳{m.total-m.pass-m.fail}</span>}
                     </div>
                   </div>
-
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontFamily: F.mono,
-                      fontWeight: 600,
-                      color: pct === 100 ? C.gr : m.fail > 0 ? C.am : C.t2,
-                      flexShrink: 0,
-                      minWidth: 34,
-                      textAlign: "right",
-                    }}
-                  >
-                    {pct}%
-                  </div>
-
+                  <div style={{ fontSize: 13, fontFamily: F.mono, fontWeight: 700, color: pct===100 ? C.gr : m.fail>0 ? C.re : C.t2, flexShrink: 0 }}>{pct}%</div>
                   {isAdmin && (
-                    <button
-                      style={reBtn({ padding: "4px 7px", fontSize: 10 })}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDel(m.id);
-                      }}
-                      title="Delete module"
-                    >
+                    <button style={reBtn({ padding: "4px 7px", fontSize: 10 })} onClick={e => { e.stopPropagation(); setConfirmDel(m.id); }} title="Delete module">
                       <Ico n="trash" s={11} />
                     </button>
                   )}
-                  <Ico n="chevR" s={13} />
+                  <Ico n="chevR" s={13} style={{ color: C.t3 }} />
                 </div>
-
-                <div style={{ height: 4, background: C.s3, display: "flex" }}>
+                <div style={{ height: 3, background: C.s3, display: "flex" }}>
                   <div style={{ width: `${passW}%`, background: C.gr, transition: "width .5s" }} />
                   <div style={{ width: `${failW}%`, background: C.re, transition: "width .5s" }} />
                 </div>
@@ -2330,35 +1396,16 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
             );
           })}
           {filtered.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "40px 0",
-                color: C.t3,
-                fontFamily: F.mono,
-                fontSize: 12,
-              }}
-            >
-              No modules match.
-            </div>
+            <div style={{ textAlign: "center", padding: "60px 0", color: C.t3, fontFamily: F.mono, fontSize: 12 }}>No modules match.</div>
           )}
         </div>
       </div>
 
       {confirmDel && (
-        <Modal
-          title="Delete Module?"
-          sub={`Delete "${modules[confirmDel]?.name}"? All its tests and steps will be permanently removed.`}
-          onClose={() => setConfirmDel(null)}
-          width={380}
-        >
+        <Modal title="Delete Module?" sub={`Delete "${modules[confirmDel]?.name}"? All tests and steps will be permanently removed.`} onClose={() => setConfirmDel(null)} width={380}>
           <ModalActions>
-            <button style={btn()} onClick={() => setConfirmDel(null)}>
-              Cancel
-            </button>
-            <button style={reBtn()} onClick={() => deleteModule(confirmDel)}>
-              <Ico n="trash" s={12} /> Delete
-            </button>
+            <button style={btn()} onClick={() => setConfirmDel(null)}>Cancel</button>
+            <button style={reBtn()} onClick={() => deleteModule(confirmDel)}><Ico n="trash" s={12} /> Delete</button>
           </ModalActions>
         </Modal>
       )}
@@ -2367,155 +1414,96 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
 }
 
 
-// ── Divider Row — full-width section separator ($$$ CSV rows) ─────────────────
+// ── Divider Row ───────────────────────────────────────────────────────────────
 function DividerRow({ label }) {
   return (
     <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: "7px 14px",
-      background: "linear-gradient(90deg,#fff7ed,#fef9f5)",
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "8px 16px",
+      background: "linear-gradient(90deg, rgba(56,189,248,0.06), rgba(56,189,248,0.02))",
       borderBottom: `1px solid ${C.b1}`,
     }}>
-      <div style={{ height: 1, width: 10, background: C.b2, flexShrink: 0 }} />
+      <div style={{ width: 16, height: 1, background: "rgba(56,189,248,0.4)", flexShrink: 0 }} />
       <span style={{
-        fontSize: 10,
-        fontFamily: F.mono,
-        fontWeight: 700,
-        color: C.ac,
-        textTransform: "uppercase",
-        letterSpacing: "1.2px",
-        whiteSpace: "nowrap",
+        fontSize: 10, fontFamily: F.mono, fontWeight: 600,
+        color: C.ac, textTransform: "uppercase", letterSpacing: "1.5px", whiteSpace: "nowrap",
       }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: C.b2 }} />
+      <div style={{ flex: 1, height: 1, background: "rgba(56,189,248,0.15)" }} />
     </div>
   );
 }
 
-function StepRow({
-  step,
-  idx,
-  onChange,
-  onStatusToggle,
-  isActive,
-  onActivate,
-  rowRef,
-}) {
+// ── Step Row ──────────────────────────────────────────────────────────────────
+function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef }) {
   const isMobile = useIsMobile();
-
-  const rowBg =
-    step.status === "fail"
-      ? "#fff5f5"
-      : step.status === "pass"
-      ? "#f0fdf4"
-      : isActive
-      ? "#fff7ed"
-      : "transparent";
+  const rowBg = step.status === "fail" ? "rgba(251,113,133,0.06)" : step.status === "pass" ? "rgba(52,211,153,0.06)" : isActive ? "rgba(56,189,248,0.05)" : "transparent";
 
   const passBtn = (
-    <button
-      onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        padding: isMobile ? "7px 0" : "4px 10px",
-        borderRadius: 20,
-        border: `1px solid ${step.status === "pass" ? "#86efac" : C.b2}`,
-        background: step.status === "pass" ? C.grd : "transparent",
-        color: step.status === "pass" ? C.gr : C.t3,
-        fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
-        cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
-      }}
-    >
+    <button onClick={e => { e.stopPropagation(); onStatusToggle(idx, "pass"); }} style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: isMobile ? "7px 0" : "4px 10px", borderRadius: 20,
+      border: `1px solid ${step.status === "pass" ? "rgba(52,211,153,0.5)" : C.b2}`,
+      background: step.status === "pass" ? "rgba(52,211,153,0.12)" : "transparent",
+      color: step.status === "pass" ? C.gr : C.t3,
+      fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
+      cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
+    }}>
       <Ico n="check" s={isMobile ? 12 : 10} /> PASS
     </button>
   );
   const failBtn = (
-    <button
-      onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        padding: isMobile ? "7px 0" : "4px 10px",
-        borderRadius: 20,
-        border: `1px solid ${step.status === "fail" ? "#fca5a5" : C.b2}`,
-        background: step.status === "fail" ? C.red : "transparent",
-        color: step.status === "fail" ? C.re : C.t3,
-        fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
-        cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
-      }}
-    >
+    <button onClick={e => { e.stopPropagation(); onStatusToggle(idx, "fail"); }} style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: isMobile ? "7px 0" : "4px 10px", borderRadius: 20,
+      border: `1px solid ${step.status === "fail" ? "rgba(251,113,133,0.5)" : C.b2}`,
+      background: step.status === "fail" ? "rgba(251,113,133,0.12)" : "transparent",
+      color: step.status === "fail" ? C.re : C.t3,
+      fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
+      cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
+    }}>
       <Ico n="x" s={isMobile ? 12 : 10} /> FAIL
     </button>
   );
 
-  // ── Mobile: card layout ──────────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div
-        ref={rowRef}
-        onClick={onActivate}
-        style={{
-          borderBottom: `1px solid ${C.b1}`,
-          background: rowBg,
-          outline: isActive ? `2px solid ${C.ac}` : "none",
-          outlineOffset: -2,
-          transition: "background .15s, outline .15s",
-          padding: "10px 12px",
-        }}
-      >
-        {/* Row 1: serial + status buttons */}
+      <div ref={rowRef} onClick={onActivate} style={{
+        borderBottom: `1px solid ${C.b1}`, background: rowBg,
+        outline: isActive ? `2px solid rgba(56,189,248,0.5)` : "none",
+        outlineOffset: -2, transition: "background .15s", padding: "10px 12px",
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span style={{
-            fontFamily: F.mono, fontSize: 11, fontWeight: 700,
-            color: C.t3, minWidth: 28, flexShrink: 0,
-          }}>
+          <span style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: C.t3, minWidth: 28, flexShrink: 0 }}>
             {isActive && <span style={{ color: C.ac, marginRight: 2 }}>●</span>}
             {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
           </span>
           <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", gap: 6, width: 160 }}>
-            {passBtn}
-            {failBtn}
-          </div>
+          <div style={{ display: "flex", gap: 6, width: 160 }}>{passBtn}{failBtn}</div>
         </div>
-        {/* Row 2: action */}
         {step.action ? (
-          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5, marginBottom: 4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {step.action}
-          </div>
+          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5, marginBottom: 4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{step.action}</div>
         ) : (
           <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", fontFamily: F.mono, marginBottom: 4 }}>No action</div>
         )}
-        {/* Row 3: expected result */}
         {step.result ? (
-          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5, marginBottom: 6, paddingLeft: 8, borderLeft: `2px solid ${C.b2}`, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5, marginBottom: 6, paddingLeft: 10, borderLeft: `2px solid rgba(56,189,248,0.25)`, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, display: "block", marginBottom: 2 }}>Expected</span>
             {step.result}
           </div>
         ) : null}
-        {/* Row 4: remarks */}
         <textarea
-          value={step.remarks}
-          onChange={(e) => onChange(idx, "remarks", e.target.value)}
-          placeholder="Add remarks…"
-          rows={2}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: "100%", background: C.s2, border: `1px solid ${C.b1}`,
-            borderRadius: 6, color: C.t2, fontFamily: F.sans,
-            fontSize: 12, resize: "vertical", outline: "none",
-            lineHeight: 1.5, padding: "6px 8px", minHeight: 36,
-          }}
+          value={step.remarks} onChange={e => onChange(idx, "remarks", e.target.value)}
+          placeholder="Add remarks…" rows={2} onClick={e => e.stopPropagation()}
+          style={{ width: "100%", background: C.s2, border: `1px solid ${C.b1}`, borderRadius: 6, color: C.t2, fontFamily: F.sans, fontSize: 12, resize: "vertical", outline: "none", lineHeight: 1.5, padding: "6px 8px", minHeight: 36 }}
         />
       </div>
     );
   }
 
-  // ── Desktop: grid table row ──────────────────────────────────────────────────
-  const readonlyCell = (text, color) => (
-    <div style={{ padding: "8px 10px", display: "flex", alignItems: "flex-start", borderRight: `1px solid ${C.b1}`, minHeight: 40 }}>
+  const readCell = (text, col) => (
+    <div style={{ padding: "8px 12px", display: "flex", alignItems: "flex-start", borderRight: `1px solid ${C.b1}`, minHeight: 40 }}>
       {text ? (
-        <span style={{ fontSize: 12, color, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{text}</span>
+        <span style={{ fontSize: 12, color: col, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{text}</span>
       ) : (
         <span style={{ fontSize: 11, color: C.t3, fontStyle: "italic", fontFamily: F.mono }}>—</span>
       )}
@@ -2523,42 +1511,29 @@ function StepRow({
   );
 
   return (
-    <div
-      ref={rowRef}
-      onClick={onActivate}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "50px 1fr 1fr 180px 110px",
-        gap: 0,
-        borderBottom: `1px solid ${C.b1}`,
-        background: rowBg,
-        outline: isActive ? `2px solid ${C.ac}` : "none",
-        outlineOffset: -2,
-        transition: "background .15s, outline .15s",
-        cursor: "default",
-      }}
-    >
+    <div ref={rowRef} onClick={onActivate} style={{
+      display: "grid", gridTemplateColumns: "50px 1fr 1fr 180px 110px",
+      borderBottom: `1px solid ${C.b1}`, background: rowBg,
+      outline: isActive ? `2px solid rgba(56,189,248,0.4)` : "none",
+      outlineOffset: -2, transition: "background .15s", cursor: "default",
+    }}>
       <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${C.b1}` }}>
         {isActive && <div style={{ width: 4, height: 4, borderRadius: "50%", background: C.ac, marginRight: 4, flexShrink: 0 }} />}
         <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 600, color: step.serialNo != null && step.serialNo !== "" ? C.t2 : C.t3 }}>
           {step.serialNo != null && step.serialNo !== "" ? step.serialNo : "—"}
         </span>
       </div>
-      {readonlyCell(step.action, C.t1)}
-      {readonlyCell(step.result, C.t2)}
-      <div style={{ padding: "4px 8px", borderRight: `1px solid ${C.b1}` }}>
+      {readCell(step.action, C.t1)}
+      {readCell(step.result, C.t2)}
+      <div style={{ padding: "4px 10px", borderRight: `1px solid ${C.b1}` }}>
         <textarea
-          value={step.remarks}
-          onChange={(e) => onChange(idx, "remarks", e.target.value)}
-          placeholder="Remarks…"
-          rows={2}
-          onClick={(e) => e.stopPropagation()}
+          value={step.remarks} onChange={e => onChange(idx, "remarks", e.target.value)}
+          placeholder="Remarks…" rows={2} onClick={e => e.stopPropagation()}
           style={{ width: "100%", background: "transparent", border: "none", color: C.t2, fontFamily: F.sans, fontSize: 12, resize: "vertical", outline: "none", lineHeight: 1.5, minHeight: 36 }}
         />
       </div>
       <div style={{ padding: "6px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
-        {passBtn}
-        {failBtn}
+        {passBtn}{failBtn}
       </div>
     </div>
   );
@@ -2586,11 +1561,8 @@ function TestDetail({
   const [search, setSearch] = useState("");
   const [fStat, setFStat] = useState("all");
   const [addCount, setAddCount] = useState(10);
-  const [renaming, setRenaming] = useState(false);
-  const [renVal, setRenVal] = useState(test.name);
   const [descVal, setDescVal] = useState(test.description || "");
   const [activeIdx, setActiveIdx] = useState(0); // tracks the highlighted row (original step index)
-  const renRef = useRef();
   const rowRefs = useRef({}); // keyed by original step index
   const tableRef = useRef();
 
@@ -2601,7 +1573,6 @@ function TestDetail({
   // Re-sync steps when the parent test identity changes (new test opened).
   useEffect(() => {
     setSteps(test.steps);
-    setRenVal(test.name);
     setDescVal(test.description || "");
     const firstPending = test.steps.findIndex((s) => !s.isDivider && s.status === "pending");
     setActiveIdx(firstPending >= 0 ? firstPending : 0);
@@ -2806,7 +1777,7 @@ function TestDetail({
     const statusColor = (s) =>
       s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
     const statusBg = (s) =>
-      s === "pass" ? "#f0fdf4" : s === "fail" ? "#fff5f5" : "#f9fafb";
+      s === "pass" ? "rgba(52,211,153,0.08)" : s === "fail" ? "rgba(251,113,133,0.08)" : "rgba(10,16,28,0.9)";
     const rows = steps
       .map(
         (s) => `
@@ -2961,29 +1932,8 @@ function TestDetail({
 
           <span style={{ color: C.t3, fontSize: 12, flexShrink: 0 }}>›</span>
 
-          {/* Test name (editable) */}
-          {renaming ? (
-            <input
-              ref={renRef}
-              value={renVal}
-              onChange={(e) => setRenVal(e.target.value)}
-              onBlur={() => { commit(steps, renVal || test.name, descVal); setRenaming(false); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { commit(steps, renVal || test.name, descVal); setRenaming(false); }
-                if (e.key === "Escape") setRenaming(false);
-              }}
-              autoFocus
-              style={{
-                background: "none", border: "none",
-                borderBottom: `2px solid ${C.ac}`,
-                color: C.t1, fontFamily: F.sans,
-                fontSize: isMobile ? 14 : 15,
-                fontWeight: 700, padding: "0 2px",
-                outline: "none", minWidth: 0, flex: 1,
-              }}
-            />
-          ) : (
-            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 5 }}>
+          {/* Test name (static) */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{
                 fontSize: isMobile ? 14 : 15,
                 fontWeight: 700,
@@ -2994,17 +1944,7 @@ function TestDetail({
               }}>
                 {test.name}
               </span>
-              {isAdmin && (
-                <button
-                  onClick={() => { setRenaming(true); setTimeout(() => renRef.current?.select(), 20); }}
-                  style={{ ...iBtn(), padding: 3, flexShrink: 0 }}
-                  title="Rename test"
-                >
-                  <Ico n="edit" s={11} />
-                </button>
-              )}
             </div>
-          )}
 
           {/* Progress pill — always visible */}
           <div style={{
@@ -3068,7 +2008,7 @@ function TestDetail({
         }}>
           <input
             value={descVal}
-            onChange={(e) => { setDescVal(e.target.value); commit(steps, renVal, e.target.value); }}
+            onChange={(e) => { setDescVal(e.target.value); commit(steps, test.name, e.target.value); }}
             placeholder="Add a description…"
             style={{
               flex: 1,
@@ -3224,7 +2164,7 @@ function TestDetail({
           style={{
             display: "grid",
             gridTemplateColumns: "50px 1fr 1fr 180px 110px",
-            background: "rgba(246,248,250,0.88)",
+            background: "rgba(10,16,28,0.9)",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
             borderBottom: `1px solid ${C.b2}`,
@@ -3293,7 +2233,6 @@ function TestDetail({
     </div>
   );
 }
-
 // ── Module View — shows test list for one module, one test at a time ───────────
 function ModuleView({
   mod,
@@ -3311,10 +2250,7 @@ function ModuleView({
   const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null); // null = list, number = test detail
   const [search, setSearch] = useState("");
-  const [renaming, setRenaming] = useState(false);
-  const [renVal, setRenVal] = useState(mod.name);
   const [locks, setLocks] = useState({});
-  const renRef = useRef();
 
   // Refs to always have current values without stale closures
   const activeTestIdRef  = useRef(null);  // test id currently open (for heartbeat + beforeunload)
@@ -3392,7 +2328,6 @@ function ModuleView({
     }
     setSelTestIdx(null);
     setSearch("");
-    setRenVal(mod.name);
   }, [mod.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openTest = async (realIdx) => {
@@ -3525,55 +2460,11 @@ function ModuleView({
     >
       <Topbar
         title={
-          renaming ? (
-            <input
-              ref={renRef}
-              value={renVal}
-              onChange={(e) => setRenVal(e.target.value)}
-              onBlur={() => {
-                saveModName(renVal || mod.name);
-                setRenaming(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  saveModName(renVal || mod.name);
-                  setRenaming(false);
-                }
-                if (e.key === "Escape") setRenaming(false);
-              }}
-              autoFocus
-              style={{
-                background: "none",
-                border: "none",
-                borderBottom: `1px solid ${C.ac}`,
-                color: C.t1,
-                fontFamily: F.sans,
-                fontSize: 15,
-                fontWeight: 700,
-                padding: "0 2px",
-                outline: "none",
-                width: 220,
-              }}
-            />
-          ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {mod.name}
               </span>
-              {isAdmin && (
-                <button
-                  onClick={() => {
-                    setRenaming(true);
-                    setTimeout(() => renRef.current?.select(), 20);
-                  }}
-                  style={{ ...iBtn(), padding: 3, flexShrink: 0 }}
-                  title="Rename module"
-                >
-                  <Ico n="edit" s={12} />
-                </button>
-              )}
             </span>
-          )
         }
         sub={`${modIdx + 1}/${modTotal} · ${mod.tests.length} test${mod.tests.length !== 1 ? "s" : ""}`}
       >
@@ -3639,16 +2530,16 @@ function ModuleView({
               <div
                 key={t.id}
                 style={{
-                  background: lockedByOther ? "#fefce8"
-                    : isMyLockedTest ? "#f0fdf4"
-                    : blockedByMyLock ? "#f8fafc"
+                  background: lockedByOther ? "rgba(251,191,36,0.08)"
+                    : isMyLockedTest ? "rgba(52,211,153,0.08)"
+                    : blockedByMyLock ? "rgba(15,25,45,0.5)"
                     : C.s1,
                   border: `1px solid ${
-                    lockedByOther ? "#fde68a"
-                      : isMyLockedTest ? "#86efac"
+                    lockedByOther ? "rgba(251,191,36,0.3)"
+                      : isMyLockedTest ? "rgba(52,211,153,0.3)"
                       : blockedByMyLock ? C.b1
-                      : fail > 0 ? "#fca5a5"
-                      : pass === t.steps.length && t.steps.length > 0 ? "#bbf7d0"
+                      : fail > 0 ? "rgba(251,113,133,0.3)"
+                      : pass === t.steps.length && t.steps.length > 0 ? "rgba(52,211,153,0.25)"
                       : C.b1
                   }`,
                   borderRadius: 10,
@@ -3678,7 +2569,7 @@ function ModuleView({
                       height: 36,
                       borderRadius: 9,
                       background: lockedByOther ? "#fef3c7" : isMyLockedTest ? "#dcfce7" : C.s3,
-                      border: `1px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
+                      border: `1px solid ${lockedByOther ? "rgba(251,191,36,0.5)" : isMyLockedTest ? "rgba(52,211,153,0.3)" : C.b2}`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -3711,7 +2602,7 @@ function ModuleView({
                       <div style={{ marginTop: 3 }}>
                         {lockInfo && (
                           <span style={{
-                            fontSize: 10, fontFamily: F.mono, background: "#fef3c7",
+                            fontSize: 10, fontFamily: F.mono, background: "rgba(251,191,36,0.1)",
                             color: C.am, padding: "2px 8px", borderRadius: 10,
                             border: `1px solid #fcd34d`, fontWeight: 700,
                           }}>
@@ -3720,7 +2611,7 @@ function ModuleView({
                         )}
                         {isMyLockedTest && (
                           <span style={{
-                            fontSize: 10, fontFamily: F.mono, background: "#dcfce7",
+                            fontSize: 10, fontFamily: F.mono, background: "rgba(52,211,153,0.1)",
                             color: C.gr, padding: "2px 8px", borderRadius: 10,
                             border: `1px solid #86efac`, fontWeight: 700,
                           }}>
@@ -3832,7 +2723,6 @@ function ModuleView({
     </div>
   );
 }
-
 // ── Report View ────────────────────────────────────────────────────────────────
 function ReportView({ modules, toast }) {
   const isMobile = useIsMobile();
@@ -3897,7 +2787,7 @@ function ReportView({ modules, toast }) {
     const sc = (s) =>
       s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
     const sb = (s) =>
-      s === "pass" ? "#f0fdf4" : s === "fail" ? "#fff5f5" : "#ffffff";
+      s === "pass" ? "rgba(52,211,153,0.08)" : s === "fail" ? "rgba(251,113,133,0.08)" : "#0c1220";
 
     const modRows = filtered
       .map((m) => {
@@ -4051,7 +2941,7 @@ function ReportView({ modules, toast }) {
           <button
             onClick={() => setFailOnly((f) => !f)}
             style={{
-              ...smBtn(failOnly ? { background: C.red, borderColor: "#fca5a5", color: C.re } : {}),
+              ...smBtn(failOnly ? { background: C.red, borderColor: "rgba(251,113,133,0.3)", color: C.re } : {}),
               flexShrink: 0,
               whiteSpace: "nowrap",
             }}
@@ -4103,7 +2993,7 @@ function ReportView({ modules, toast }) {
             return (
               <div key={m.id} style={{
                 background: C.s1,
-                border: `1px solid ${m.fail > 0 ? "#fca5a5" : m.pass === m.total && m.total > 0 ? "#86efac" : C.b1}`,
+                border: `1px solid ${m.fail > 0 ? "rgba(251,113,133,0.3)" : m.pass === m.total && m.total > 0 ? "rgba(52,211,153,0.3)" : C.b1}`,
                 borderRadius: 10,
                 overflow: "hidden",
               }}>
@@ -4178,7 +3068,7 @@ function ReportView({ modules, toast }) {
                           {t.steps.map((s) => {
                             const c = s.status === "pass" ? C.gr : s.status === "fail" ? C.re : C.am;
                             const bg2 = s.status === "pass" ? C.grd : s.status === "fail" ? C.red : C.amd;
-                            const stepBg = s.status === "fail" ? "#fff5f5" : s.status === "pass" ? "#f9fffe" : "transparent";
+                            const stepBg = s.status === "fail" ? "rgba(251,113,133,0.08)" : s.status === "pass" ? "rgba(52,211,153,0.05)" : "transparent";
 
                             if (isMobile) {
                               // Mobile: card layout per step
@@ -5040,7 +3930,7 @@ export default function App() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: C.bg,
+          background: C.s1,
           color: C.ac,
           fontFamily: F.mono,
           fontSize: 13,
@@ -5087,7 +3977,7 @@ export default function App() {
         display: "flex",
         height: "100vh",
         overflow: "hidden",
-        background: C.bg,
+        background: C.s1,
         color: C.t1,
         fontFamily: F.sans,
         fontSize: 14,
@@ -5217,7 +4107,7 @@ export default function App() {
             bottom: 0,
             left: 0,
             right: 0,
-            background: "rgba(255,255,255,0.80)",
+            background: "rgba(7,11,18,0.92)",
             backdropFilter: "blur(18px)",
             WebkitBackdropFilter: "blur(18px)",
             borderTop: `1px solid rgba(221,226,234,0.6)`,
@@ -5255,7 +4145,7 @@ export default function App() {
                   gap: 4,
                   border: "none",
                   borderTop: `2px solid ${isActive ? C.ac : "transparent"}`,
-                  background: isActive ? "#fff7ed" : "transparent",
+                  background: isActive ? "rgba(56,189,248,0.1)" : "transparent",
                   color: isActive ? C.ac : C.t3,
                   fontFamily: F.sans,
                   fontSize: 10,
