@@ -1115,135 +1115,274 @@ function useToast() {
 }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
+
+// Background watermark logo — large faint "TP" mark behind the login card.
+// TO EDIT THIS SVG IN THE FUTURE: see comment block below the LoginPage function.
+function LoginBgLogo() {
+  return (
+    <svg
+      viewBox="0 0 200 200"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{
+        position: "absolute",
+        width: "min(520px, 90vw)",
+        height: "min(520px, 90vw)",
+        opacity: 0.045,
+        pointerEvents: "none",
+        userSelect: "none",
+        // centred in the background
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        zIndex: 0,
+      }}
+      aria-hidden="true"
+    >
+      {/* ── Outer ring ── */}
+      <circle cx="100" cy="100" r="96" fill="none" stroke="#0070f3" strokeWidth="3.5" />
+
+      {/* ── Inner decorative ring ── */}
+      <circle cx="100" cy="100" r="80" fill="none" stroke="#0070f3" strokeWidth="1" strokeDasharray="4 6" />
+
+      {/* ── "TP" wordmark ── */}
+      {/* T */}
+      <text
+        x="28" y="122"
+        fontFamily="'SF Mono','Fira Code',monospace"
+        fontWeight="800"
+        fontSize="72"
+        fill="#0070f3"
+        letterSpacing="-4"
+      >T</text>
+      {/* P */}
+      <text
+        x="96" y="122"
+        fontFamily="'SF Mono','Fira Code',monospace"
+        fontWeight="800"
+        fontSize="72"
+        fill="#0077b6"
+        letterSpacing="-4"
+      >P</text>
+
+      {/* ── Small tick mark (pass icon) at bottom ── */}
+      <polyline
+        points="82,158 94,170 120,144"
+        fill="none"
+        stroke="#0070f3"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
   const isMobile = useIsMobile();
+
   const go = () => {
     const found = users.find(
       (x) => x.username === u.trim() && x.password === p && x.active
     );
     found ? onLogin(found) : setErr("Invalid credentials or account inactive.");
   };
+
   return (
+    /*
+     * Outer wrapper:
+     *   - min-height instead of height so the page scrolls on very small screens
+     *     instead of clipping content
+     *   - overflowY: "auto" lets the card scroll into view on short viewports
+     *   - position: relative so the absolute background logo is contained here
+     */
     <div
       style={{
-        height: "100vh",
+        minHeight: "100dvh",        // dvh = dynamic viewport height (accounts for mobile browser chrome)
         display: "flex",
-        alignItems: isMobile ? "flex-start" : "center",
+        alignItems: "center",
         justifyContent: "center",
-        background: `linear-gradient(160deg,#e8f0fe 0%,#f0f2f5 60%)`,
-        padding: isMobile ? "40px 16px" : 0,
+        background: "linear-gradient(160deg,#e8f0fe 0%,#eef2fb 50%,#f0f2f5 100%)",
+        padding: isMobile ? "24px 16px" : "40px 16px",
+        boxSizing: "border-box",
         overflowY: "auto",
+        position: "relative",
       }}
     >
+      {/* Faint background watermark logo */}
+      <LoginBgLogo />
+
+      {/*
+       * Login card:
+       *   - boxSizing: border-box ensures padding doesn't add to the stated width
+       *   - width is capped so it never bleeds off screen
+       *   - no hard height — the card grows to fit its content
+       *   - zIndex: 1 puts it above the background logo
+       */}
       <div
         style={{
-          width: isMobile ? "100%" : 390,
-          maxWidth: 420,
-          padding: isMobile ? "36px 24px" : "48px 40px",
+          position: "relative",
+          zIndex: 1,
+          width: "100%",
+          maxWidth: 400,
+          boxSizing: "border-box",
+          padding: isMobile ? "32px 24px 28px" : "48px 40px 40px",
           background: C.s1,
           border: `1px solid ${C.b1}`,
-          borderRadius: 16,
-          boxShadow: "0 8px 40px rgba(0,0,0,.10)",
+          borderRadius: 18,
+          boxShadow: "0 8px 48px rgba(0,0,0,.11), 0 1px 3px rgba(0,0,0,.06)",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 38,
-          }}
-        >
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 10,
-              background: "linear-gradient(135deg,#00b4d8,#0077b6)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: F.mono,
-              fontWeight: 700,
-              fontSize: 14,
-              color: "#fff",
-            }}
-          >
-            TP
-          </div>
-          <div
-            style={{
-              fontFamily: F.mono,
-              fontSize: 20,
-              fontWeight: 700,
-              color: C.t1,
-            }}
-          >
+        {/* Logo + brand */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
+          {/* Inline SVG logo mark — edit colours/shape here */}
+          <svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
+            <rect width="42" height="42" rx="10" fill="url(#lgGrad)" />
+            <defs>
+              <linearGradient id="lgGrad" x1="0" y1="0" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#00b4d8" />
+                <stop offset="100%" stopColor="#0077b6" />
+              </linearGradient>
+            </defs>
+            {/* T bar */}
+            <rect x="9" y="12" width="24" height="4" rx="2" fill="white" />
+            {/* T stem */}
+            <rect x="19" y="16" width="4" height="14" rx="2" fill="white" />
+            {/* P loop — simple tick/check to hint "testing" */}
+            <polyline
+              points="12,33 17,38 30,25"
+              fill="none"
+              stroke="white"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 800, color: C.t1, letterSpacing: -0.5 }}>
             Test<span style={{ color: C.ac }}>Pro</span>
           </div>
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
+
+        {/* Heading */}
+        <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: C.t1, marginBottom: 4 }}>
           Sign in
         </div>
-        <div style={{ fontSize: 13, color: C.t2, marginBottom: 30 }}>
+        <div style={{ fontSize: 13, color: C.t2, marginBottom: 28 }}>
           Access your testing workspace
         </div>
+
+        {/* Fields — Field component already adds marginBottom: 18, no extra spacing needed */}
         <Field label="Username">
           <input
-            style={inputSty}
+            style={{ ...inputSty, boxSizing: "border-box" }}
             value={u}
-            onChange={(e) => setU(e.target.value)}
+            onChange={(e) => { setU(e.target.value); setErr(""); }}
             onKeyDown={(e) => e.key === "Enter" && go()}
             autoFocus
+            autoCapitalize="none"
+            autoCorrect="off"
+            placeholder="Enter your username"
           />
         </Field>
         <Field label="Password">
           <input
-            style={inputSty}
+            style={{ ...inputSty, boxSizing: "border-box" }}
             type="password"
             value={p}
-            onChange={(e) => setP(e.target.value)}
+            onChange={(e) => { setP(e.target.value); setErr(""); }}
             onKeyDown={(e) => e.key === "Enter" && go()}
+            placeholder="Enter your password"
           />
         </Field>
+
+        {/* Error message */}
+        {err && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 7,
+            background: "#fef2f2", border: "1px solid #fecaca",
+            borderRadius: 8, padding: "9px 12px", marginBottom: 16,
+          }}>
+            <Ico n="x" s={13} c={C.re} />
+            <span style={{ color: C.re, fontSize: 12, fontFamily: F.mono }}>{err}</span>
+          </div>
+        )}
+
+        {/* Sign in button */}
         <button
           onClick={go}
           style={{
             width: "100%",
-            padding: 13,
+            boxSizing: "border-box",
+            padding: "13px 16px",
             border: "none",
-            borderRadius: 6,
+            borderRadius: 9,
             background: C.ac,
             color: "#fff",
             fontFamily: F.mono,
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: 700,
             cursor: "pointer",
-            boxShadow: `0 2px 8px rgba(0,112,243,.3)`,
+            boxShadow: "0 2px 12px rgba(0,112,243,.35)",
+            letterSpacing: 0.2,
+            transition: "opacity .15s",
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
         >
           Sign In →
         </button>
-        {err && (
-          <div
-            style={{
-              color: C.re,
-              fontSize: 12,
-              textAlign: "center",
-              marginTop: 14,
-              fontFamily: F.mono,
-            }}
-          >
-            {err}
-          </div>
-        )}
+
+        {/* Footer hint */}
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: C.t3, fontFamily: F.mono }}>
+          Contact your admin if you need access
+        </div>
       </div>
     </div>
   );
 }
+
+/*
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │  HOW TO EDIT THE SVG LOGO IN FUTURE                                     │
+ * ├─────────────────────────────────────────────────────────────────────────┤
+ * │                                                                         │
+ * │  There are TWO SVGs in the login screen:                                │
+ * │                                                                         │
+ * │  1. LoginBgLogo  (the large faint watermark behind the card)            │
+ * │     — viewBox="0 0 200 200"                                             │
+ * │     — Controlled by its `style` prop (size, opacity, position)          │
+ * │     — To change opacity: edit  opacity: 0.045  (0 = invisible, 1=full) │
+ * │     — To resize: edit  width/height  in the style prop                  │
+ * │     — To change the letters: edit the two <text> elements               │
+ * │     — To change ring style: edit stroke / strokeDasharray on <circle>   │
+ * │     — To change tick colour/size: edit <polyline> stroke / strokeWidth  │
+ * │                                                                         │
+ * │  2. Inline logo mark  (the 42×42 icon inside the card header)           │
+ * │     — viewBox="0 0 42 42"                                               │
+ * │     — Background: edit the <linearGradient> stop colours                │
+ * │     — Rounded rect: edit rx on <rect width="42" height="42" …>          │
+ * │     — "T" shape: two <rect> elements — adjust x/y/width/height          │
+ * │     — Tick: <polyline points="12,33 17,38 30,25"> — edit the numbers   │
+ * │       Format: "x1,y1 x2,y2 x3,y3" where the tick bends at point 2      │
+ * │                                                                         │
+ * │  QUICK SVG COORDINATE CHEATSHEET                                        │
+ * │     viewBox="0 0 W H"  →  top-left is 0,0  bottom-right is W,H         │
+ * │     x increases →  y increases ↓                                        │
+ * │     <rect x y width height rx> — rx rounds the corners                  │
+ * │     <circle cx cy r> — centre x, centre y, radius                       │
+ * │     <text x y fontSize>  — x/y is the baseline-left of the text         │
+ * │     <polyline points="x1,y1 x2,y2 …"> — connected line segments         │
+ * │     <path d="M x y L x y Z"> — M=move, L=line, Z=close                 │
+ * │     fill — shape fill colour    stroke — outline colour                  │
+ * │     strokeWidth — outline thickness                                      │
+ * │     opacity — 0=invisible, 1=solid (can also use on individual elements) │
+ * │                                                                         │
+ * │  TIP: Paste either SVG into https://svgviewer.dev to live-edit and      │
+ * │  preview changes before copying back here.                              │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ */
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 function Sidebar({
