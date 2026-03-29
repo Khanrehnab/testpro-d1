@@ -2060,15 +2060,77 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   );
 }
 
-// ── CSV Import Modal (Tests → Steps only) ──────────────────────────────────────
-function CsvImportModal({ onImport, onClose }) {
+// ── CSV Import Modal — shows upload picker, then a live progress bar during DB sync ──
+function CsvImportModal({ onImport, onClose, importing, importProgress, importStatus }) {
   const [drag, setDrag] = useState(false);
   const fileRef = useRef();
+
   const handleFile = (f) => {
     const r = new FileReader();
     r.onload = (e) => onImport(e.target.result);
     r.readAsText(f);
   };
+
+  // Once importing starts, replace the picker with a progress screen
+  if (importing) {
+    const pct   = Math.round(importProgress * 100);
+    const done  = importProgress >= 1;
+    return (
+      <Modal
+        title="Importing CSV…"
+        sub={importStatus}
+        onClose={done ? onClose : undefined} // block close until done
+        width={420}
+      >
+        {/* Progress bar track */}
+        <div style={{
+          height: 10,
+          background: C.s3,
+          borderRadius: 99,
+          overflow: "hidden",
+          margin: "18px 0 10px",
+        }}>
+          <div style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: done ? C.gr : C.ac,
+            borderRadius: 99,
+            transition: "width .25s ease, background .3s",
+          }} />
+        </div>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 11,
+          fontFamily: F.mono,
+          color: C.t3,
+          marginBottom: 20,
+        }}>
+          <span>{importStatus}</span>
+          <span style={{ color: done ? C.gr : C.ac, fontWeight: 700 }}>{pct}%</span>
+        </div>
+        {done && (
+          <ModalActions>
+            <button style={grBtn()} onClick={onClose}>
+              <Ico n="check" s={12} /> Done
+            </button>
+          </ModalActions>
+        )}
+        {!done && (
+          <div style={{
+            textAlign: "center",
+            fontSize: 11,
+            fontFamily: F.mono,
+            color: C.t3,
+            padding: "4px 0 8px",
+          }}>
+            Please wait — do not close this tab
+          </div>
+        )}
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       title="Import CSV"
@@ -2076,10 +2138,7 @@ function CsvImportModal({ onImport, onClose }) {
       onClose={onClose}
     >
       <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDrag(true);
-        }}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => {
           e.preventDefault();
@@ -2110,31 +2169,25 @@ function CsvImportModal({ onImport, onClose }) {
         type="file"
         accept=".csv,.txt"
         style={{ display: "none" }}
-        onChange={(e) => {
-          if (e.target.files[0]) handleFile(e.target.files[0]);
-        }}
+        onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); }}
       />
-      <div
-        style={{
-          background: C.s2,
-          border: `1px solid ${C.b1}`,
-          borderRadius: 6,
-          padding: "10px 14px",
-          fontFamily: F.mono,
-          fontSize: 11,
-          color: C.t2,
-          lineHeight: 1.9,
-        }}
-      >
+      <div style={{
+        background: C.s2,
+        border: `1px solid ${C.b1}`,
+        borderRadius: 6,
+        padding: "10px 14px",
+        fontFamily: F.mono,
+        fontSize: 11,
+        color: C.t2,
+        lineHeight: 1.9,
+      }}>
         <div>1,Navigate to login page,Login page loads correctly</div>
         <div>2,Enter valid credentials,Fields accept input</div>
         <div>3,Click Submit,User is redirected to dashboard</div>
-        <div style={{color:"#9ca3af",marginTop:4}}>$$$Section Title — creates a divider row</div>
+        <div style={{ color: "#9ca3af", marginTop: 4 }}>$$$Section Title — creates a divider row</div>
       </div>
       <ModalActions>
-        <button style={btn()} onClick={onClose}>
-          Cancel
-        </button>
+        <button style={btn()} onClick={onClose}>Cancel</button>
       </ModalActions>
     </Modal>
   );
@@ -2382,6 +2435,9 @@ function TestDetail({
   const isAdmin = session.role === "admin";
   const [steps, setSteps] = useState(test.steps);
   const [csvOpen, setCsvOpen] = useState(false);
+  const [importing, setImporting] = useState(false);       // true while DB sync is running
+  const [importProgress, setImportProgress] = useState(0); // 0–1
+  const [importStatus, setImportStatus] = useState("");     // human-readable status line
   const [search, setSearch] = useState("");
   const [fStat, setFStat] = useState("all");
   const [addCount, setAddCount] = useState(10);
@@ -2588,9 +2644,12 @@ function TestDetail({
   // preserving tester remarks/status and preventing duplicate DB rows.
   //
   // Cross-module sync: after importing, the same Action/Result/divider
-  // structure is pushed to the same test-index in every other module,
-  // preserving each module's own existing remarks and status values.
-  const importCSV = (text) => {
+  // structure is pushed to the same test-index in every other module.
+  //
+  // Progress: steps are upserted in batches of 50 per module. After each
+  // batch a "handshake" (DB round-trip) confirms the write before continuing.
+  // The app is blocked (progress modal) until all modules are synced.
+  const importCSV = async (text) => {
     const lines = text.trim().split("\n");
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
     const MAX_CSV_LINES = 1000;
@@ -2600,8 +2659,7 @@ function TestDetail({
     }
     const dataLines = rawDataLines.slice(0, MAX_CSV_LINES);
 
-    // Helper: build a steps array for a given target test, using the parsed
-    // CSV rows but preserving any existing remarks/status from that test.
+    // Helper: build a steps array for a given target test, preserving remarks/status
     const buildStepsForTest = (targetTest, targetTestId) => {
       const existingBySN = {};
       (targetTest.steps || []).forEach((s) => {
@@ -2609,110 +2667,187 @@ function TestDetail({
           existingBySN[String(s.serialNo)] = s;
         }
       });
-
       let stepCounter = 0;
       const result = [];
-
       dataLines.forEach((line, i) => {
         const cols = csvParse(line);
         const rawFirst = (cols[0] || "").trim();
-
         if (rawFirst.startsWith("$$$")) {
           const label =
             rawFirst.slice(3).trim() ||
             cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
             "Section";
           const stableLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 40);
-          const divId = `${targetTestId}_div_${stableLabel}_${i}`;
           result.push({
-            id: divId,
-            serialNo: null,
-            action: label,
-            result: "",
-            remarks: "",
-            status: "pending",
-            isDivider: true,
+            id: `${targetTestId}_div_${stableLabel}_${i}`,
+            serialNo: null, action: label, result: "", remarks: "", status: "pending", isDivider: true,
           });
         } else {
           stepCounter++;
-          const csvSN =
-            rawFirst !== ""
-              ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
-              : stepCounter;
-
+          const csvSN = rawFirst !== "" ? (isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)) : stepCounter;
           const existing = existingBySN[String(csvSN)];
-          const stableId = existing?.id || `${targetTestId}_s${csvSN}`;
-
           result.push({
             ...(existing || {}),
-            id: stableId,
-            isDivider: false,
-            serialNo: csvSN,
+            id: existing?.id || `${targetTestId}_s${csvSN}`,
+            isDivider: false, serialNo: csvSN,
             action: cols[1] !== undefined ? cols[1] : (existing?.action ?? ""),
             result: cols[2] !== undefined ? cols[2] : (existing?.result ?? ""),
-            // Preserve each module's tester remarks + status — never overwrite
             remarks: existing?.remarks ?? "",
             status:  existing?.status  ?? "pending",
           });
         }
       });
-
       return result;
     };
 
-    // Build steps for the current test (to update local state immediately)
+    // ── 1. Update local state immediately so the UI shows the new steps ──────
     const ns = buildStepsForTest(test, test.id);
     setSteps(ns);
-    setCsvOpen(false);
+    setCsvOpen(false);   // close the file picker modal
+    setImporting(true);  // open the progress modal — app is now blocked
+    setImportProgress(0);
+    setImportStatus("Preparing…");
+    localCommitRef.current = true;
 
-    // Now propagate to ALL modules at the same test-index (testIdx).
-    // Deferred via setTimeout so the UI updates (modal close + steps render)
-    // paint first — prevents the browser from freezing on large module counts.
-    setTimeout(async () => {
-      localCommitRef.current = true;
-      const updatedModules = {};
-      const savePromises = [];
-
-      for (const [modId, m] of Object.entries(allModules)) {
-        const targetTest = m.tests[testIdx];
-        if (!targetTest) {
-          updatedModules[modId] = m;
-          continue;
-        }
-        const targetSteps = buildStepsForTest(targetTest, targetTest.id);
-        const updTests = m.tests.map((t, i) =>
-          i === testIdx ? { ...t, steps: targetSteps } : t
-        );
-        updatedModules[modId] = { ...m, tests: updTests };
-
-        // Save each test's steps surgically to DB
-        savePromises.push(
-          store.saveSteps(targetTest.id, modId, targetSteps, {
-            moduleName:  m.name,
-            serialNo:    targetTest.serialNo ?? targetTest.serial_no ?? 0,
-            name:        targetTest.name,
-            description: targetTest.description ?? "",
-          }).catch((e) =>
-            console.error(`saveSteps error for ${modId}/${targetTest.id}:`, e)
-          )
-        );
-      }
-
-      saveMods(updatedModules);
-      await Promise.all(savePromises);
-
-      const modCount = Object.values(allModules).filter((m) => m.tests[testIdx]).length;
-      toast(
-        `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""} → synced to ${modCount} module${modCount !== 1 ? "s" : ""}`,
-        "success"
-      );
-      addLog({
-        ts: Date.now(),
-        user: session.name,
-        action: `CSV imported into Test ${testIdx + 1} across ${modCount} modules (${dataLines.length} rows each)`,
-        type: "info",
+    // ── 2. Build per-module step arrays ──────────────────────────────────────
+    const modulesToSync = [];
+    for (const [modId, m] of Object.entries(allModules)) {
+      const targetTest = m.tests[testIdx];
+      if (!targetTest) continue;
+      modulesToSync.push({
+        modId, m,
+        targetTest,
+        targetSteps: buildStepsForTest(targetTest, targetTest.id),
       });
-    }, 0);
+    }
+
+    const HANDSHAKE_EVERY = 50; // DB round-trip after every N steps
+    const CHUNK           = 50; // upsert batch size (same as handshake interval)
+
+    // Total "units of work" = sum of ceil(steps / HANDSHAKE_EVERY) for each module
+    const totalUnits = modulesToSync.reduce(
+      (acc, { targetSteps }) => acc + Math.max(1, Math.ceil(targetSteps.length / HANDSHAKE_EVERY)),
+      0
+    );
+    let doneUnits = 0;
+
+    const updatedModules = { ...allModules };
+
+    // ── 3. Process each module serially, with per-50-step handshakes ─────────
+    for (let mi = 0; mi < modulesToSync.length; mi++) {
+      const { modId, m, targetTest, targetSteps } = modulesToSync[mi];
+      setImportStatus(`Syncing ${m.name} (${mi + 1}/${modulesToSync.length})…`);
+
+      // Update React state for this module
+      const updTests = m.tests.map((t, i) =>
+        i === testIdx ? { ...t, steps: targetSteps } : t
+      );
+      updatedModules[modId] = { ...m, tests: updTests };
+
+      // Ensure parent module + test rows exist (FK safety)
+      await supabase.from("modules").upsert(
+        { id: modId, name: m.name, position: 0 }, { onConflict: "id" }
+      );
+      await supabase.from("tests").upsert({
+        id:          targetTest.id,
+        module_id:   modId,
+        serial_no:   targetTest.serialNo ?? targetTest.serial_no ?? 0,
+        name:        targetTest.name,
+        description: targetTest.description ?? "",
+      }, { onConflict: "id" });
+
+      // Build DB rows
+      const stepsWithPosition = targetSteps.map((s, position) => ({
+        id:         s.id,
+        test_id:    targetTest.id,
+        position,
+        serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
+        action:     s.action   ?? "",
+        result:     s.result   ?? "",
+        remarks:    s.remarks  ?? "",
+        status:     s.status   ?? "pending",
+        is_divider: s.isDivider ?? false,
+      }));
+
+      // Upsert in batches of HANDSHAKE_EVERY, confirm each batch (handshake)
+      if (stepsWithPosition.length === 0) {
+        // No steps — just wipe
+        await supabase.from("steps").delete().eq("test_id", targetTest.id);
+        doneUnits++;
+        setImportProgress(doneUnits / totalUnits);
+      } else {
+        for (let si = 0; si < stepsWithPosition.length; si += CHUNK) {
+          const batch = stepsWithPosition.slice(si, si + CHUNK);
+
+          // Upsert batch
+          const { error: upErr } = await supabase
+            .from("steps")
+            .upsert(batch, { onConflict: "id" });
+          if (upErr) {
+            console.error(`Upsert steps error (${modId} batch ${si}):`, upErr);
+            toast(`Sync error on ${m.name} — retrying…`, "error");
+            // Retry once
+            const { error: retryErr } = await supabase
+              .from("steps")
+              .upsert(batch, { onConflict: "id" });
+            if (retryErr) {
+              console.error(`Retry failed (${modId} batch ${si}):`, retryErr);
+            }
+          }
+
+          // Handshake: verify the last step of this batch actually landed
+          const lastId = batch[batch.length - 1].id;
+          const { data: check, error: checkErr } = await supabase
+            .from("steps")
+            .select("id")
+            .eq("id", lastId)
+            .maybeSingle();
+
+          if (checkErr || !check) {
+            console.warn(`Handshake miss for step ${lastId} in ${modId} — continuing`);
+          }
+
+          doneUnits++;
+          setImportProgress(doneUnits / totalUnits);
+          setImportStatus(
+            `Syncing ${m.name} — steps ${si + batch.length}/${stepsWithPosition.length} (${mi + 1}/${modulesToSync.length} modules)`
+          );
+
+          // Yield to the browser between batches so the progress bar actually animates
+          await new Promise((r) => setTimeout(r, 0));
+        }
+
+        // Clean up stale steps for this test after all batches succeed
+        const liveIds = new Set(stepsWithPosition.map((s) => s.id));
+        const { data: existing } = await supabase
+          .from("steps").select("id").eq("test_id", targetTest.id);
+        const stale = (existing || []).map((r) => r.id).filter((id) => !liveIds.has(id));
+        if (stale.length) {
+          for (let si = 0; si < stale.length; si += CHUNK) {
+            await supabase.from("steps").delete().in("id", stale.slice(si, si + CHUNK));
+          }
+        }
+      }
+    }
+
+    // ── 4. Commit final module state to React ────────────────────────────────
+    saveMods(updatedModules);
+
+    // ── 5. Finalise ──────────────────────────────────────────────────────────
+    setImportProgress(1);
+    const modCount = modulesToSync.length;
+    setImportStatus(`Done — ${dataLines.length} rows synced across ${modCount} module${modCount !== 1 ? "s" : ""}`);
+
+    toast(
+      `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""} → synced to ${modCount} module${modCount !== 1 ? "s" : ""}`,
+      "success"
+    );
+    addLog({
+      ts: Date.now(),
+      user: session.name,
+      action: `CSV imported into Test ${testIdx + 1} across ${modCount} modules (${dataLines.length} rows each)`,
+      type: "info",
+    });
   };
 
   const exportCSV = () => {
@@ -3218,11 +3353,27 @@ function TestDetail({
         </div>
       </div>
 
-      {csvOpen && isAdmin && (
+      {/* Show CSV modal for file picking, OR during import for progress tracking */}
+      {(csvOpen || importing) && isAdmin && (
         <CsvImportModal
           onImport={importCSV}
-          onClose={() => setCsvOpen(false)}
+          onClose={() => {
+            if (!importing) setCsvOpen(false);
+            else if (importProgress >= 1) { setImporting(false); setCsvOpen(false); }
+          }}
+          importing={importing}
+          importProgress={importProgress}
+          importStatus={importStatus}
         />
+      )}
+      {/* Full-screen interaction blocker while import is running */}
+      {importing && importProgress < 1 && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 190, // below the modal (z:200) but above everything else
+          cursor: "not-allowed",
+        }} onClick={(e) => e.stopPropagation()} />
       )}
     </div>
   );
