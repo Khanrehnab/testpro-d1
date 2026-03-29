@@ -1335,115 +1335,29 @@ function LoginPage({ users, onLogin }) {
         willChange: "transform",
       }} />
 
-      {/* ── Background train illustration — 3/4 front-left perspective ── */}
+      {/* ── Background train illustration ── */}
       <div style={{
         position: "absolute",
-        bottom: isMobile ? "4%" : "5%",
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: isMobile ? 560 : 900,
-        opacity: 0.13,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: isMobile ? "52%" : "58%",
         pointerEvents: "none",
         zIndex: 0,
+        opacity: 0.13,
+        overflow: "hidden",
       }}>
-        <svg viewBox="0 0 700 430" fill="none" xmlns="http://www.w3.org/2000/svg" width="100%">
-
-          {/* ── Main body silhouette ── */}
-          <path d="
-            M 90 398
-            C 68 352, 85 272, 128 197
-            C 152 153, 190 110, 232 87
-            L 608 42
-            C 643 38, 674 52, 684 82
-            L 684 118
-            C 676 148, 648 176, 610 192
-            L 385 242
-            C 278 260, 182 304, 136 350
-            C 112 372, 96 388, 90 398
-            Z
-          " fill="#ea580c" stroke="#c2410c" strokeWidth="2.5"/>
-
-          {/* ── Windshield / cockpit glass ── */}
-          <path d="
-            M 128 197
-            C 152 153, 190 110, 232 87
-            L 298 78
-            L 318 178
-            C 288 203, 253 228, 212 252
-            L 148 284
-            C 131 254, 127 226, 128 197
-            Z
-          " fill="#7c2d12" fillOpacity="0.88"/>
-
-          {/* Windshield upper glint / reflection */}
-          <path d="M 155 168 C 172 138, 200 112, 232 93 L 258 87 L 268 130 C 245 148, 218 165, 188 180 Z"
-            fill="#fb923c" fillOpacity="0.22"/>
-
-          {/* ── Roof panel separation line ── */}
-          <path d="M 232 87 L 608 42"
-            stroke="#c2410c" strokeWidth="2.5" strokeLinecap="round"/>
-
-          {/* ── Three indicator lights at top ── */}
-          <circle cx="238" cy="90" r="11" fill="#fed7aa" fillOpacity="0.9"/>
-          <circle cx="266" cy="85" r="11" fill="#fed7aa" fillOpacity="0.9"/>
-          <circle cx="294" cy="80" r="11" fill="#fed7aa" fillOpacity="0.9"/>
-          {/* Light inner glow */}
-          <circle cx="238" cy="90" r="6" fill="#fff" fillOpacity="0.8"/>
-          <circle cx="266" cy="85" r="6" fill="#fff" fillOpacity="0.8"/>
-          <circle cx="294" cy="80" r="6" fill="#fff" fillOpacity="0.8"/>
-
-          {/* ── Body stripe / accent line ── */}
-          <path d="
-            M 145 305
-            C 220 280, 380 255, 545 230
-            L 668 210
-            L 672 226
-            L 545 248
-            C 380 272, 218 298, 143 323
-            Z
-          " fill="#c2410c" fillOpacity="0.6"/>
-
-          {/* ── Underbelly shadow ── */}
-          <path d="
-            M 90 398
-            C 100 420, 126 428, 158 422
-            L 360 372
-            L 280 352
-            L 136 350
-            C 112 365, 96 384, 90 398
-            Z
-          " fill="#7c2d12" fillOpacity="0.7"/>
-
-          {/* ── Tail highlight ── */}
-          <path d="M 635 50 C 658 48, 676 60, 682 80 L 682 100 C 670 88, 655 78, 635 74 Z"
-            fill="#fb923c" fillOpacity="0.45"/>
-
-          {/* ── Speed lines (trailing diagonally to lower-right) ── */}
-          <line x1="560" y1="175" x2="700" y2="152" stroke="#fb923c" strokeWidth="2.2" strokeLinecap="round" strokeOpacity="0.8"/>
-          <line x1="545" y1="198" x2="700" y2="173" stroke="#fb923c" strokeWidth="1.8" strokeLinecap="round" strokeOpacity="0.65"/>
-          <line x1="530" y1="220" x2="700" y2="194" stroke="#fb923c" strokeWidth="1.4" strokeLinecap="round" strokeOpacity="0.5"/>
-          <line x1="515" y1="242" x2="700" y2="215" stroke="#fb923c" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.38"/>
-          <line x1="500" y1="264" x2="700" y2="236" stroke="#fb923c" strokeWidth="1.0" strokeLinecap="round" strokeOpacity="0.28"/>
-          <line x1="480" y1="290" x2="700" y2="260" stroke="#c2410c" strokeWidth="0.8" strokeLinecap="round" strokeOpacity="0.22"/>
-
-          {/* ── Rail tracks in perspective ── */}
-          <line x1="10" y1="428" x2="700" y2="360" stroke="#ea580c" strokeWidth="3.5" strokeOpacity="0.7"/>
-          <line x1="0" y1="420" x2="700" y2="345" stroke="#c2410c" strokeWidth="2" strokeOpacity="0.45"/>
-
-          {/* Rail sleepers in perspective */}
-          {[0.05,0.13,0.22,0.32,0.43,0.54,0.65,0.76,0.87,0.96].map((t, i) => {
-            const x = t * 700;
-            const y1 = 428 - t * 68;
-            const y2 = 420 - t * 75;
-            return (
-              <line key={i}
-                x1={x - 12 + t * 8} y1={y1 + 4}
-                x2={x + 12 - t * 8} y2={y2 - 4}
-                stroke="#c2410c" strokeWidth={3 - t * 1.5} strokeLinecap="round" strokeOpacity="0.5"/>
-            );
-          })}
-
-        </svg>
+        <img
+          src="/bg_train.svg"
+          alt=""
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center bottom",
+            display: "block",
+          }}
+        />
       </div>
 
       {/* ── Card — floats gently up and down ── */}
@@ -1528,28 +1442,18 @@ function LoginPage({ users, onLogin }) {
                 flexShrink: 0,
                 animation: "logoGlow 3s ease-in-out infinite, gradShift 6s ease infinite",
               }}>
-                {/* High-speed train icon — 3/4 front-left perspective */}
-                <svg width="32" height="32" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* Main body */}
-                  <path d="M7 43 C5 36,7 25,14 17 C18 11,24 7,30 5 L44 4 C46 4,47 6,46 10 L43 20 C40 25,33 29,25 34 C18 38,12 41,7 43 Z"
-                    fill="white" fillOpacity="0.96"/>
-                  {/* Windshield — dark cockpit glass */}
-                  <path d="M14 17 C18 11,24 7,30 5 L34 5 L36 16 C31 21,24 25,17 29 L10 32 C8 27,9 22,14 17 Z"
-                    fill="rgba(194,65,12,0.52)"/>
-                  {/* Windshield edge glint */}
-                  <path d="M14 17 C18 11,24 7,30 5" stroke="white" strokeOpacity="0.5" strokeWidth="0.8" fill="none"/>
-                  {/* Roof panel line */}
-                  <path d="M30 5 L44 4" stroke="white" strokeOpacity="0.38" strokeWidth="0.8"/>
-                  {/* Three indicator lights */}
-                  <circle cx="27" cy="6.5" r="1.7" fill="white" fillOpacity="0.95"/>
-                  <circle cx="31" cy="5.8" r="1.7" fill="white" fillOpacity="0.95"/>
-                  <circle cx="35" cy="5.2" r="1.7" fill="white" fillOpacity="0.95"/>
-                  {/* Underbelly shadow */}
-                  <path d="M7 43 C8 46,13 47,18 45 L31 38 L26 35 L18 39 Z" fill="rgba(0,0,0,0.18)"/>
-                  {/* Speed lines trailing right */}
-                  <line x1="37" y1="24" x2="47" y2="21" stroke="white" strokeOpacity="0.42" strokeWidth="0.9" strokeLinecap="round"/>
-                  <line x1="39" y1="28" x2="47" y2="26" stroke="white" strokeOpacity="0.30" strokeWidth="0.7" strokeLinecap="round"/>
-                  <line x1="40" y1="32" x2="47" y2="30" stroke="white" strokeOpacity="0.22" strokeWidth="0.6" strokeLinecap="round"/>
+                {/* Front-view train icon */}
+                <svg width="34" height="34" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="#ffffff" d="M2 36h32L23 19H13z"/>
+                  <path fill="rgba(0,0,0,0.35)" d="M5 36h26L21 19h-6z"/>
+                  <path fill="rgba(255,255,255,0.5)" d="M8 36h20l-9-17h-2z"/>
+                  <path fill="#ffffff" d="M28 35a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h18a1 1 0 0 1 1 1zm-2-4a1 1 0 0 1-1 1H11a1 1 0 1 1 0-2h14a1 1 0 0 1 1 1z"/>
+                  <path fill="rgba(0,0,0,0.4)" d="M27.076 25.3L23 19H13l-4.076 6.3c1.889 2.517 4.798 4.699 9.076 4.699c4.277 0 7.188-2.183 9.076-4.699z"/>
+                  <path fill="#ffffff" d="M18 0C9 0 6 3 6 9v8c0 1.999 3 11 12 11s12-9.001 12-11V9c0-6-3-9-12-9z"/>
+                  <path fill="rgba(255,255,255,0.85)" d="M8 11C8 2 12.477 1 18 1s10 1 10 10c0 6-4.477 11-10 11c-5.523-.001-10-5-10-11z"/>
+                  <path fill="#FFAC33" d="M18 21.999c1.642 0 3.185-.45 4.553-1.228C21.77 19.729 20.03 19 18 19s-3.769.729-4.552 1.772c1.366.777 2.911 1.227 4.552 1.227z"/>
+                  <path d="M19 4.997v4.965c3.488-.232 6-1.621 6-2.463V5.833c0-.791-3.692-.838-6-.836zm-2 0c-2.308-.002-6 .044-6 .836V7.5c0 .842 2.512 2.231 6 2.463V4.997z" fill="rgba(255,255,255,0.6)"/>
+                  <path fill="rgba(0,0,0,0.25)" d="M6 10s0 3 4 9c0 0-4-2-4-6v-3zm24 0s0 3-4 9c0 0 4-2 4-6v-3z"/>
                 </svg>
               </div>
               <div>
@@ -1867,17 +1771,18 @@ function Sidebar({
             flexShrink: 0,
           }}
         >
-          {/* Mini high-speed train — 3/4 perspective */}
-          <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M7 43 C5 36,7 25,14 17 C18 11,24 7,30 5 L44 4 C46 4,47 6,46 10 L43 20 C40 25,33 29,25 34 C18 38,12 41,7 43 Z"
-              fill="white" fillOpacity="0.96"/>
-            <path d="M14 17 C18 11,24 7,30 5 L34 5 L36 16 C31 21,24 25,17 29 L10 32 C8 27,9 22,14 17 Z"
-              fill="rgba(194,65,12,0.5)"/>
-            <path d="M30 5 L44 4" stroke="white" strokeOpacity="0.35" strokeWidth="0.8"/>
-            <circle cx="27" cy="6.5" r="1.7" fill="white" fillOpacity="0.95"/>
-            <circle cx="31" cy="5.8" r="1.7" fill="white" fillOpacity="0.95"/>
-            <circle cx="35" cy="5.2" r="1.7" fill="white" fillOpacity="0.95"/>
-            <path d="M7 43 C8 46,13 47,18 45 L31 38 L26 35 L18 39 Z" fill="rgba(0,0,0,0.18)"/>
+          {/* Front-view train icon */}
+          <svg width="20" height="20" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#ffffff" d="M2 36h32L23 19H13z"/>
+            <path fill="rgba(0,0,0,0.35)" d="M5 36h26L21 19h-6z"/>
+            <path fill="rgba(255,255,255,0.5)" d="M8 36h20l-9-17h-2z"/>
+            <path fill="#ffffff" d="M28 35a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h18a1 1 0 0 1 1 1zm-2-4a1 1 0 0 1-1 1H11a1 1 0 1 1 0-2h14a1 1 0 0 1 1 1z"/>
+            <path fill="rgba(0,0,0,0.4)" d="M27.076 25.3L23 19H13l-4.076 6.3c1.889 2.517 4.798 4.699 9.076 4.699c4.277 0 7.188-2.183 9.076-4.699z"/>
+            <path fill="#ffffff" d="M18 0C9 0 6 3 6 9v8c0 1.999 3 11 12 11s12-9.001 12-11V9c0-6-3-9-12-9z"/>
+            <path fill="rgba(255,255,255,0.85)" d="M8 11C8 2 12.477 1 18 1s10 1 10 10c0 6-4.477 11-10 11c-5.523-.001-10-5-10-11z"/>
+            <path fill="#FFAC33" d="M18 21.999c1.642 0 3.185-.45 4.553-1.228C21.77 19.729 20.03 19 18 19s-3.769.729-4.552 1.772c1.366.777 2.911 1.227 4.552 1.227z"/>
+            <path d="M19 4.997v4.965c3.488-.232 6-1.621 6-2.463V5.833c0-.791-3.692-.838-6-.836zm-2 0c-2.308-.002-6 .044-6 .836V7.5c0 .842 2.512 2.231 6 2.463V4.997z" fill="rgba(255,255,255,0.6)"/>
+            <path fill="rgba(0,0,0,0.25)" d="M6 10s0 3 4 9c0 0-4-2-4-6v-3zm24 0s0 3-4 9c0 0 4-2 4-6v-3z"/>
           </svg>
         </div>
         {!collapsed && (
