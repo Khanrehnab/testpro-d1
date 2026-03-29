@@ -903,21 +903,21 @@ function Topbar({ title, sub, children }) {
   return (
     <div
       style={{
-        height: 58,
-        padding: "0 22px",
+        minHeight: 58,
+        padding: isMobile ? "10px 14px" : "0 22px",
         flexShrink: 0,
         background: C.s1,
         borderBottom: `1px solid ${C.b1}`,
         display: "flex",
         alignItems: "center",
-        gap: 10,
+        gap: 8,
         boxShadow: "0 1px 3px rgba(0,0,0,.06)",
       }}
     >
       {isMobile && onMenuClick && (
         <button
           onClick={onMenuClick}
-          style={{ ...iBtn(), padding: "6px 8px", marginLeft: -8 }}
+          style={{ ...iBtn(), padding: "6px 8px", marginLeft: -4, flexShrink: 0 }}
           title="Menu"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -930,12 +930,13 @@ function Topbar({ title, sub, children }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: 16,
+            fontSize: isMobile ? 15 : 16,
             fontWeight: 700,
             color: C.t1,
             overflow: "hidden",
             display: "flex",
             alignItems: "center",
+            gap: 6,
           }}
         >
           {title}
@@ -943,10 +944,13 @@ function Topbar({ title, sub, children }) {
         {sub && (
           <div
             style={{
-              fontSize: 12,
+              fontSize: 11,
               color: C.t3,
               marginTop: 1,
               fontFamily: F.mono,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {sub}
@@ -1034,7 +1038,7 @@ function ModalActions({ children }) {
     </div>
   );
 }
-function Field({ label, children, labelColor }) {
+function Field({ label, children }) {
   return (
     <div style={{ marginBottom: 18 }}>
       <label
@@ -1042,7 +1046,7 @@ function Field({ label, children, labelColor }) {
           display: "block",
           fontSize: 10,
           fontFamily: F.mono,
-          color: labelColor || C.t2,
+          color: C.t2,
           textTransform: "uppercase",
           letterSpacing: "1.2px",
           marginBottom: 7,
@@ -1115,357 +1119,131 @@ function useToast() {
 }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
-
-// Animated SaaS canvas background — floating network nodes, edges, particles.
-// Mounts/unmounts cleanly with React's useEffect lifecycle.
-function LoginCanvas() {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-
-    let W, H, t = 0, nodes = [], particles = [], travelDots = [], rafId;
-
-    const rand = (a, b) => a + Math.random() * (b - a);
-
-    function resize() {
-      W = canvas.width  = canvas.offsetWidth;
-      H = canvas.height = canvas.offsetHeight;
-      initScene();
-    }
-
-    function initScene() {
-      nodes = [];
-      particles = [];
-      travelDots = [];
-      const cols = ["#1a6bff", "#00c9a7", "#a855f7"];
-      for (let i = 0; i < 22; i++) {
-        nodes.push({
-          x: rand(W * 0.05, W * 0.95),
-          y: rand(H * 0.05, H * 0.95),
-          r: rand(3, 6.5),
-          color: cols[i % 3],
-          vx: rand(-0.14, 0.14),
-          vy: rand(-0.14, 0.14),
-          pulse: rand(0, Math.PI * 2),
-        });
-      }
-      for (let i = 0; i < 55; i++) spawnParticle(true);
-    }
-
-    function spawnParticle(init = false) {
-      const maxLife = rand(70, 190);
-      particles.push({
-        x: rand(0, W), y: rand(0, H),
-        size: rand(1, 2.4),
-        alpha: rand(0.2, 0.65),
-        speed: rand(0.25, 1.1),
-        angle: rand(0, Math.PI * 2),
-        age: init ? rand(0, maxLife) : 0,
-        maxLife,
-      });
-    }
-
-    function spawnTravelDot(a, b) {
-      travelDots.push({
-        ax: a.x, ay: a.y, bx: b.x, by: b.y,
-        prog: 0,
-        speed: rand(0.008, 0.018),
-        color: "#00c9a7",
-      });
-    }
-
-    function draw() {
-      t++;
-      ctx.clearRect(0, 0, W, H);
-
-      // ── Background fill ──
-      ctx.fillStyle = "#060b18";
-      ctx.fillRect(0, 0, W, H);
-
-      // ── Grid ──
-      ctx.strokeStyle = "rgba(30,80,200,0.07)";
-      ctx.lineWidth = 0.5;
-      const sp = 60;
-      for (let x = 0; x < W; x += sp) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-      for (let y = 0; y < H; y += sp) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-      // ── Ambient glow pools ──
-      const g1 = ctx.createRadialGradient(W * 0.22, H * 0.38, 0, W * 0.22, H * 0.38, W * 0.38);
-      g1.addColorStop(0, "rgba(26,107,255,0.13)"); g1.addColorStop(1, "transparent");
-      ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
-
-      const g2 = ctx.createRadialGradient(W * 0.78, H * 0.65, 0, W * 0.78, H * 0.65, W * 0.32);
-      g2.addColorStop(0, "rgba(168,85,247,0.10)"); g2.addColorStop(1, "transparent");
-      ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
-
-      // ── Edges ──
-      const DIST = 195;
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[i].x - nodes[j].x;
-          const dy = nodes[i].y - nodes[j].y;
-          const d  = Math.sqrt(dx * dx + dy * dy);
-          if (d < DIST) {
-            ctx.beginPath();
-            ctx.strokeStyle = `rgba(26,107,255,${(1 - d / DIST) * 0.38})`;
-            ctx.lineWidth = 0.55;
-            ctx.moveTo(nodes[i].x, nodes[i].y);
-            ctx.lineTo(nodes[j].x, nodes[j].y);
-            ctx.stroke();
-            if (d < DIST * 0.55 && Math.random() < 0.002) spawnTravelDot(nodes[i], nodes[j]);
-          }
-        }
-      }
-
-      // ── Travel dots ──
-      for (let i = travelDots.length - 1; i >= 0; i--) {
-        const d = travelDots[i];
-        d.prog += d.speed;
-        if (d.prog >= 1) { travelDots.splice(i, 1); continue; }
-        const x = d.ax + (d.bx - d.ax) * d.prog;
-        const y = d.ay + (d.by - d.ay) * d.prog;
-        ctx.beginPath();
-        ctx.arc(x, y, 2, 0, Math.PI * 2);
-        ctx.fillStyle = d.color;
-        ctx.globalAlpha = 1 - Math.abs(d.prog - 0.5) * 1.8;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-
-      // ── Nodes ──
-      nodes.forEach((n) => {
-        n.x += n.vx; n.y += n.vy;
-        if (n.x < 0 || n.x > W) n.vx *= -1;
-        if (n.y < 0 || n.y > H) n.vy *= -1;
-        n.pulse += 0.025;
-        const pr = n.r + Math.sin(n.pulse) * 1.8;
-        // halo
-        const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, pr * 5);
-        grd.addColorStop(0, n.color + "bb"); grd.addColorStop(1, "transparent");
-        ctx.beginPath(); ctx.arc(n.x, n.y, pr * 5, 0, Math.PI * 2);
-        ctx.fillStyle = grd; ctx.fill();
-        // core
-        ctx.beginPath(); ctx.arc(n.x, n.y, pr, 0, Math.PI * 2);
-        ctx.fillStyle = n.color; ctx.fill();
-        // ring
-        ctx.beginPath(); ctx.arc(n.x, n.y, pr * 2.2, 0, Math.PI * 2);
-        ctx.strokeStyle = n.color + "3a"; ctx.lineWidth = 0.8; ctx.stroke();
-      });
-
-      // ── Particles ──
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        p.age++;
-        p.x += Math.cos(p.angle) * p.speed;
-        p.y += Math.sin(p.angle) * p.speed;
-        const fade = 1 - p.age / p.maxLife;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0,201,167,${p.alpha * fade})`;
-        ctx.fill();
-        if (p.age >= p.maxLife) spawnParticle();
-        if (p.age >= p.maxLife) particles.splice(i--, 1);
-      }
-
-      // ── Scan line ──
-      const sy = (Math.sin(t * 0.003) * 0.5 + 0.5) * H;
-      const sg = ctx.createLinearGradient(0, sy - 80, 0, sy + 80);
-      sg.addColorStop(0, "transparent");
-      sg.addColorStop(0.5, "rgba(26,107,255,0.022)");
-      sg.addColorStop(1, "transparent");
-      ctx.fillStyle = sg; ctx.fillRect(0, sy - 80, W, 160);
-
-      rafId = requestAnimationFrame(draw);
-    }
-
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
-    resize();
-    draw();
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      ro.disconnect();
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        display: "block",
-        zIndex: 0,
-      }}
-      aria-hidden="true"
-    />
-  );
-}
-
 function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
   const isMobile = useIsMobile();
-
   const go = () => {
     const found = users.find(
       (x) => x.username === u.trim() && x.password === p && x.active
     );
     found ? onLogin(found) : setErr("Invalid credentials or account inactive.");
   };
-
   return (
     <div
       style={{
-        position: "fixed",      // fills entire viewport behind everything
-        inset: 0,
+        height: "100vh",
         display: "flex",
-        alignItems: "center",
+        alignItems: isMobile ? "flex-start" : "center",
         justifyContent: "center",
-        background: "#060b18",
-        padding: isMobile ? "24px 16px" : "40px 16px",
-        boxSizing: "border-box",
+        background: `linear-gradient(160deg,#e8f0fe 0%,#f0f2f5 60%)`,
+        padding: isMobile ? "40px 16px" : 0,
         overflowY: "auto",
       }}
     >
-      {/* Animated SaaS canvas background */}
-      <LoginCanvas />
-
-      {/* Login card — sits above the canvas via zIndex */}
       <div
         style={{
-          position: "relative",
-          zIndex: 1,
-          width: "100%",
-          maxWidth: 400,
-          boxSizing: "border-box",
-          padding: isMobile ? "32px 24px 28px" : "48px 40px 40px",
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 20,
-          boxShadow: "0 8px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
+          width: isMobile ? "100%" : 390,
+          maxWidth: 420,
+          padding: isMobile ? "36px 24px" : "48px 40px",
+          background: C.s1,
+          border: `1px solid ${C.b1}`,
+          borderRadius: 16,
+          boxShadow: "0 8px 40px rgba(0,0,0,.10)",
         }}
       >
-        {/* Logo + brand */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
-          <svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
-            <rect width="42" height="42" rx="10" fill="url(#lgGrad2)" />
-            <defs>
-              <linearGradient id="lgGrad2" x1="0" y1="0" x2="42" y2="42" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#00b4d8" />
-                <stop offset="100%" stopColor="#0077b6" />
-              </linearGradient>
-            </defs>
-            <rect x="9" y="12" width="24" height="4" rx="2" fill="white" />
-            <rect x="19" y="16" width="4" height="14" rx="2" fill="white" />
-            <polyline points="12,33 17,38 30,25" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 800, color: "#ffffff", letterSpacing: -0.5 }}>
-            Test<span style={{ color: "#00c9a7" }}>Pro</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 38,
+          }}
+        >
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 10,
+              background: "linear-gradient(135deg,#00b4d8,#0077b6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: F.mono,
+              fontWeight: 700,
+              fontSize: 14,
+              color: "#fff",
+            }}
+          >
+            TP
+          </div>
+          <div
+            style={{
+              fontFamily: F.mono,
+              fontSize: 20,
+              fontWeight: 700,
+              color: C.t1,
+            }}
+          >
+            Test<span style={{ color: C.ac }}>Pro</span>
           </div>
         </div>
-
-        {/* Heading */}
-        <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: "#ffffff", marginBottom: 4 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
           Sign in
         </div>
-        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 28 }}>
+        <div style={{ fontSize: 13, color: C.t2, marginBottom: 30 }}>
           Access your testing workspace
         </div>
-
-        {/* Username field */}
-        <Field label="Username" labelColor="rgba(255,255,255,0.45)">
+        <Field label="Username">
           <input
-            style={{
-              ...inputSty,
-              boxSizing: "border-box",
-              background: "rgba(255,255,255,0.07)",
-              border: "1px solid rgba(255,255,255,0.15)",
-              color: "#ffffff",
-              caretColor: "#00c9a7",
-            }}
+            style={inputSty}
             value={u}
-            onChange={(e) => { setU(e.target.value); setErr(""); }}
+            onChange={(e) => setU(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && go()}
             autoFocus
-            autoCapitalize="none"
-            autoCorrect="off"
-            placeholder="Enter your username"
           />
         </Field>
-
-        {/* Password field */}
-        <Field label="Password" labelColor="rgba(255,255,255,0.45)">
+        <Field label="Password">
           <input
-            style={{
-              ...inputSty,
-              boxSizing: "border-box",
-              background: "rgba(255,255,255,0.07)",
-              border: "1px solid rgba(255,255,255,0.15)",
-              color: "#ffffff",
-              caretColor: "#00c9a7",
-            }}
+            style={inputSty}
             type="password"
             value={p}
-            onChange={(e) => { setP(e.target.value); setErr(""); }}
+            onChange={(e) => setP(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && go()}
-            placeholder="Enter your password"
           />
         </Field>
-
-        {/* Error message */}
-        {err && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 7,
-            background: "rgba(220,38,38,0.15)",
-            border: "1px solid rgba(220,38,38,0.35)",
-            borderRadius: 8, padding: "9px 12px", marginBottom: 16,
-          }}>
-            <Ico n="x" s={13} c="#f87171" />
-            <span style={{ color: "#f87171", fontSize: 12, fontFamily: F.mono }}>{err}</span>
-          </div>
-        )}
-
-        {/* Sign in button */}
         <button
           onClick={go}
           style={{
             width: "100%",
-            boxSizing: "border-box",
-            padding: "13px 16px",
+            padding: 13,
             border: "none",
-            borderRadius: 9,
-            background: "linear-gradient(135deg,#1a6bff,#0050cc)",
+            borderRadius: 6,
+            background: C.ac,
             color: "#fff",
             fontFamily: F.mono,
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: 700,
             cursor: "pointer",
-            boxShadow: "0 2px 20px rgba(26,107,255,0.45)",
-            letterSpacing: 0.2,
-            transition: "opacity .15s, transform .1s",
+            boxShadow: `0 2px 8px rgba(0,112,243,.3)`,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
-          onMouseDown={(e)  => { e.currentTarget.style.transform = "scale(0.985)"; }}
-          onMouseUp={(e)    => { e.currentTarget.style.transform = "scale(1)"; }}
         >
           Sign In →
         </button>
-
-        {/* Footer */}
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: "rgba(255,255,255,0.28)", fontFamily: F.mono }}>
-          Contact your admin if you need access
-        </div>
+        {err && (
+          <div
+            style={{
+              color: C.re,
+              fontSize: 12,
+              textAlign: "center",
+              marginTop: 14,
+              fontFamily: F.mono,
+            }}
+          >
+            {err}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2768,16 +2546,17 @@ function TestDetail({
         {/* Row 1 — breadcrumb + title + progress */}
         <div
           style={{
-            padding: isMobile ? "10px 14px 8px" : "12px 22px 10px",
+            padding: isMobile ? "10px 12px 8px" : "12px 22px 10px",
             display: "flex",
             alignItems: "center",
-            gap: 10,
+            gap: 8,
             borderBottom: `1px solid ${C.b1}`,
+            minHeight: 50,
           }}
         >
           {/* Hamburger on mobile */}
           {isMobile && onMenuClick && (
-            <button onClick={onMenuClick} style={{ ...iBtn(), padding: "5px 6px", marginLeft: -6 }}>
+            <button onClick={onMenuClick} style={{ ...iBtn(), padding: "5px 6px", marginLeft: -4, flexShrink: 0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
               </svg>
@@ -2796,10 +2575,11 @@ function TestDetail({
               borderColor: C.b1,
               color: C.t2,
               flexShrink: 0,
+              maxWidth: isMobile ? 90 : 160,
             }}
           >
             <Ico n="chevL" s={11} />
-            <span style={{ maxWidth: isMobile ? 80 : 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {mod.name}
             </span>
           </button>
@@ -2828,7 +2608,7 @@ function TestDetail({
               }}
             />
           ) : (
-            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{
                 fontSize: isMobile ? 14 : 15,
                 fontWeight: 700,
@@ -2855,12 +2635,12 @@ function TestDetail({
           <div style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 6,
             flexShrink: 0,
             background: C.s2,
             border: `1px solid ${C.b1}`,
             borderRadius: 20,
-            padding: "4px 12px",
+            padding: isMobile ? "4px 10px" : "4px 12px",
           }}>
             {!isMobile && (
               <>
@@ -2904,7 +2684,7 @@ function TestDetail({
 
         {/* Row 2 — description + progress bar */}
         <div style={{
-          padding: isMobile ? "6px 14px" : "6px 22px",
+          padding: isMobile ? "6px 12px" : "6px 22px",
           display: "flex",
           alignItems: "center",
           gap: 10,
@@ -3399,15 +3179,17 @@ function ModuleView({
               }}
             />
           ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {mod.name}
+            <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {mod.name}
+              </span>
               {isAdmin && (
                 <button
                   onClick={() => {
                     setRenaming(true);
                     setTimeout(() => renRef.current?.select(), 20);
                   }}
-                  style={{ ...iBtn(), padding: 3 }}
+                  style={{ ...iBtn(), padding: 3, flexShrink: 0 }}
                   title="Rename module"
                 >
                   <Ico n="edit" s={12} />
@@ -3416,13 +3198,8 @@ function ModuleView({
             </span>
           )
         }
-        sub={`${mod.tests.length} test${
-          mod.tests.length !== 1 ? "s" : ""
-        } · click a test to open its steps`}
+        sub={`${modIdx + 1}/${modTotal} · ${mod.tests.length} test${mod.tests.length !== 1 ? "s" : ""}`}
       >
-        <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, whiteSpace: "nowrap" }}>
-          {modIdx + 1}/{modTotal}
-        </span>
         {!isMobile && (
           <>
             <button
@@ -4116,6 +3893,7 @@ function ReportView({ modules, toast }) {
 
 // ── Audit Log ──────────────────────────────────────────────────────────────────
 function AuditView({ log }) {
+  const isMobile = useIsMobile();
   const fmt = (ts) =>
     new Date(ts).toLocaleString("en-GB", {
       day: "2-digit",
@@ -4127,7 +3905,7 @@ function AuditView({ log }) {
   return (
     <>
       <Topbar title="Audit Log" sub={`${log.length} events recorded`} />
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "10px 12px" : "12px 20px" }}>
         <div
           style={{
             background: C.s1,
@@ -4203,218 +3981,73 @@ function AuditView({ log }) {
 }
 
 // ── Users Panel ────────────────────────────────────────────────────────────────
-
-// Avatar with name-based colour variation
-function UserAvatar({ name, size = 44 }) {
-  const palettes = [
-    ["#dbeafe", "#1d4ed8"],
-    ["#dcfce7", "#15803d"],
-    ["#fef3c7", "#b45309"],
-    ["#fce7f3", "#be185d"],
-    ["#ede9fe", "#6d28d9"],
-    ["#ffedd5", "#c2410c"],
-  ];
-  const [bg, fg] = palettes[name.charCodeAt(0) % palettes.length];
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        flexShrink: 0,
-        background: `linear-gradient(135deg,${bg},${bg}cc)`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: Math.round(size * 0.36),
-        fontWeight: 700,
-        color: fg,
-        border: `1.5px solid ${fg}33`,
-        letterSpacing: -0.5,
-      }}
-    >
-      {name[0].toUpperCase()}
-    </div>
-  );
-}
-
-// Animated bottom-sheet used on mobile for forms and confirmations
-function BottomSheet({ open, onClose, title, sub, children }) {
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
-
-  if (!open) return null;
-  return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 900,
-        background: "rgba(0,0,0,0.45)",
-        display: "flex", alignItems: "flex-end",
-        WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)",
-      }}
-    >
-      <div
-        style={{
-          width: "100%", maxHeight: "92dvh",
-          background: C.s1, borderRadius: "20px 20px 0 0",
-          overflow: "hidden", display: "flex", flexDirection: "column",
-          boxShadow: "0 -8px 40px rgba(0,0,0,0.18)",
-          animation: "bsSlideUp 0.25s cubic-bezier(.32,1,.5,1) both",
-        }}
-      >
-        <style>{`@keyframes bsSlideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
-        {/* drag handle */}
-        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: C.b2 }} />
-        </div>
-        {/* header */}
-        <div style={{ padding: "8px 20px 14px", borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "flex-start", gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.t1 }}>{title}</div>
-            {sub && <div style={{ fontSize: 13, color: C.t3, marginTop: 2 }}>{sub}</div>}
-          </div>
-          <button
-            onClick={onClose}
-            style={{ background: C.s3, border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.t2, flexShrink: 0 }}
-          >
-            <Ico n="x" s={16} />
-          </button>
-        </div>
-        {/* body */}
-        <div style={{ overflowY: "auto", padding: 20, flex: 1, WebkitOverflowScrolling: "touch" }}>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Floating action button (mobile Add User)
-function UsersFAB({ onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        position: "fixed",
-        bottom: "calc(70px + env(safe-area-inset-bottom, 0px))",
-        right: 20, zIndex: 300,
-        background: C.ac, color: "#fff",
-        border: "none", borderRadius: 50,
-        height: 52, paddingLeft: 16, paddingRight: 20,
-        display: "flex", alignItems: "center", gap: 8,
-        fontFamily: F.sans, fontSize: 15, fontWeight: 600,
-        cursor: "pointer",
-        boxShadow: "0 4px 20px rgba(0,112,243,0.4)",
-        WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
-        transition: "transform .1s",
-      }}
-      onTouchStart={(e) => { e.currentTarget.style.transform = "scale(0.96)"; }}
-      onTouchEnd={(e)   => { e.currentTarget.style.transform = "scale(1)"; }}
-    >
-      <Ico n="plus" s={20} /> Add User
-    </button>
-  );
-}
-
-// Shared add/edit form used inside both Modal (desktop) and BottomSheet (mobile)
-function UserFormFields({ form, setForm, isAdd, onSave, onClose }) {
-  return (
-    <>
-      <Field label="Full Name">
-        <input style={inputSty} value={form.name} autoFocus placeholder="e.g. Jane Smith"
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-      </Field>
-      <Field label="Username">
-        <input style={inputSty} value={form.username} autoCapitalize="none" autoCorrect="off" placeholder="e.g. janesmith"
-          onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
-      </Field>
-      <Field label="Email (optional)">
-        <input style={inputSty} value={form.email} type="email" placeholder="e.g. jane@company.com"
-          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-      </Field>
-      <Field label="Password">
-        <input style={inputSty} type="password" value={form.password} placeholder="Min. 6 characters"
-          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
-      </Field>
-      <Field label="Role">
-        <select
-          style={{
-            ...inputSty, appearance: "none", WebkitAppearance: "none",
-            backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
-            backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center",
-          }}
-          value={form.role}
-          onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-        >
-          <option value="tester">Tester</option>
-          <option value="admin">Admin</option>
-        </select>
-      </Field>
-      <ModalActions>
-        <button style={btn()} onClick={onClose}>Cancel</button>
-        <button
-          style={{ ...acBtn(), flex: 1, justifyContent: "center", padding: "10px 16px", fontSize: 14, borderRadius: 9 }}
-          onClick={onSave}
-        >
-          {isAdd ? "Create User" : "Save Changes"}
-        </button>
-      </ModalActions>
-    </>
-  );
-}
-
 function UsersPanel({ users, session, saveUsers, addLog, toast }) {
   const isMobile = useIsMobile();
-  const [modal,   setModal]   = useState(null);   // null | "add" | userObj
-  const [form,    setForm]    = useState({ name: "", username: "", email: "", password: "", role: "tester", active: true });
-  const [search,  setSearch]  = useState("");
-  const [confirm, setConfirm] = useState(null);
-  const [filterRole,   setFilterRole]   = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-
-  const totalActive  = users.filter((u) => u.active).length;
-  const totalAdmins  = users.filter((u) => u.role === "admin").length;
-  const totalTesters = users.filter((u) => u.role === "tester").length;
-
-  const filtered = users.filter((u) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      u.name.toLowerCase().includes(q) ||
-      u.username.toLowerCase().includes(q) ||
-      (u.email || "").toLowerCase().includes(q);
-    const matchRole   = filterRole   === "all" || u.role === filterRole;
-    const matchStatus = filterStatus === "all" || (filterStatus === "active" ? u.active : !u.active);
-    return matchSearch && matchRole && matchStatus;
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({
+    name: "",
+    username: "",
+    email: "",
+    password: "",
+    role: "tester",
+    active: true,
   });
+  const [search, setSearch] = useState("");
+  const [confirm, setConfirm] = useState(null);
 
+  const filtered = users.filter(
+    (u) =>
+      u.name.toLowerCase().includes(search.toLowerCase()) ||
+      u.username.toLowerCase().includes(search.toLowerCase()) ||
+      (u.email || "").toLowerCase().includes(search.toLowerCase())
+  );
   const openAdd = () => {
-    setForm({ name: "", username: "", email: "", password: "", role: "tester", active: true });
+    setForm({
+      name: "",
+      username: "",
+      email: "",
+      password: "",
+      role: "tester",
+      active: true,
+    });
     setModal("add");
   };
-  const openEdit = (u) => { setForm({ ...u }); setModal(u); };
+  const openEdit = (u) => {
+    setForm({ ...u });
+    setModal(u);
+  };
 
   const save = () => {
     if (!form.name.trim() || !form.username.trim() || !form.password.trim()) {
-      toast("Name, username & password required", "error"); return;
+      toast("Name, username & password required", "error");
+      return;
     }
-    if (modal === "add" && users.find((u) => u.username === form.username.trim())) {
-      toast("Username already exists", "error"); return;
+    if (
+      modal === "add" &&
+      users.find((u) => u.username === form.username.trim())
+    ) {
+      toast("Username already exists", "error");
+      return;
     }
     const updated =
       modal === "add"
-        ? [...users, { ...form, id: `new_${Date.now()}` }]
+        ? [...users, { ...form, id: `new_${Date.now()}` }]  // temp id — replaced by Supabase UUID in saveUsers
         : users.map((u) => (u.id === form.id ? { ...form } : u));
     saveUsers(updated);
     setModal(null);
-    toast(modal === "add" ? `User "${form.name}" created` : `"${form.name}" updated`, "success");
+    toast(
+      modal === "add"
+        ? `User "${form.name}" created`
+        : `"${form.name}" updated`,
+      "success"
+    );
     addLog({
-      ts: Date.now(), user: session.name,
-      action: modal === "add" ? `Created user "${form.name}" (${form.role})` : `Updated user "${form.name}"`,
+      ts: Date.now(),
+      user: session.name,
+      action:
+        modal === "add"
+          ? `Created user "${form.name}" (${form.role})`
+          : `Updated user "${form.name}"`,
       type: "info",
     });
   };
@@ -4423,244 +4056,269 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
     saveUsers(users.filter((x) => x.id !== u.id));
     toast(`"${u.name}" deleted`, "info");
     setConfirm(null);
-    addLog({ ts: Date.now(), user: session.name, action: `Deleted user "${u.name}"`, type: "info" });
+    addLog({
+      ts: Date.now(),
+      user: session.name,
+      action: `Deleted user "${u.name}"`,
+      type: "info",
+    });
   };
-
   const toggle = (u) => {
     if (u.id === session.id) return;
-    saveUsers(users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x)));
+    saveUsers(
+      users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x))
+    );
     toast(`${u.name} ${u.active ? "deactivated" : "activated"}`, "info");
-    addLog({ ts: Date.now(), user: session.name, action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`, type: "info" });
+    addLog({
+      ts: Date.now(),
+      user: session.name,
+      action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`,
+      type: "info",
+    });
   };
-
-  const isModalAdd = modal === "add";
-
-  // ── Filter chip ────────────────────────────────────────────────────────────
-  const Chip = ({ label, active, onClick }) => (
-    <button onClick={onClick} style={{
-      padding: "6px 14px", borderRadius: 20, flexShrink: 0,
-      border: active ? `1.5px solid ${C.ac}` : `1px solid ${C.b2}`,
-      background: active ? "#eff6ff" : C.s1,
-      color: active ? C.ac : C.t2,
-      fontFamily: F.sans, fontSize: 12, fontWeight: active ? 600 : 400,
-      cursor: "pointer", transition: "all .15s",
-      WebkitTapHighlightColor: "transparent",
-    }}>
-      {label}
-    </button>
-  );
-
-  // ── Stat pill (mobile) ─────────────────────────────────────────────────────
-  const StatPill = ({ label, value, color }) => (
-    <div style={{
-      background: C.s1, border: `1px solid ${C.b1}`, borderRadius: 12,
-      padding: "10px 14px", flex: 1, textAlign: "center", minWidth: 0,
-    }}>
-      <div style={{ fontSize: 22, fontWeight: 800, color: color || C.t1, fontFamily: F.mono }}>{value}</div>
-      <div style={{ fontSize: 10, color: C.t3, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
-    </div>
-  );
 
   return (
     <>
-      {/* ── Topbar ── */}
-      <Topbar title="User Management" sub={`${users.length} users · ${totalActive} active`}>
+      <Topbar
+        title="User Management"
+        sub={`${users.length} users · ${
+          users.filter((u) => u.active).length
+        } active`}
+      >
         {!isMobile && (
-          <>
-            <SearchBox value={search} onChange={setSearch} placeholder="Search users…" width={190} />
-            <button style={acBtn(smBtn())} onClick={openAdd}>
-              <Ico n="plus" s={13} /> Add User
-            </button>
-          </>
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            placeholder="Search users…"
+            width={190}
+          />
         )}
+        <button style={acBtn(smBtn())} onClick={openAdd}>
+          <Ico n="plus" s={13} /> {isMobile ? "" : "Add User"}
+        </button>
       </Topbar>
-
-      {/* ── Body ── */}
-      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-
-        {/* Mobile: stats + search + filter chips */}
-        {isMobile && (
-          <div style={{ padding: "16px 16px 0" }}>
-            {/* Stats */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <StatPill label="Total"   value={users.length}  />
-              <StatPill label="Active"  value={totalActive}   color={C.gr} />
-              <StatPill label="Admins"  value={totalAdmins}   color={C.ac} />
-              <StatPill label="Testers" value={totalTesters}  color={C.am} />
-            </div>
-            {/* Search */}
-            <div style={{ position: "relative", marginBottom: 12 }}>
-              <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.t3, pointerEvents: "none" }}>
-                <Ico n="search" s={15} />
+      {isMobile && (
+        <div style={{ padding: "10px 12px", background: C.s1, borderBottom: `1px solid ${C.b1}`, flexShrink: 0 }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search users…" width="100%" />
+        </div>
+      )}
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 20 }}>
+        <div style={{ display: "grid", gap: isMobile ? 8 : 10 }}>
+          {filtered.map((u) => (
+            <div
+              key={u.id}
+              style={{
+                background: C.s1,
+                border: `1px solid ${C.b1}`,
+                borderRadius: 10,
+                padding: isMobile ? "12px 14px" : "14px 18px",
+                display: "flex",
+                alignItems: isMobile ? "flex-start" : "center",
+                gap: isMobile ? 10 : 14,
+                flexDirection: isMobile ? "column" : "row",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14, width: "100%" }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  background: "linear-gradient(135deg,#dbeafe,#bfdbfe)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontFamily: F.mono,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: C.ac,
+                  border: `1px solid ${C.b1}`,
+                }}
+              >
+                {u.name[0].toUpperCase()}
               </div>
-              <input
-                value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, username or email…"
-                style={{ ...inputSty, paddingLeft: 38, borderRadius: 10, fontSize: 15, height: 44 }}
-              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: C.t2,
+                    fontFamily: F.mono,
+                    marginTop: 2,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {u.username}
+                  {u.email ? ` · ${u.email}` : ""}
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                  <Badge type={u.role} />
+                  <Badge type={u.active ? "active" : "inactive"} />
+                  {u.id === session.id && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontFamily: F.mono,
+                        background: "#f3f0ff",
+                        color: "#7c3aed",
+                        padding: "2px 9px",
+                        borderRadius: 20,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        border: "1px solid #ede9fe",
+                      }}
+                    >
+                      You
+                    </span>
+                  )}
+                </div>
+              </div>
+              {!isMobile && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {u.id !== session.id && (
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <Toggle on={u.active} onClick={() => toggle(u)} />
+                    <span
+                      style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}
+                    >
+                      {u.active ? "Active" : "Off"}
+                    </span>
+                  </div>
+                )}
+                <button style={smBtn()} onClick={() => openEdit(u)}>
+                  <Ico n="edit" s={12} /> Edit
+                </button>
+                {u.id !== session.id && (
+                  <button style={reBtn(smBtn())} onClick={() => setConfirm(u)}>
+                    <Ico n="trash" s={12} />
+                  </button>
+                )}
+              </div>
+              )}
+              </div>
+              {isMobile && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+                {u.id !== session.id && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                    <Toggle on={u.active} onClick={() => toggle(u)} />
+                    <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}>
+                      {u.active ? "Active" : "Off"}
+                    </span>
+                  </div>
+                )}
+                <button style={smBtn({ flex: u.id !== session.id ? "none" : 1, justifyContent: "center" })} onClick={() => openEdit(u)}>
+                  <Ico n="edit" s={12} /> Edit
+                </button>
+                {u.id !== session.id && (
+                  <button style={reBtn(smBtn())} onClick={() => setConfirm(u)}>
+                    <Ico n="trash" s={12} />
+                  </button>
+                )}
+              </div>
+              )}
             </div>
-            {/* Filter chips */}
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 12 }}>
-              <Chip label="All"      active={filterRole === "all" && filterStatus === "all"} onClick={() => { setFilterRole("all"); setFilterStatus("all"); }} />
-              <Chip label="Admins"   active={filterRole === "admin"}    onClick={() => setFilterRole(filterRole === "admin"   ? "all" : "admin")} />
-              <Chip label="Testers"  active={filterRole === "tester"}   onClick={() => setFilterRole(filterRole === "tester"  ? "all" : "tester")} />
-              <Chip label="Active"   active={filterStatus === "active"} onClick={() => setFilterStatus(filterStatus === "active"   ? "all" : "active")} />
-              <Chip label="Inactive" active={filterStatus === "inactive"} onClick={() => setFilterStatus(filterStatus === "inactive" ? "all" : "inactive")} />
-            </div>
-          </div>
-        )}
-
-        {/* User list */}
-        <div style={{ padding: isMobile ? "0 16px 100px" : 20, display: "grid", gap: 10 }}>
+          ))}
           {filtered.length === 0 && (
-            <div style={{ textAlign: "center", padding: 48, color: C.t3, fontFamily: F.mono, fontSize: 13 }}>
-              <Ico n="users" s={28} />
-              <div style={{ marginTop: 12 }}>No users found.</div>
+            <div
+              style={{
+                textAlign: "center",
+                padding: 40,
+                color: C.t3,
+                fontFamily: F.mono,
+                fontSize: 12,
+              }}
+            >
+              No users found.
             </div>
           )}
-
-          {filtered.map((u) => {
-            const isSelf = u.id === session.id;
-
-            // ── Mobile card ──────────────────────────────────────────────────
-            if (isMobile) return (
-              <div key={u.id} style={{
-                background: C.s1, border: `1px solid ${C.b1}`,
-                borderRadius: 14, padding: 16,
-                display: "flex", flexDirection: "column", gap: 12,
-                boxShadow: "0 1px 4px rgba(0,0,0,.04)",
-              }}>
-                {/* Top: avatar + name + badges */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <UserAvatar name={u.name} size={48} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: C.t1 }}>{u.name}</span>
-                      {isSelf && (
-                        <span style={{ fontSize: 9, fontFamily: F.mono, background: "#f3f0ff", color: "#7c3aed", padding: "2px 8px", borderRadius: 20, fontWeight: 700, textTransform: "uppercase", border: "1px solid #ede9fe" }}>You</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12, color: C.t2, fontFamily: F.mono, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      @{u.username}{u.email ? ` · ${u.email}` : ""}
-                    </div>
-                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                      <Badge type={u.role} />
-                      <Badge type={u.active ? "active" : "inactive"} />
-                    </div>
-                  </div>
-                </div>
-                {/* Bottom: toggle + actions */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${C.b1}`, paddingTop: 10, gap: 8 }}>
-                  {!isSelf ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => toggle(u)}>
-                      <Toggle on={u.active} onClick={() => toggle(u)} />
-                      <span style={{ fontSize: 12, color: C.t2, fontFamily: F.mono }}>{u.active ? "Active" : "Inactive"}</span>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: 12, color: C.t3, fontFamily: F.mono }}>Current session</span>
-                  )}
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button style={{ ...smBtn(), padding: "8px 14px", fontSize: 13, borderRadius: 9, display: "flex", alignItems: "center", gap: 6 }} onClick={() => openEdit(u)}>
-                      <Ico n="edit" s={14} /> Edit
-                    </button>
-                    {!isSelf && (
-                      <button style={{ ...reBtn(smBtn()), padding: "8px 14px", fontSize: 13, borderRadius: 9, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setConfirm(u)}>
-                        <Ico n="trash" s={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-
-            // ── Desktop row (unchanged) ──────────────────────────────────────
-            return (
-              <div key={u.id} style={{ background: C.s1, border: `1px solid ${C.b1}`, borderRadius: 10, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
-                <UserAvatar name={u.name} size={40} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{u.name}</div>
-                  <div style={{ fontSize: 11, color: C.t2, fontFamily: F.mono, marginTop: 2 }}>
-                    {u.username}{u.email ? ` · ${u.email}` : ""}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                    <Badge type={u.role} />
-                    <Badge type={u.active ? "active" : "inactive"} />
-                    {isSelf && (
-                      <span style={{ fontSize: 10, fontFamily: F.mono, background: "#f3f0ff", color: "#7c3aed", padding: "2px 9px", borderRadius: 20, fontWeight: 700, textTransform: "uppercase", border: "1px solid #ede9fe" }}>You</span>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {!isSelf && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Toggle on={u.active} onClick={() => toggle(u)} />
-                      <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t2 }}>{u.active ? "Active" : "Off"}</span>
-                    </div>
-                  )}
-                  <button style={smBtn()} onClick={() => openEdit(u)}>
-                    <Ico n="edit" s={12} /> Edit
-                  </button>
-                  {!isSelf && (
-                    <button style={reBtn(smBtn())} onClick={() => setConfirm(u)}>
-                      <Ico n="trash" s={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 
-      {/* FAB — mobile only */}
-      {isMobile && <UsersFAB onClick={openAdd} />}
-
-      {/* ── Add / Edit — Desktop Modal ── */}
-      {!isMobile && modal && (
-        <Modal title={isModalAdd ? "Add User" : "Edit User"} sub={isModalAdd ? "Create a new account" : `Editing ${form.name}`} onClose={() => setModal(null)}>
-          <UserFormFields form={form} setForm={setForm} isAdd={isModalAdd} onSave={save} onClose={() => setModal(null)} />
-        </Modal>
-      )}
-
-      {/* ── Add / Edit — Mobile Bottom Sheet ── */}
-      {isMobile && (
-        <BottomSheet open={!!modal} onClose={() => setModal(null)} title={isModalAdd ? "Add User" : "Edit User"} sub={isModalAdd ? "Create a new account" : `Editing ${form.name}`}>
-          <UserFormFields form={form} setForm={setForm} isAdd={isModalAdd} onSave={save} onClose={() => setModal(null)} />
-        </BottomSheet>
-      )}
-
-      {/* ── Delete confirm — Desktop Modal ── */}
-      {!isMobile && confirm && (
-        <Modal title="Delete User?" sub={`Delete "${confirm.name}"? This cannot be undone.`} onClose={() => setConfirm(null)} width={360}>
+      {modal && (
+        <Modal
+          title={modal === "add" ? "Add User" : "Edit User"}
+          sub={
+            modal === "add" ? "Create a new account" : `Editing ${form.name}`
+          }
+          onClose={() => setModal(null)}
+        >
+          <Field label="Full Name">
+            <input
+              style={inputSty}
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              autoFocus
+            />
+          </Field>
+          <Field label="Username">
+            <input
+              style={inputSty}
+              value={form.username}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, username: e.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Email (optional)">
+            <input
+              style={inputSty}
+              value={form.email}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, email: e.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              style={inputSty}
+              type="password"
+              value={form.password}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, password: e.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Role">
+            <select
+              style={{ ...inputSty, appearance: "none" }}
+              value={form.role}
+              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+            >
+              <option value="tester">Tester</option>
+              <option value="admin">Admin</option>
+            </select>
+          </Field>
           <ModalActions>
-            <button style={btn()} onClick={() => setConfirm(null)}>Cancel</button>
-            <button style={reBtn()} onClick={() => del(confirm)}><Ico n="trash" s={12} /> Delete</button>
+            <button style={btn()} onClick={() => setModal(null)}>
+              Cancel
+            </button>
+            <button style={acBtn()} onClick={save}>
+              {modal === "add" ? "Create User" : "Save Changes"}
+            </button>
           </ModalActions>
         </Modal>
       )}
-
-      {/* ── Delete confirm — Mobile Bottom Sheet ── */}
-      {isMobile && (
-        <BottomSheet open={!!confirm} onClose={() => setConfirm(null)} title="Delete User?" sub={confirm ? `This will permanently remove "${confirm.name}".` : ""}>
-          {confirm && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.s2, borderRadius: 12, padding: 14 }}>
-                <UserAvatar name={confirm.name} size={44} />
-                <div>
-                  <div style={{ fontWeight: 600, color: C.t1 }}>{confirm.name}</div>
-                  <div style={{ fontSize: 12, color: C.t3, fontFamily: F.mono }}>@{confirm.username}</div>
-                </div>
-              </div>
-              <p style={{ fontSize: 14, color: C.t2, lineHeight: 1.5 }}>This action cannot be undone. The user will lose access immediately.</p>
-              <button style={{ ...reBtn(), width: "100%", justifyContent: "center", padding: "13px 16px", fontSize: 15, borderRadius: 12, fontWeight: 600 }} onClick={() => del(confirm)}>
-                <Ico n="trash" s={16} /> Delete {confirm.name}
-              </button>
-              <button style={{ ...btn(), width: "100%", justifyContent: "center", padding: "13px 16px", fontSize: 15, borderRadius: 12 }} onClick={() => setConfirm(null)}>
-                Cancel
-              </button>
-            </div>
-          )}
-        </BottomSheet>
+      {confirm && (
+        <Modal
+          title="Delete User?"
+          sub={`Delete "${confirm.name}"? This cannot be undone.`}
+          onClose={() => setConfirm(null)}
+          width={360}
+        >
+          <ModalActions>
+            <button style={btn()} onClick={() => setConfirm(null)}>
+              Cancel
+            </button>
+            <button style={reBtn()} onClick={() => del(confirm)}>
+              <Ico n="trash" s={12} /> Delete
+            </button>
+          </ModalActions>
+        </Modal>
       )}
     </>
   );
