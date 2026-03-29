@@ -36,7 +36,7 @@ const store = {
         stepsByTest[s.test_id].push({
           ...s,
           serialNo:  s.serial_no,
-          isDivider: s.is_divider ?? false,
+          isDivider: !!s.is_divider,
         });
       }
 
@@ -144,7 +144,7 @@ const store = {
       result:     s.result   ?? "",
       remarks:    s.remarks  ?? "",
       status:     s.status   ?? "pending",
-      is_divider: s.isDivider ?? false,
+      is_divider: !!s.isDivider,
     }));
 
     // 3. Upsert all steps for this test
@@ -249,7 +249,7 @@ const store = {
           result:     s.result   ?? "",
           remarks:    s.remarks  ?? "",
           status:     s.status   ?? "pending",
-          is_divider: s.isDivider ?? false,
+          is_divider: !!s.isDivider,
         };
       });
       for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
@@ -2766,7 +2766,7 @@ function TestDetail({
         result:     s.result   ?? "",
         remarks:    s.remarks  ?? "",
         status:     s.status   ?? "pending",
-        is_divider: s.isDivider ?? false,
+        is_divider: !!s.isDivider,
       }));
 
       // Upsert in batches of HANDSHAKE_EVERY, confirm each batch (handshake)
@@ -4935,7 +4935,7 @@ export default function App() {
                   action:    row.action,
                   result:    row.result,
                   serialNo:  row.serial_no,
-                  isDivider: row.is_divider ?? false,
+                  isDivider: !!row.is_divider,
                 };
                 const updatedTests = [...mod.tests];
                 updatedTests[testIdx] = { ...test, steps: updatedSteps };
@@ -4952,7 +4952,7 @@ export default function App() {
                 const test = mod.tests[testIdx];
                 if (test.steps.some((s) => s.id === row.id)) break; // already local
                 const updatedTests = [...mod.tests];
-                const normRow = { ...row, serialNo: row.serial_no, isDivider: row.is_divider ?? false };
+                const normRow = { ...row, serialNo: row.serial_no, isDivider: !!row.is_divider };
                 updatedTests[testIdx] = {
                   ...test,
                   steps: [...test.steps, normRow].sort(
