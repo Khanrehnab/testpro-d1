@@ -1335,6 +1335,70 @@ function LoginPage({ users, onLogin }) {
         willChange: "transform",
       }} />
 
+      {/* ── Background train illustration ── */}
+      <div style={{
+        position: "absolute",
+        bottom: isMobile ? "6%" : "8%",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: isMobile ? 520 : 820,
+        opacity: 0.09,
+        pointerEvents: "none",
+        zIndex: 0,
+        filter: "blur(0.5px)",
+      }}>
+        <svg viewBox="0 0 820 220" fill="none" xmlns="http://www.w3.org/2000/svg" width="100%">
+          {/* Main train body */}
+          <rect x="40" y="60" width="640" height="100" rx="18" fill="#ea580c"/>
+          {/* Nose / aerodynamic front */}
+          <path d="M680 65 Q750 80 780 110 Q750 140 680 155 Z" fill="#ea580c"/>
+          {/* Tail */}
+          <path d="M40 75 Q20 95 20 110 Q20 125 40 145 Z" fill="#c2410c"/>
+          {/* Upper body accent */}
+          <rect x="40" y="60" width="640" height="36" rx="18" fill="#c2410c"/>
+          {/* Windows row */}
+          <rect x="80" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          <rect x="148" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          <rect x="216" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          <rect x="284" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          <rect x="352" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          <rect x="420" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          <rect x="488" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          <rect x="556" y="70" width="52" height="28" rx="6" fill="#fed7aa" fillOpacity="0.7"/>
+          {/* Orange speed stripe along bottom */}
+          <rect x="40" y="148" width="640" height="12" rx="4" fill="#fb923c" fillOpacity="0.6"/>
+          {/* Wheels — bogies */}
+          <circle cx="120" cy="175" r="22" fill="#7c2d12"/>
+          <circle cx="120" cy="175" r="13" fill="#ea580c"/>
+          <circle cx="120" cy="175" r="6" fill="#1c0f07"/>
+          <circle cx="220" cy="175" r="22" fill="#7c2d12"/>
+          <circle cx="220" cy="175" r="13" fill="#ea580c"/>
+          <circle cx="220" cy="175" r="6" fill="#1c0f07"/>
+          <circle cx="420" cy="175" r="22" fill="#7c2d12"/>
+          <circle cx="420" cy="175" r="13" fill="#ea580c"/>
+          <circle cx="420" cy="175" r="6" fill="#1c0f07"/>
+          <circle cx="560" cy="175" r="22" fill="#7c2d12"/>
+          <circle cx="560" cy="175" r="13" fill="#ea580c"/>
+          <circle cx="560" cy="175" r="6" fill="#1c0f07"/>
+          <circle cx="660" cy="175" r="22" fill="#7c2d12"/>
+          <circle cx="660" cy="175" r="13" fill="#ea580c"/>
+          <circle cx="660" cy="175" r="6" fill="#1c0f07"/>
+          {/* Rail tracks */}
+          <line x1="0" y1="198" x2="820" y2="198" stroke="#ea580c" strokeWidth="5" strokeOpacity="0.8"/>
+          <line x1="0" y1="210" x2="820" y2="210" stroke="#ea580c" strokeWidth="3" strokeOpacity="0.5"/>
+          {/* Sleepers */}
+          {[30,90,150,210,270,330,390,450,510,570,630,690,750,810].map((x, i) => (
+            <rect key={i} x={x-14} y="193" width="28" height="19" rx="2" fill="#c2410c" fillOpacity="0.55"/>
+          ))}
+          {/* Motion lines — streaks behind nose */}
+          <line x1="0" y1="88" x2="32" y2="88" stroke="#fb923c" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.7"/>
+          <line x1="0" y1="100" x2="18" y2="100" stroke="#fb923c" strokeWidth="2" strokeLinecap="round" strokeOpacity="0.5"/>
+          <line x1="0" y1="112" x2="26" y2="112" stroke="#fb923c" strokeWidth="2.5" strokeLinecap="round" strokeOpacity="0.6"/>
+          <line x1="0" y1="124" x2="14" y2="124" stroke="#fb923c" strokeWidth="2" strokeLinecap="round" strokeOpacity="0.4"/>
+          <line x1="0" y1="136" x2="32" y2="136" stroke="#fb923c" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.6"/>
+        </svg>
+      </div>
+
       {/* ── Card — floats gently up and down ── */}
       <div
         style={{
@@ -1408,21 +1472,35 @@ function LoginPage({ users, onLogin }) {
                 width: 48,
                 height: 48,
                 borderRadius: 13,
-                background: "linear-gradient(135deg,#0077b6,#0070f3,#7c3aed)",
+                background: "linear-gradient(135deg,#fb923c,#ea580c,#c2410c)",
                 backgroundSize: "200% 200%",
-                animation: "gradShift 6s ease infinite",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontFamily: F.mono,
-                fontWeight: 800,
-                fontSize: 15,
                 color: "#fff",
                 flexShrink: 0,
                 animation: "logoGlow 3s ease-in-out infinite, gradShift 6s ease infinite",
-                letterSpacing: "0.5px",
               }}>
-                TP
+                {/* High-speed train icon */}
+                <svg width="30" height="30" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Body */}
+                  <rect x="2" y="10" width="24" height="11" rx="3.5" fill="white" fillOpacity="0.95"/>
+                  {/* Nose / front taper */}
+                  <path d="M26 13.5 L30.5 16 L26 18.5 Z" fill="white" fillOpacity="0.95"/>
+                  {/* Windows */}
+                  <rect x="5" y="12.5" width="4" height="3.5" rx="1" fill="#fb923c"/>
+                  <rect x="11" y="12.5" width="4" height="3.5" rx="1" fill="#fb923c"/>
+                  <rect x="17" y="12.5" width="4" height="3.5" rx="1" fill="#fb923c"/>
+                  {/* Orange stripe */}
+                  <rect x="2" y="19" width="24" height="2" rx="0" fill="#fb923c" fillOpacity="0.5"/>
+                  {/* Wheels */}
+                  <circle cx="7" cy="23" r="2.2" fill="white" fillOpacity="0.9"/>
+                  <circle cx="7" cy="23" r="1" fill="#ea580c"/>
+                  <circle cx="20" cy="23" r="2.2" fill="white" fillOpacity="0.9"/>
+                  <circle cx="20" cy="23" r="1" fill="#ea580c"/>
+                  {/* Rail line */}
+                  <line x1="1" y1="25.2" x2="31" y2="25.2" stroke="white" strokeOpacity="0.45" strokeWidth="1.2"/>
+                </svg>
               </div>
               <div>
                 <div style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 700, color: C.t1, letterSpacing: "-0.4px", lineHeight: 1.2 }}>
@@ -1532,8 +1610,8 @@ function LoginPage({ users, onLogin }) {
                 border: "none",
                 borderRadius: 10,
                 background: loading
-                  ? "linear-gradient(90deg,#5ba4f5,#7c9ef5)"
-                  : "linear-gradient(90deg,#0070f3,#7c3aed,#0070f3)",
+                  ? "linear-gradient(90deg,#fdba74,#fb923c)"
+                  : "linear-gradient(90deg,#fb923c,#ea580c,#fb923c)",
                 backgroundSize: "200% 100%",
                 animation: loading ? "none" : "gradShift 4s ease infinite",
                 color: "#fff",
@@ -1541,7 +1619,7 @@ function LoginPage({ users, onLogin }) {
                 fontSize: 15,
                 fontWeight: 600,
                 cursor: loading ? "default" : "pointer",
-                boxShadow: loading ? "none" : "0 4px 20px rgba(0,112,243,.40)",
+                boxShadow: loading ? "none" : "0 4px 20px rgba(234,88,12,.40)",
                 letterSpacing: "0.2px",
                 transition: "box-shadow .2s, transform .1s",
                 display: "flex",
@@ -1662,7 +1740,7 @@ function Sidebar({
           fontSize: 13,
           fontWeight: 500,
           color: active ? C.ac : isLocked ? C.t3 : C.t2,
-          background: active ? "#eff6ff" : "transparent",
+          background: active ? "#fff7ed" : "transparent",
           borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
           opacity: isLocked ? 0.45 : 1,
           transition: "all .15s",
@@ -1731,18 +1809,27 @@ function Sidebar({
             width: 28,
             height: 28,
             borderRadius: 7,
-            background: "linear-gradient(135deg,#00b4d8,#0077b6)",
+            background: "linear-gradient(135deg,#fb923c,#ea580c)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontFamily: F.mono,
-            fontWeight: 700,
-            fontSize: 11,
             color: "#fff",
             flexShrink: 0,
           }}
         >
-          TP
+          {/* Mini high-speed train */}
+          <svg width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="10" width="24" height="11" rx="3.5" fill="white" fillOpacity="0.95"/>
+            <path d="M26 13.5 L30.5 16 L26 18.5 Z" fill="white" fillOpacity="0.95"/>
+            <rect x="5" y="12.5" width="4" height="3.5" rx="1" fill="#ea580c"/>
+            <rect x="11" y="12.5" width="4" height="3.5" rx="1" fill="#ea580c"/>
+            <rect x="17" y="12.5" width="4" height="3.5" rx="1" fill="#ea580c"/>
+            <rect x="2" y="19" width="24" height="2" fill="#fb923c" fillOpacity="0.5"/>
+            <circle cx="7" cy="23" r="2.2" fill="white" fillOpacity="0.9"/>
+            <circle cx="7" cy="23" r="1" fill="#ea580c"/>
+            <circle cx="20" cy="23" r="2.2" fill="white" fillOpacity="0.9"/>
+            <circle cx="20" cy="23" r="1" fill="#ea580c"/>
+          </svg>
         </div>
         {!collapsed && (
           <span
@@ -1851,7 +1938,7 @@ function Sidebar({
                     fontSize: 13,
                     color: active ? C.ac : locked && !(selMod === m.id && view === "mod") ? C.t3 : C.t2,
                     opacity: locked && !(selMod === m.id && view === "mod") ? 0.45 : 1,
-                    background: active ? "#eff6ff" : "transparent",
+                    background: active ? "#fff7ed" : "transparent",
                     borderLeft: `2px solid ${active ? C.ac : "transparent"}`,
                     transition: "all .12s",
                   }}
@@ -2355,7 +2442,7 @@ function DividerRow({ label }) {
       alignItems: "center",
       gap: 10,
       padding: "7px 14px",
-      background: "linear-gradient(90deg,#eff6ff,#f8faff)",
+      background: "linear-gradient(90deg,#fff7ed,#fef9f5)",
       borderBottom: `1px solid ${C.b1}`,
     }}>
       <div style={{ height: 1, width: 10, background: C.b2, flexShrink: 0 }} />
@@ -2390,7 +2477,7 @@ function StepRow({
       : step.status === "pass"
       ? "#f0fdf4"
       : isActive
-      ? "#eff6ff"
+      ? "#fff7ed"
       : "transparent";
 
   const passBtn = (
@@ -4047,7 +4134,7 @@ function ReportView({ modules, toast }) {
         {isMobile ? (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
             {[
-              { label: "Total Steps", val: total.toLocaleString(), color: C.ac, bg: "#eff6ff" },
+              { label: "Total Steps", val: total.toLocaleString(), color: C.ac, bg: C.acd },
               { label: "Pass Rate", val: `${total ? Math.round((pass / total) * 100) : 0}%`, color: C.gr, bg: C.grd },
               { label: `Passed`, val: pass.toLocaleString(), color: C.gr, bg: C.grd },
               { label: `Failed`, val: fail.toLocaleString(), color: C.re, bg: C.red },
@@ -4063,7 +4150,7 @@ function ReportView({ modules, toast }) {
           </div>
         ) : (
           <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-            <Chip label={`${total.toLocaleString()} steps`} color={C.ac} bg="#eff6ff" />
+            <Chip label={`${total.toLocaleString()} steps`} color={C.ac} bg={C.acd} />
             <Chip label={`✓ ${pass.toLocaleString()} passed (${total ? Math.round((pass / total) * 100) : 0}%)`} color={C.gr} bg={C.grd} />
             <Chip label={`✗ ${fail.toLocaleString()} failed (${total ? Math.round((fail / total) * 100) : 0}%)`} color={C.re} bg={C.red} />
             <Chip label={`⟳ ${(total - pass - fail).toLocaleString()} pending`} color={C.am} bg={C.amd} />
@@ -4519,13 +4606,13 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
                       style={{
                         fontSize: 10,
                         fontFamily: F.mono,
-                        background: "#f3f0ff",
-                        color: "#7c3aed",
+                        background: C.acd,
+                        color: C.ac,
                         padding: "2px 9px",
                         borderRadius: 20,
                         fontWeight: 700,
                         textTransform: "uppercase",
-                        border: "1px solid #ede9fe",
+                        border: `1px solid ${C.b2}`,
                       }}
                     >
                       You
@@ -5235,7 +5322,7 @@ export default function App() {
                   gap: 4,
                   border: "none",
                   borderTop: `2px solid ${isActive ? C.ac : "transparent"}`,
-                  background: isActive ? "#f0f7ff" : "transparent",
+                  background: isActive ? "#fff7ed" : "transparent",
                   color: isActive ? C.ac : C.t3,
                   fontFamily: F.sans,
                   fontSize: 10,
