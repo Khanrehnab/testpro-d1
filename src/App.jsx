@@ -1068,12 +1068,15 @@ function useToast() {
     error: { bg: "#fef2f2", border: "rgba(220,38,38,.4)", color: C.re },
     info: { bg: "#eff6ff", border: "rgba(0,112,243,.4)", color: C.ac },
   };
-  const Host = () => (
+  const Host = () => {
+    const isMobile = useIsMobile();
+    return (
     <div
       style={{
         position: "fixed",
-        bottom: 20,
-        right: 20,
+        bottom: isMobile ? 66 : 20,
+        right: isMobile ? 12 : 20,
+        left: isMobile ? 12 : "auto",
         zIndex: 999,
         display: "flex",
         flexDirection: "column",
@@ -1088,34 +1091,26 @@ function useToast() {
             key={t.id}
             style={{
               padding: "10px 16px",
-              borderRadius: 6,
+              borderRadius: 8,
               border: `1px solid ${c.border}`,
               background: c.bg,
               color: c.color,
               fontFamily: F.mono,
-              fontSize: 12,
+              fontSize: isMobile ? 13 : 12,
               display: "flex",
               alignItems: "center",
               gap: 8,
-              boxShadow: "0 4px 16px rgba(0,0,0,.10)",
+              boxShadow: "0 4px 16px rgba(0,0,0,.14)",
             }}
           >
-            <Ico
-              n={
-                t.type === "success"
-                  ? "check"
-                  : t.type === "error"
-                  ? "x"
-                  : "bell"
-              }
-              s={12}
-            />
+            <Ico n={t.type === "success" ? "check" : t.type === "error" ? "x" : "bell"} s={12} />
             {t.msg}
           </div>
         );
       })}
     </div>
-  );
+    );
+  };
   return { push, Host };
 }
 
@@ -1884,10 +1879,10 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
               >
                 <div
                   style={{
-                    padding: "12px 16px",
+                    padding: "12px 14px",
                     display: "flex",
                     alignItems: "center",
-                    gap: 14,
+                    gap: 10,
                     cursor: "pointer",
                   }}
                   onClick={() => onSelect(m.id)}
@@ -1897,9 +1892,9 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
                       style={{
                         fontSize: 13,
                         fontWeight: 600,
-                        whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       {m.name}
@@ -1912,61 +1907,21 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
                         marginTop: 2,
                       }}
                     >
-                      {m.testCount} test{m.testCount !== 1 ? "s" : ""} ·{" "}
-                      {m.total} step{m.total !== 1 ? "s" : ""}
+                      {m.testCount}t · {m.total}s
+                      {m.pass > 0 && <span style={{ color: C.gr, marginLeft: 6 }}>✓{m.pass}</span>}
+                      {m.fail > 0 && <span style={{ color: C.re, marginLeft: 4 }}>✗{m.fail}</span>}
+                      {m.total - m.pass - m.fail > 0 && <span style={{ color: C.t3, marginLeft: 4 }}>⟳{m.total - m.pass - m.fail}</span>}
                     </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      alignItems: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {m.pass > 0 && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontFamily: F.mono,
-                          color: C.gr,
-                        }}
-                      >
-                        ✓ {m.pass}
-                      </span>
-                    )}
-                    {m.fail > 0 && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontFamily: F.mono,
-                          color: C.re,
-                        }}
-                      >
-                        ✗ {m.fail}
-                      </span>
-                    )}
-                    {m.total - m.pass - m.fail > 0 && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontFamily: F.mono,
-                          color: C.t3,
-                        }}
-                      >
-                        ⟳ {m.total - m.pass - m.fail}
-                      </span>
-                    )}
                   </div>
 
                   <div
                     style={{
                       fontSize: 12,
                       fontFamily: F.mono,
+                      fontWeight: 600,
                       color: pct === 100 ? C.gr : m.fail > 0 ? C.am : C.t2,
                       flexShrink: 0,
-                      minWidth: 38,
+                      minWidth: 34,
                       textAlign: "right",
                     }}
                   >
@@ -1975,7 +1930,7 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
 
                   {isAdmin && (
                     <button
-                      style={reBtn({ padding: "4px 8px", fontSize: 10 })}
+                      style={reBtn({ padding: "4px 7px", fontSize: 10 })}
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirmDel(m.id);
@@ -1988,21 +1943,9 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
                   <Ico n="chevR" s={13} />
                 </div>
 
-                <div style={{ height: 5, background: C.s3, display: "flex" }}>
-                  <div
-                    style={{
-                      width: `${passW}%`,
-                      background: C.gr,
-                      transition: "width .5s",
-                    }}
-                  />
-                  <div
-                    style={{
-                      width: `${failW}%`,
-                      background: C.re,
-                      transition: "width .5s",
-                    }}
-                  />
+                <div style={{ height: 4, background: C.s3, display: "flex" }}>
+                  <div style={{ width: `${passW}%`, background: C.gr, transition: "width .5s" }} />
+                  <div style={{ width: `${failW}%`, background: C.re, transition: "width .5s" }} />
                 </div>
               </div>
             );
@@ -2049,11 +1992,10 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
 function DividerRow({ label }) {
   return (
     <div style={{
-      gridColumn: "1 / -1",
       display: "flex",
       alignItems: "center",
       gap: 10,
-      padding: "6px 14px",
+      padding: "7px 14px",
       background: "linear-gradient(90deg,#eff6ff,#f8faff)",
       borderBottom: `1px solid ${C.b1}`,
     }}>
@@ -2081,42 +2023,7 @@ function StepRow({
   onActivate,
   rowRef,
 }) {
-  const readonlyCell = (text, color) => (
-    <div
-      style={{
-        padding: "8px 10px",
-        display: "flex",
-        alignItems: "flex-start",
-        borderRight: `1px solid ${C.b1}`,
-        minHeight: 40,
-      }}
-    >
-      {text ? (
-        <span
-          style={{
-            fontSize: 12,
-            color,
-            lineHeight: 1.6,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {text}
-        </span>
-      ) : (
-        <span
-          style={{
-            fontSize: 11,
-            color: C.t3,
-            fontStyle: "italic",
-            fontFamily: F.mono,
-          }}
-        >
-          —
-        </span>
-      )}
-    </div>
-  );
+  const isMobile = useIsMobile();
 
   const rowBg =
     step.status === "fail"
@@ -2126,6 +2033,115 @@ function StepRow({
       : isActive
       ? "#eff6ff"
       : "transparent";
+
+  const passBtn = (
+    <button
+      onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: isMobile ? "7px 0" : "4px 10px",
+        borderRadius: 20,
+        border: `1px solid ${step.status === "pass" ? "#86efac" : C.b2}`,
+        background: step.status === "pass" ? C.grd : "transparent",
+        color: step.status === "pass" ? C.gr : C.t3,
+        fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
+        cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
+      }}
+    >
+      <Ico n="check" s={isMobile ? 12 : 10} /> PASS
+    </button>
+  );
+  const failBtn = (
+    <button
+      onClick={(e) => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: isMobile ? "7px 0" : "4px 10px",
+        borderRadius: 20,
+        border: `1px solid ${step.status === "fail" ? "#fca5a5" : C.b2}`,
+        background: step.status === "fail" ? C.red : "transparent",
+        color: step.status === "fail" ? C.re : C.t3,
+        fontFamily: F.mono, fontSize: isMobile ? 11 : 10, fontWeight: 700,
+        cursor: "pointer", flex: 1, justifyContent: "center", transition: "all .15s",
+      }}
+    >
+      <Ico n="x" s={isMobile ? 12 : 10} /> FAIL
+    </button>
+  );
+
+  // ── Mobile: card layout ──────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div
+        ref={rowRef}
+        onClick={onActivate}
+        style={{
+          borderBottom: `1px solid ${C.b1}`,
+          background: rowBg,
+          outline: isActive ? `2px solid ${C.ac}` : "none",
+          outlineOffset: -2,
+          transition: "background .15s, outline .15s",
+          padding: "10px 12px",
+        }}
+      >
+        {/* Row 1: serial + status buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <span style={{
+            fontFamily: F.mono, fontSize: 11, fontWeight: 700,
+            color: C.t3, minWidth: 28, flexShrink: 0,
+          }}>
+            {isActive && <span style={{ color: C.ac, marginRight: 2 }}>●</span>}
+            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
+          </span>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 6, width: 160 }}>
+            {passBtn}
+            {failBtn}
+          </div>
+        </div>
+        {/* Row 2: action */}
+        {step.action ? (
+          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5, marginBottom: 4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {step.action}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", fontFamily: F.mono, marginBottom: 4 }}>No action</div>
+        )}
+        {/* Row 3: expected result */}
+        {step.result ? (
+          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5, marginBottom: 6, paddingLeft: 8, borderLeft: `2px solid ${C.b2}`, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, display: "block", marginBottom: 2 }}>Expected</span>
+            {step.result}
+          </div>
+        ) : null}
+        {/* Row 4: remarks */}
+        <textarea
+          value={step.remarks}
+          onChange={(e) => onChange(idx, "remarks", e.target.value)}
+          placeholder="Add remarks…"
+          rows={2}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: "100%", background: C.s2, border: `1px solid ${C.b1}`,
+            borderRadius: 6, color: C.t2, fontFamily: F.sans,
+            fontSize: 12, resize: "vertical", outline: "none",
+            lineHeight: 1.5, padding: "6px 8px", minHeight: 36,
+          }}
+        />
+      </div>
+    );
+  }
+
+  // ── Desktop: grid table row ──────────────────────────────────────────────────
+  const readonlyCell = (text, color) => (
+    <div style={{ padding: "8px 10px", display: "flex", alignItems: "flex-start", borderRight: `1px solid ${C.b1}`, minHeight: 40 }}>
+      {text ? (
+        <span style={{ fontSize: 12, color, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{text}</span>
+      ) : (
+        <span style={{ fontSize: 11, color: C.t3, fontStyle: "italic", fontFamily: F.mono }}>—</span>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -2143,42 +2159,14 @@ function StepRow({
         cursor: "default",
       }}
     >
-      <div
-        style={{
-          padding: "8px 10px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          borderRight: `1px solid ${C.b1}`,
-        }}
-      >
-        {isActive && (
-          <div
-            style={{
-              width: 4,
-              height: 4,
-              borderRadius: "50%",
-              background: C.ac,
-              marginRight: 4,
-              flexShrink: 0,
-            }}
-          />
-        )}
-        <span
-          style={{
-            fontFamily: F.mono,
-            fontSize: 12,
-            fontWeight: 600,
-            color: step.serialNo != null && step.serialNo !== "" ? C.t2 : C.t3,
-          }}
-        >
+      <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${C.b1}` }}>
+        {isActive && <div style={{ width: 4, height: 4, borderRadius: "50%", background: C.ac, marginRight: 4, flexShrink: 0 }} />}
+        <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 600, color: step.serialNo != null && step.serialNo !== "" ? C.t2 : C.t3 }}>
           {step.serialNo != null && step.serialNo !== "" ? step.serialNo : "—"}
         </span>
       </div>
-
       {readonlyCell(step.action, C.t1)}
       {readonlyCell(step.result, C.t2)}
-
       <div style={{ padding: "4px 8px", borderRight: `1px solid ${C.b1}` }}>
         <textarea
           value={step.remarks}
@@ -2186,81 +2174,12 @@ function StepRow({
           placeholder="Remarks…"
           rows={2}
           onClick={(e) => e.stopPropagation()}
-          style={{
-            width: "100%",
-            background: "transparent",
-            border: "none",
-            color: C.t2,
-            fontFamily: F.sans,
-            fontSize: 12,
-            resize: "vertical",
-            outline: "none",
-            lineHeight: 1.5,
-            minHeight: 36,
-          }}
+          style={{ width: "100%", background: "transparent", border: "none", color: C.t2, fontFamily: F.sans, fontSize: 12, resize: "vertical", outline: "none", lineHeight: 1.5, minHeight: 36 }}
         />
       </div>
-
-      <div
-        style={{
-          padding: "6px 8px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 4,
-        }}
-      >
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onStatusToggle(idx, "pass");
-          }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "4px 10px",
-            borderRadius: 20,
-            border: `1px solid ${step.status === "pass" ? "#86efac" : C.b2}`,
-            background: step.status === "pass" ? C.grd : "transparent",
-            color: step.status === "pass" ? C.gr : C.t3,
-            fontFamily: F.mono,
-            fontSize: 10,
-            fontWeight: 700,
-            cursor: "pointer",
-            width: "100%",
-            justifyContent: "center",
-            transition: "all .15s",
-          }}
-        >
-          <Ico n="check" s={10} /> PASS
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onStatusToggle(idx, "fail");
-          }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "4px 10px",
-            borderRadius: 20,
-            border: `1px solid ${step.status === "fail" ? "#fca5a5" : C.b2}`,
-            background: step.status === "fail" ? C.red : "transparent",
-            color: step.status === "fail" ? C.re : C.t3,
-            fontFamily: F.mono,
-            fontSize: 10,
-            fontWeight: 700,
-            cursor: "pointer",
-            width: "100%",
-            justifyContent: "center",
-            transition: "all .15s",
-          }}
-        >
-          <Ico n="x" s={10} /> FAIL
-        </button>
+      <div style={{ padding: "6px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+        {passBtn}
+        {failBtn}
       </div>
     </div>
   );
@@ -2787,11 +2706,11 @@ function TestDetail({
 
         {/* Row 3 — action buttons */}
         <div style={{
-          padding: isMobile ? "8px 14px" : "8px 22px",
+          padding: isMobile ? "8px 12px" : "8px 22px",
           display: "flex",
           alignItems: "center",
           gap: 6,
-          flexWrap: "wrap",
+          flexWrap: isMobile ? "wrap" : "nowrap",
         }}>
           <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
           {isAdmin && (
@@ -2804,10 +2723,12 @@ function TestDetail({
             <button
               style={{
                 ...grBtn(smBtn()),
-                marginLeft: "auto",
-                padding: isMobile ? "7px 16px" : "6px 14px",
-                fontSize: isMobile ? 13 : 12,
-                fontWeight: 600,
+                marginLeft: isMobile ? 0 : "auto",
+                flex: isMobile ? 1 : "none",
+                justifyContent: "center",
+                padding: isMobile ? "9px 0" : "6px 14px",
+                fontSize: isMobile ? 14 : 12,
+                fontWeight: 700,
                 boxShadow: "0 2px 8px rgba(22,163,74,.25)",
               }}
               onClick={() => {
@@ -2819,7 +2740,7 @@ function TestDetail({
               }}
               title="Save progress and release the lock so others can continue"
             >
-              <Ico n="check" s={12} /> Finish Test
+              <Ico n="check" s={14} /> Finish Test
             </button>
           )}
           {/* Spacer if admin (no Finish button) */}
@@ -2829,17 +2750,19 @@ function TestDetail({
 
       <div
         style={{
-          padding: "8px 16px",
+          padding: isMobile ? "8px 12px" : "8px 16px",
           background: C.s1,
           borderBottom: `1px solid ${C.b1}`,
           display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
+          alignItems: isMobile ? "flex-start" : "center",
+          flexDirection: isMobile ? "column" : "row",
+          gap: isMobile ? 8 : 8,
           flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", gap: 4 }}>
+        {/* Filter pills + search row */}
+        <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           {[
             ["all", "All", realSteps.length],
             ["pass", "Pass", pass],
@@ -2850,33 +2773,34 @@ function TestDetail({
               key={k}
               onClick={() => setFStat(k)}
               style={{
-                padding: "4px 9px",
+                padding: isMobile ? "6px 11px" : "4px 9px",
                 borderRadius: 20,
                 border: `1px solid ${fStat === k ? C.b2 : C.b1}`,
                 background: fStat === k ? C.s3 : "transparent",
                 color: fStat === k ? C.t1 : C.t2,
                 fontFamily: F.mono,
-                fontSize: 10,
+                fontSize: isMobile ? 11 : 10,
                 cursor: "pointer",
               }}
             >
               {l} ({c})
             </button>
           ))}
+          </div>
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            placeholder="Search steps…"
+            width={isMobile ? "100%" : 170}
+          />
         </div>
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder="Search steps…"
-          width={170}
-        />
         {isAdmin && (
           <div
             style={{
-              marginLeft: "auto",
               display: "flex",
               alignItems: "center",
               gap: 6,
+              width: isMobile ? "100%" : "auto",
             }}
           >
             <select
@@ -2891,6 +2815,7 @@ function TestDetail({
                 fontFamily: F.mono,
                 fontSize: 11,
                 outline: "none",
+                flex: isMobile ? 1 : "none",
               }}
             >
               {[1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000].map((n) => (
@@ -2900,7 +2825,7 @@ function TestDetail({
               ))}
             </select>
             <button
-              style={grBtn(smBtn())}
+              style={isMobile ? grBtn({ ...smBtn(), flex: 1, justifyContent: "center", padding: "8px 0" }) : grBtn(smBtn())}
               onClick={addSteps}
               disabled={steps.length >= 100_000}
             >
@@ -2910,8 +2835,10 @@ function TestDetail({
         )}
       </div>
 
-      <div ref={tableRef} style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-        <div style={{ minWidth: 680 }}>
+      <div ref={tableRef} style={{ flex: 1, overflowY: "auto", overflowX: isMobile ? "hidden" : "auto" }}>
+        <div style={isMobile ? {} : { minWidth: 680 }}>
+        {/* Desktop column headers */}
+        {!isMobile && (
         <div
           style={{
             display: "grid",
@@ -2942,6 +2869,7 @@ function TestDetail({
             )
           )}
         </div>
+        )}
 
         {visible.length === 0 && (
           <div
@@ -2997,6 +2925,7 @@ function ModuleView({
   modTotal,
 }) {
   const isAdmin = session.role === "admin";
+  const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null); // null = list, number = test detail
   const [search, setSearch] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -3265,40 +3194,51 @@ function ModuleView({
           mod.tests.length !== 1 ? "s" : ""
         } · click a test to open its steps`}
       >
-        <button
-          style={smBtn()}
-          onClick={() => onNav(-1)}
-          disabled={modIdx === 0 || uiLocked}
-          title={uiLocked ? "Finish the current test first" : undefined}
-        >
-          <Ico n="chevL" s={12} />
-        </button>
-        <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3 }}>
+        <span style={{ fontSize: 10, fontFamily: F.mono, color: C.t3, whiteSpace: "nowrap" }}>
           {modIdx + 1}/{modTotal}
         </span>
-        <button
-          style={smBtn()}
-          onClick={() => onNav(1)}
-          disabled={modIdx === modTotal - 1 || uiLocked}
-          title={uiLocked ? "Finish the current test first" : undefined}
-        >
-          <Ico n="chevR" s={12} />
-        </button>
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder="Search tests…"
-          width={170}
-        />
+        {!isMobile && (
+          <>
+            <button
+              style={smBtn()}
+              onClick={() => onNav(-1)}
+              disabled={modIdx === 0 || uiLocked}
+              title={uiLocked ? "Finish the current test first" : undefined}
+            >
+              <Ico n="chevL" s={12} />
+            </button>
+            <button
+              style={smBtn()}
+              onClick={() => onNav(1)}
+              disabled={modIdx === modTotal - 1 || uiLocked}
+              title={uiLocked ? "Finish the current test first" : undefined}
+            >
+              <Ico n="chevR" s={12} />
+            </button>
+          </>
+        )}
+        {!isMobile && (
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            placeholder="Search tests…"
+            width={170}
+          />
+        )}
         {isAdmin && (
           <button style={grBtn(smBtn())} onClick={addTest}>
-            <Ico n="plus" s={12} /> Add Test
+            <Ico n="plus" s={12} /> {isMobile ? "" : "Add Test"}
           </button>
         )}
       </Topbar>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 12 : 16 }}>
+        {isMobile && (
+          <div style={{ marginBottom: 10 }}>
+            <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" width="100%" />
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 10 : 8 }}>
           {filtered.map((t, visIdx) => {
             const realIdx = mod.tests.indexOf(t);
             const pass = t.steps.filter((s) => s.status === "pass").length;
@@ -3342,17 +3282,20 @@ function ModuleView({
                 {/* Test header */}
                 <div
                   style={{
-                    padding: "14px 18px",
+                    padding: isMobile ? "12px 14px" : "14px 18px",
                     display: "flex",
-                    alignItems: "center",
-                    gap: 14,
+                    alignItems: isMobile ? "flex-start" : "center",
+                    gap: isMobile ? 10 : 14,
+                    flexDirection: isMobile ? "column" : "row",
                   }}
                 >
+                  {/* Top row on mobile: badge + name + action */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
                   {/* Serial badge */}
                   <div
                     style={{
-                      width: 40,
-                      height: 40,
+                      width: 36,
+                      height: 36,
                       borderRadius: 9,
                       background: lockedByOther ? "#fef3c7" : isMyLockedTest ? "#dcfce7" : C.s3,
                       border: `1px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
@@ -3366,8 +3309,8 @@ function ModuleView({
                       flexShrink: 0,
                     }}
                   >
-                    {lockedByOther ? <Ico n="lock" s={16} />
-                      : isMyLockedTest ? <Ico n="check" s={16} />
+                    {lockedByOther ? <Ico n="lock" s={15} />
+                      : isMyLockedTest ? <Ico n="check" s={15} />
                       : t.serialNo}
                   </div>
                   {/* Info */}
@@ -3377,118 +3320,97 @@ function ModuleView({
                         fontSize: 14,
                         fontWeight: 600,
                         color: C.t1,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       {t.name}
-                      {lockInfo && (
-                        <span style={{
-                          fontSize: 10, fontFamily: F.mono, background: "#fef3c7",
-                          color: C.am, padding: "2px 8px", borderRadius: 10,
-                          border: `1px solid #fcd34d`, fontWeight: 700,
-                        }}>
-                          🔒 In use by {lockInfo.userName}
-                        </span>
-                      )}
-                      {isMyLockedTest && (
-                        <span style={{
-                          fontSize: 10, fontFamily: F.mono, background: "#dcfce7",
-                          color: C.gr, padding: "2px 8px", borderRadius: 10,
-                          border: `1px solid #86efac`, fontWeight: 700,
-                        }}>
-                          ▶ Your active test
-                        </span>
-                      )}
                     </div>
+                    {(lockInfo || isMyLockedTest) && (
+                      <div style={{ marginTop: 3 }}>
+                        {lockInfo && (
+                          <span style={{
+                            fontSize: 10, fontFamily: F.mono, background: "#fef3c7",
+                            color: C.am, padding: "2px 8px", borderRadius: 10,
+                            border: `1px solid #fcd34d`, fontWeight: 700,
+                          }}>
+                            🔒 In use by {lockInfo.userName}
+                          </span>
+                        )}
+                        {isMyLockedTest && (
+                          <span style={{
+                            fontSize: 10, fontFamily: F.mono, background: "#dcfce7",
+                            color: C.gr, padding: "2px 8px", borderRadius: 10,
+                            border: `1px solid #86efac`, fontWeight: 700,
+                          }}>
+                            ▶ Your active test
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {t.description && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: C.t2,
-                          marginTop: 2,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
+                      <div style={{ fontSize: 11, color: C.t2, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {t.description}
                       </div>
                     )}
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontFamily: F.mono,
-                        color: C.t3,
-                        marginTop: 4,
-                      }}
-                    >
-                      {t.steps.length} step{t.steps.length !== 1 ? "s" : ""} ·{" "}
-                      {pass} pass · {fail} fail · {pending} pending
+                    <div style={{ fontSize: 11, fontFamily: F.mono, color: C.t3, marginTop: 3 }}>
+                      {t.steps.length} step{t.steps.length !== 1 ? "s" : ""} · {pass}✓ {fail}✗ {pending}…
                     </div>
                   </div>
-                  {/* Progress */}
-                  <div style={{ width: 80, flexShrink: 0 }}>
-                    <PBar pct={pct} fail={fail > 0} />
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: C.t3,
-                        fontFamily: F.mono,
-                        textAlign: "right",
-                        marginTop: 3,
-                      }}
-                    >
-                      {pct}%
-                    </div>
-                  </div>
-                  {/* Status chips */}
-                  <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-                    {pass > 0 && (
-                      <Chip label={`✓${pass}`} color={C.gr} bg={C.grd} />
-                    )}
-                    {fail > 0 && (
-                      <Chip label={`✗${fail}`} color={C.re} bg={C.red} />
-                    )}
-                    {pending > 0 && (
-                      <Chip label={`⟳${pending}`} color={C.am} bg={C.amd} />
-                    )}
-                  </div>
-                  {/* Actions */}
+                  {/* Actions — always on the right of the top row */}
                   <div
-                    style={{ display: "flex", gap: 6, flexShrink: 0 }}
+                    style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {isAdmin && (
-                      <button
-                        style={reBtn(smBtn())}
-                        onClick={() => deleteTest(realIdx)}
-                        title="Delete test"
-                      >
+                    {isAdmin && !isMobile && (
+                      <button style={reBtn(smBtn())} onClick={() => deleteTest(realIdx)} title="Delete test">
                         <Ico n="trash" s={11} />
                       </button>
                     )}
                     {lockedByOther ? (
                       <button style={amBtn(smBtn())} disabled title={`Locked by ${lock.userName}`}>
-                        <Ico n="lock" s={11} /> Locked
+                        <Ico n="lock" s={11} /> {!isMobile && "Locked"}
                       </button>
                     ) : isMyLockedTest ? (
-                      <button style={grBtn(smBtn())} onClick={() => openTest(realIdx)}
-                        title="Return to your test">
+                      <button style={grBtn(smBtn())} onClick={() => openTest(realIdx)} title="Return to your test">
                         <Ico n="back" s={11} /> Return
                       </button>
                     ) : blockedByMyLock ? (
-                      <button style={smBtn({ opacity: 0.4, cursor: "not-allowed" })} disabled
-                        title="Finish your current test first">
-                        <Ico n="lock" s={11} /> Finish first
+                      <button style={smBtn({ opacity: 0.4, cursor: "not-allowed" })} disabled title="Finish your current test first">
+                        <Ico n="lock" s={11} />
                       </button>
                     ) : (
                       <button style={acBtn(smBtn())} onClick={() => openTest(realIdx)}>
-                        <Ico n="chevR" s={11} /> Open
+                        <Ico n="chevR" s={11} /> {!isMobile && "Open"}
+                      </button>
+                    )}
+                    {isAdmin && isMobile && (
+                      <button style={reBtn(smBtn())} onClick={() => deleteTest(realIdx)} title="Delete test">
+                        <Ico n="trash" s={11} />
                       </button>
                     )}
                   </div>
+                  </div>
+
+                  {/* Bottom row: progress bar + chips (only when not locked-by-other on mobile) */}
+                  {!isMobile && (
+                  <>
+                  {/* Progress */}
+                  <div style={{ width: 80, flexShrink: 0 }}>
+                    <PBar pct={pct} fail={fail > 0} />
+                    <div style={{ fontSize: 10, color: C.t3, fontFamily: F.mono, textAlign: "right", marginTop: 3 }}>
+                      {pct}%
+                    </div>
+                  </div>
+                  {/* Status chips */}
+                  <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                    {pass > 0 && <Chip label={`✓${pass}`} color={C.gr} bg={C.grd} />}
+                    {fail > 0 && <Chip label={`✗${fail}`} color={C.re} bg={C.red} />}
+                    {pending > 0 && <Chip label={`⟳${pending}`} color={C.am} bg={C.amd} />}
+                  </div>
+                  </>
+                  )}
                 </div>
 
                 {/* Mini progress strip */}
@@ -4792,7 +4714,7 @@ export default function App() {
         lineHeight: 1.5,
       }}
     >
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}`}</style>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}body{font-family:${F.sans};-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#9ca3af}textarea{font-family:${F.sans}}input,select,textarea{-webkit-font-smoothing:antialiased}button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}a{-webkit-tap-highlight-color:transparent}`}</style>
       {/* Desktop sidebar — hidden on mobile (drawer handles it) */}
       {!isMobile && (
         <Sidebar
@@ -4854,7 +4776,7 @@ export default function App() {
           overflow: "hidden",
           minWidth: 0,
           // On mobile, add bottom padding for the nav bar
-          paddingBottom: isMobile ? 56 : 0,
+          paddingBottom: isMobile ? "calc(58px + env(safe-area-inset-bottom, 0px))" : 0,
         }}
       >
         {view === "dash" && (
@@ -4915,13 +4837,13 @@ export default function App() {
             bottom: 0,
             left: 0,
             right: 0,
-            height: 56,
             background: C.s1,
             borderTop: `1px solid ${C.b1}`,
             display: "flex",
-            alignItems: "center",
+            alignItems: "stretch",
             zIndex: 200,
-            boxShadow: "0 -2px 10px rgba(0,0,0,.07)",
+            boxShadow: "0 -2px 12px rgba(0,0,0,.08)",
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
           }}
         >
           {mobileNavItems.map(({ id, icon, label }) => {
@@ -4948,19 +4870,21 @@ export default function App() {
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: 3,
+                  gap: 4,
                   border: "none",
-                  background: "transparent",
+                  borderTop: `2px solid ${isActive ? C.ac : "transparent"}`,
+                  background: isActive ? "#f0f7ff" : "transparent",
                   color: isActive ? C.ac : C.t3,
                   fontFamily: F.sans,
-                  fontSize: 9,
-                  fontWeight: isActive ? 600 : 400,
+                  fontSize: 10,
+                  fontWeight: isActive ? 700 : 400,
                   cursor: "pointer",
-                  padding: "4px 0",
-                  height: "100%",
+                  padding: "10px 0 8px",
+                  minHeight: 58,
+                  transition: "background .15s, color .15s",
                 }}
               >
-                <Ico n={icon} s={18} />
+                <Ico n={icon} s={20} />
                 {label}
               </button>
             );
@@ -4977,20 +4901,21 @@ export default function App() {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              gap: 3,
+              gap: 4,
               border: "none",
+              borderTop: "2px solid transparent",
               borderLeft: `1px solid ${C.b1}`,
               background: "transparent",
               color: C.re,
               fontFamily: F.sans,
-              fontSize: 9,
+              fontSize: 10,
               fontWeight: 400,
               cursor: "pointer",
-              padding: "4px 0",
-              height: "100%",
+              padding: "10px 0 8px",
+              minHeight: 58,
             }}
           >
-            <Ico n="logout" s={18} />
+            <Ico n="logout" s={20} />
             Logout
           </button>
         </div>
