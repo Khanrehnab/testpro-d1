@@ -15,6 +15,17 @@ import {
   Tooltip, Menu, CircularProgress, BottomNavigation,
   BottomNavigationAction, Collapse,
 } from "@mui/material";
+import {
+  DashboardRounded, AssessmentRounded, PeopleRounded, HistoryRounded,
+  CheckRounded, CloseRounded, UploadFileRounded, LogoutRounded,
+  EditRounded, DeleteRounded, AddRounded, SearchRounded,
+  ChevronRightRounded, KeyboardArrowDownRounded, ChevronLeftRounded,
+  RefreshRounded, FileDownloadRounded, NotificationsRounded,
+  LockRounded, LayersRounded, DescriptionRounded, ArrowBackRounded,
+  MenuRounded, VisibilityRounded, VisibilityOffRounded,
+  CheckCircleRounded, CancelRounded, GridViewRounded,
+  PersonRounded, AdminPanelSettingsRounded, TaskAltRounded,
+} from "@mui/icons-material";
 
 // ── Storage ─────────────────────────────────────────────────────────────────────
 
@@ -281,16 +292,21 @@ const muiTheme = createTheme({
     h4: { fontWeight: 700 }, h5: { fontWeight: 600 }, h6: { fontWeight: 600 },
     button: { fontWeight: 600, textTransform: "none" },
   },
-  shape: { borderRadius: 10 },
+  shape: { borderRadius: 12 },
   shadows: [
     "none",
-    "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
-    "0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)",
-    "0 4px 16px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)",
-    "0 8px 24px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06)",
-    "0 12px 32px rgba(0,0,0,0.14), 0 6px 12px rgba(0,0,0,0.08)",
-    ...Array(19).fill("none"),
+    "0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+    "0 2px 10px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)",
+    "0 4px 20px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.05)",
+    "0 8px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06)",
+    "0 16px 40px rgba(0,0,0,0.14), 0 6px 14px rgba(0,0,0,0.08)",
+    "0 24px 56px rgba(0,0,0,0.16), 0 10px 20px rgba(0,0,0,0.09)",
+    ...Array(18).fill("none"),
   ],
+  transitions: {
+    duration: { shortest: 120, shorter: 160, short: 220, standard: 280, complex: 400 },
+    easing: { easeInOut: "cubic-bezier(0.4, 0, 0.2, 1)", sharp: "cubic-bezier(0.4, 0, 0.6, 1)" },
+  },
   components: {
     MuiCssBaseline: {
       styleOverrides: `
@@ -299,32 +315,85 @@ const muiTheme = createTheme({
         body { -webkit-font-smoothing: antialiased; }
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        ::-webkit-scrollbar-thumb { background: rgba(234,88,12,0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(234,88,12,0.38); }
         button { -webkit-tap-highlight-color: transparent; }
+        ::selection { background: rgba(234,88,12,0.15); }
       `,
     },
     MuiButton: {
       styleOverrides: {
-        root: { borderRadius: 8, fontWeight: 600, letterSpacing: 0 },
+        root: {
+          borderRadius: 10, fontWeight: 600, letterSpacing: 0,
+          transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
+          "&:active": { transform: "scale(0.97)" },
+        },
+        contained: {
+          boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+          "&:hover": { boxShadow: "0 4px 16px rgba(0,0,0,0.18)", transform: "translateY(-1px)" },
+        },
         sizeSmall: { fontSize: 12, padding: "4px 12px" },
         sizeMedium: { fontSize: 13, padding: "6px 16px" },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          transition: "all 0.16s cubic-bezier(0.4,0,0.2,1)",
+          "&:active": { transform: "scale(0.88)" },
+        },
       },
     },
     MuiTextField: {
       defaultProps: { size: "small" },
     },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          transition: "box-shadow 0.18s, border-color 0.18s",
+          "&.Mui-focused": { boxShadow: "0 0 0 3px rgba(234,88,12,0.12)" },
+        },
+      },
+    },
     MuiChip: {
-      styleOverrides: { root: { fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" } },
+      styleOverrides: {
+        root: {
+          fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
+          transition: "all 0.15s cubic-bezier(0.4,0,0.2,1)",
+        },
+      },
     },
     MuiPaper: { defaultProps: { elevation: 0 } },
     MuiLinearProgress: {
-      styleOverrides: { root: { borderRadius: 4, height: 5 } },
+      styleOverrides: {
+        root: { borderRadius: 99, height: 5, overflow: "hidden" },
+        bar: { borderRadius: 99 },
+      },
     },
     MuiTableCell: {
       styleOverrides: {
         head: { fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.8px", color: "#a8a29e", fontFamily: "'JetBrains Mono', monospace" },
         root: { borderColor: "#f5dece" },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: { transition: "all 0.16s cubic-bezier(0.4,0,0.2,1)" },
+      },
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: { borderRadius: 12, fontWeight: 500 },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: 16 },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: { borderRadius: 8, fontSize: 12, fontWeight: 500 },
       },
     },
   },
@@ -355,59 +424,59 @@ const MobileMenuCtx = React.createContext(null);
 
 // ── Framer Motion Variants ────────────────────────────────────────────────────────
 const pageVariants = {
-  initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" } },
-  exit:    { opacity: 0, y: -8, transition: { duration: 0.15 } },
+  initial: { opacity: 0, y: 14, scale: 0.99 },
+  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } },
+  exit:    { opacity: 0, y: -8, scale: 0.99, transition: { duration: 0.18, ease: "easeIn" } },
 };
 const cardVariants = {
-  initial: { opacity: 0, y: 16 },
+  initial: { opacity: 0, y: 20 },
   animate: (i) => ({
     opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.28, ease: "easeOut" },
+    transition: { delay: i * 0.04, type: "spring", stiffness: 320, damping: 28 },
   }),
 };
 const listStagger = {
-  animate: { transition: { staggerChildren: 0.055 } },
+  animate: { transition: { staggerChildren: 0.04 } },
 };
 const listItem = {
-  initial: { opacity: 0, x: -10 },
-  animate: { opacity: 1, x: 0, transition: { duration: 0.22, ease: "easeOut" } },
+  initial: { opacity: 0, x: -12 },
+  animate: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 340, damping: 30 } },
 };
 
-// ── SVG Icons ────────────────────────────────────────────────────────────────────
-const PATHS = {
-  check:  [["M20 6 9 17 4 12"]],
-  x:      [["M18 6 6 18"], ["M6 6l12 12"]],
-  upload: [["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"], ["M17 8l-5-5-5 5"], ["M12 3v12"]],
-  logout: [["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"], ["M16 17l5-5-5-5"], ["M21 12H9"]],
-  grid:   [["M3 3h7v7H3z"], ["M14 3h7v7h-7z"], ["M14 14h7v7h-7z"], ["M3 14h7v7H3z"]],
-  edit:   [["M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"], ["M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"]],
-  trash:  [["M3 6h18"], ["M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"], ["M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"]],
-  plus:   [["M12 5v14"], ["M5 12h14"]],
-  search: [["M11 11m-6 0a6 6 0 1 0 12 0 6 6 0 0 0-12 0"], ["M21 21l-3.5-3.5"]],
-  dash:   [["M22 12h-4l-3 9L9 3l-3 9H2"]],
-  report: [["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"], ["M14 2v6h6"], ["M16 13H8"], ["M16 17H8"]],
-  users:  [["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"], ["M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0"], ["M23 21v-2a4 4 0 0 0-3-3.87"], ["M16 3.13a4 4 0 0 1 0 7.75"]],
-  log:    [["M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"], ["M22 6l-10 7L2 6"]],
-  chevR:  [["M9 18l6-6-6-6"]],
-  chevD:  [["M6 9l6 6 6-6"]],
-  chevL:  [["M15 18l-6-6 6-6"]],
-  reset:  [["M1 4v6h6"], ["M3.51 15a9 9 0 1 0 .49-3.2"]],
-  down:   [["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"], ["M7 10l5 5 5-5"], ["M12 15V3"]],
-  bell:   [["M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"], ["M13.73 21a2 2 0 0 1-3.46 0"]],
-  lock:   [["M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z"], ["M7 11V7a5 5 0 0 1 10 0v4"]],
-  layers: [["M12 2 2 7l10 5 10-5-10-5z"], ["M2 17l10 5 10-5"], ["M2 12l10 5 10-5"]],
-  file:   [["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"], ["M14 2v6h6"]],
-  back:   [["M19 12H5"], ["M12 5l-7 7 7 7"]],
+// ── MUI Icon Map ─────────────────────────────────────────────────────────────────
+const ICO_MAP = {
+  check:  CheckRounded,
+  x:      CloseRounded,
+  upload: UploadFileRounded,
+  logout: LogoutRounded,
+  grid:   GridViewRounded,
+  edit:   EditRounded,
+  trash:  DeleteRounded,
+  plus:   AddRounded,
+  search: SearchRounded,
+  dash:   DashboardRounded,
+  report: AssessmentRounded,
+  users:  PeopleRounded,
+  log:    HistoryRounded,
+  chevR:  ChevronRightRounded,
+  chevD:  KeyboardArrowDownRounded,
+  chevL:  ChevronLeftRounded,
+  reset:  RefreshRounded,
+  down:   FileDownloadRounded,
+  bell:   NotificationsRounded,
+  lock:   LockRounded,
+  layers: LayersRounded,
+  file:   DescriptionRounded,
+  back:   ArrowBackRounded,
+  audit:  HistoryRounded,
+  person: PersonRounded,
+  admin:  AdminPanelSettingsRounded,
+  task:   TaskAltRounded,
 };
 function Ico({ n, s = 15, color = "currentColor" }) {
-  const paths = PATHS[n] || [["M0 0"]];
-  return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={color}
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      {paths.map((d, i) => <path key={i} d={d[0]} />)}
-    </svg>
-  );
+  const MuiIcon = ICO_MAP[n];
+  if (MuiIcon) return <MuiIcon sx={{ fontSize: s, color, flexShrink: 0, display: "block" }} />;
+  return <span style={{ width: s, height: s, flexShrink: 0, display: "inline-block" }} />;
 }
 
 // ── Toast (MUI Snackbar) ──────────────────────────────────────────────────────────
@@ -421,23 +490,29 @@ function useToast() {
   const Host = () => {
     const isMobile = useIsMobile();
     return (
-      <Box sx={{ position: "fixed", bottom: isMobile ? 72 : 20, right: isMobile ? 12 : 20,
+      <Box sx={{ position: "fixed", bottom: isMobile ? 72 : 24, right: isMobile ? 12 : 24,
         left: isMobile ? 12 : "auto", zIndex: 9999, display: "flex", flexDirection: "column", gap: 1, pointerEvents: "none" }}>
         <AnimatePresence>
           {queue.map(t => (
             <motion.div key={t.id}
-              initial={{ opacity: 0, y: 20, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 380, damping: 28 }}
+              initial={{ opacity: 0, y: 24, scale: 0.88, x: isMobile ? 0 : 20 }}
+              animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
+              exit={{ opacity: 0, y: 8, scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
             >
               <Alert severity={t.type === "info" ? "info" : t.type === "success" ? "success" : "error"}
                 sx={{
-                  borderRadius: 2.5, boxShadow: 4, fontWeight: 500, fontSize: 13,
-                  backdropFilter: "blur(12px)", border: "1px solid",
-                  borderColor: t.type === "success" ? "success.light" : t.type === "error" ? "error.light" : "primary.light",
+                  borderRadius: 3, boxShadow: "0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08)",
+                  fontWeight: 600, fontSize: 13, minWidth: isMobile ? "auto" : 280,
+                  backdropFilter: "blur(16px)", border: "1px solid",
+                  borderColor: t.type === "success" ? "rgba(22,163,74,0.25)" : t.type === "error" ? "rgba(220,38,38,0.25)" : "rgba(234,88,12,0.25)",
+                  bgcolor: t.type === "success" ? "rgba(240,253,244,0.95)" : t.type === "error" ? "rgba(254,242,242,0.95)" : "rgba(255,247,237,0.95)",
                 }}
-                icon={<Ico n={t.type === "success" ? "check" : t.type === "error" ? "x" : "bell"} s={14} />}
+                iconMapping={{
+                  success: <CheckCircleRounded sx={{ fontSize: 18 }} />,
+                  error: <CancelRounded sx={{ fontSize: 18 }} />,
+                  info: <NotificationsRounded sx={{ fontSize: 18 }} />,
+                }}
               >
                 {t.msg}
               </Alert>
@@ -478,16 +553,16 @@ function Topbar({ title, sub, children }) {
   const onMenuClick = useContext(MobileMenuCtx);
   return (
     <AppBar position="static" elevation={0} sx={{
-      bgcolor: "rgba(255,255,255,0.88)", backdropFilter: "blur(16px)",
-      WebkitBackdropFilter: "blur(16px)", borderBottom: `1px solid ${C.b1}`,
+      bgcolor: "rgba(255,255,255,0.90)", backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+      borderBottom: `1px solid rgba(245,222,206,0.8)`,
       color: "text.primary", flexShrink: 0,
+      boxShadow: "0 1px 0 rgba(245,222,206,0.8), 0 4px 20px rgba(234,88,12,0.04)",
     }}>
       <Toolbar sx={{ minHeight: 58, gap: 1, px: isMobile ? 1.5 : 2.5 }}>
         {isMobile && onMenuClick && (
-          <IconButton onClick={onMenuClick} size="small" sx={{ mr: 0.5 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
+          <IconButton onClick={onMenuClick} size="small" sx={{ mr: 0.5, color: "text.secondary" }}>
+            <MenuRounded sx={{ fontSize: 22 }} />
           </IconButton>
         )}
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -513,8 +588,13 @@ function PBar({ pct, fail }) {
   return (
     <LinearProgress
       variant="determinate" value={pct}
-      sx={{ height: 4, borderRadius: 2, bgcolor: C.s3,
-        "& .MuiLinearProgress-bar": { bgcolor: fail ? "warning.main" : "success.main", transition: "transform 0.5s ease" }
+      sx={{ height: 5, borderRadius: 99, bgcolor: C.s3,
+        "& .MuiLinearProgress-bar": {
+          background: fail
+            ? "linear-gradient(90deg, #f59e0b, #dc2626)"
+            : "linear-gradient(90deg, #22c55e, #16a34a)",
+          borderRadius: 99, transition: "transform 0.6s cubic-bezier(0.4,0,0.2,1)",
+        }
       }}
     />
   );
@@ -525,22 +605,23 @@ function ExportMenu({ onCSV, onPDF }) {
   const [anchor, setAnchor] = useState(null);
   return (
     <>
-      <Button size="small" variant="outlined" startIcon={<Ico n="down" s={12} />}
+      <Button size="small" variant="outlined" startIcon={<FileDownloadRounded sx={{ fontSize: 15 }} />}
         onClick={e => setAnchor(e.currentTarget)}
-        sx={{ borderColor: C.b2, color: "text.secondary", bgcolor: "background.paper" }}
+        sx={{ borderColor: C.b2, color: "text.secondary", bgcolor: "background.paper",
+          "&:hover": { borderColor: C.ac, color: "primary.main", bgcolor: alpha("#ea580c", 0.04) } }}
       >
         Export
       </Button>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}
-        PaperProps={{ sx: { borderRadius: 2, boxShadow: 4, border: `1px solid ${C.b1}`, minWidth: 150 } }}
+        PaperProps={{ sx: { borderRadius: 2.5, boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: `1px solid ${C.b1}`, minWidth: 160 } }}
         transformOrigin={{ horizontal: "right", vertical: "top" }}
         anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
       >
-        <MenuItem onClick={() => { onCSV(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13 }}>
-          <Ico n="down" s={13} /> Export CSV
+        <MenuItem onClick={() => { onCSV(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13, borderRadius: 1.5, mx: 0.5, my: 0.25 }}>
+          <FileDownloadRounded sx={{ fontSize: 16, color: C.t3 }} /> Export CSV
         </MenuItem>
-        <MenuItem onClick={() => { onPDF(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13 }}>
-          <Ico n="report" s={13} /> Export PDF
+        <MenuItem onClick={() => { onPDF(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13, borderRadius: 1.5, mx: 0.5, my: 0.25 }}>
+          <AssessmentRounded sx={{ fontSize: 16, color: C.t3 }} /> Export PDF
         </MenuItem>
       </Menu>
     </>
@@ -663,13 +744,15 @@ function LoginPage({ users, onLogin }) {
 
           <Box sx={{ p: isMobile ? 3 : 4, position: "relative", zIndex: 2 }}>
             {/* Logo */}
-            <motion.div animate={{ boxShadow: ["0 4px 14px rgba(234,88,12,.30)", "0 4px 24px rgba(234,88,12,.55)", "0 4px 14px rgba(234,88,12,.30)"] }}
-              transition={{ duration: 2.5, repeat: Infinity }}>
-              <Box sx={{ width: 52, height: 52, borderRadius: 3, background: "linear-gradient(135deg,#fb923c,#ea580c)",
-                display: "flex", alignItems: "center", justifyContent: "center", mb: 2.5, boxShadow: "0 4px 14px rgba(234,88,12,.30)" }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 6 9 17 4 12"/>
-                </svg>
+            <motion.div
+              animate={{ boxShadow: ["0 4px 14px rgba(234,88,12,.30)", "0 4px 28px rgba(234,88,12,.60)", "0 4px 14px rgba(234,88,12,.30)"] }}
+              transition={{ duration: 2.5, repeat: Infinity }}
+              style={{ display: "inline-flex", borderRadius: 16, marginBottom: 20 }}
+            >
+              <Box sx={{ width: 56, height: 56, borderRadius: 3.5, background: "linear-gradient(135deg,#fb923c,#ea580c)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(234,88,12,.30)" }}>
+                <TaskAltRounded sx={{ fontSize: 30, color: "#fff" }} />
               </Box>
             </motion.div>
 
@@ -706,17 +789,7 @@ function LoginPage({ users, onLogin }) {
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton size="small" onClick={() => setShowPw(v => !v)} edge="end">
-                        {showPw ? (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-                          </svg>
-                        ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                            <line x1="1" y1="1" x2="23" y2="23"/>
-                          </svg>
-                        )}
+                        {showPw ? <VisibilityOffRounded sx={{ fontSize: 18 }} /> : <VisibilityRounded sx={{ fontSize: 18 }} />}
                       </IconButton>
                     </InputAdornment>
                   ),
@@ -763,21 +836,20 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
   const navRow = (item) => {
     const active = view === item.id;
     return (
-      <motion.div key={item.id} whileHover={{ x: 2 }} transition={{ duration: 0.15 }}>
+      <motion.div key={item.id} whileHover={{ x: active ? 0 : 3 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
         <ListItemButton
           onClick={() => { setView(item.id); if (onMobileClose) onMobileClose(); }}
           sx={{
-            borderRadius: 2, mx: 0.75, mb: 0.3, py: 0.9,
-            bgcolor: active ? alpha("#ea580c", 0.10) : "transparent",
-            color: active ? "primary.main" : "text.secondary",
-            borderLeft: active ? "3px solid" : "3px solid transparent",
-            borderLeftColor: active ? "primary.main" : "transparent",
-            "&:hover": { bgcolor: active ? alpha("#ea580c", 0.12) : alpha("#000", 0.04) },
-            transition: "all 0.15s",
+            borderRadius: 2.5, mx: 0.75, mb: 0.4, py: 0.85,
+            bgcolor: active ? "primary.main" : "transparent",
+            color: active ? "#fff" : "text.secondary",
+            boxShadow: active ? "0 4px 14px rgba(234,88,12,0.35)" : "none",
+            "&:hover": { bgcolor: active ? "primary.dark" : alpha("#000", 0.04) },
+            transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
           }}
         >
           <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 0 : 36, color: "inherit" }}>
-            <Ico n={item.icon} s={16} />
+            <Ico n={item.icon} s={18} />
           </ListItemIcon>
           {(!collapsed || isMobile) && (
             <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 700 : 500 }} />
@@ -792,20 +864,21 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
   const content = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 1.5, py: 1.5, borderBottom: `1px solid ${C.b1}`, minHeight: 56, flexShrink: 0 }}>
-        <Box sx={{ width: 30, height: 30, borderRadius: 1.5, background: "linear-gradient(135deg,#fb923c,#ea580c)",
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <img src="/testpro_logo.svg" width="20" height="20" alt="TestPro" style={{ pointerEvents: "none" }}
-            onError={e => { e.target.style.display = "none"; }} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 1.5, py: 1.5, borderBottom: `1px solid ${C.b1}`, minHeight: 58, flexShrink: 0,
+        background: "linear-gradient(135deg, rgba(255,247,237,0.8) 0%, rgba(255,255,255,0.9) 100%)" }}>
+        <Box sx={{ width: 32, height: 32, borderRadius: 2, background: "linear-gradient(135deg,#fb923c,#ea580c)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          boxShadow: "0 3px 10px rgba(234,88,12,0.38)" }}>
+          <TaskAltRounded sx={{ fontSize: 18, color: "#fff" }} />
         </Box>
         {(!collapsed || isMobile) && (
-          <Typography fontWeight={800} sx={{ fontFamily: MONO, fontSize: 14, flex: 1, letterSpacing: "-0.3px" }}>
+          <Typography fontWeight={800} sx={{ fontFamily: MONO, fontSize: 15, flex: 1, letterSpacing: "-0.5px" }}>
             Test<Box component="span" sx={{ color: "primary.main" }}>Pro</Box>
           </Typography>
         )}
         {!isMobile && (
-          <IconButton size="small" onClick={() => setCollapsed(c => !c)} sx={{ ml: "auto", color: "text.disabled" }}>
-            <Ico n={collapsed ? "chevR" : "chevL"} s={13} />
+          <IconButton size="small" onClick={() => setCollapsed(c => !c)} sx={{ ml: "auto", color: "text.disabled", "&:hover": { color: "primary.main", bgcolor: alpha("#ea580c", 0.08) } }}>
+            <Ico n={collapsed ? "chevR" : "chevL"} s={16} />
           </IconButton>
         )}
       </Box>
@@ -852,27 +925,28 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
                       }}
                       disabled={locked && !(selMod === m.id && view === "mod")}
                       sx={{
-                        borderRadius: 1.5, mb: 0.2, py: 0.75,
-                        bgcolor: active ? alpha("#ea580c", 0.08) : "transparent",
+                        borderRadius: 2, mb: 0.25, py: 0.7,
+                        bgcolor: active ? alpha("#ea580c", 0.10) : "transparent",
                         color: active ? "primary.main" : "text.secondary",
-                        borderLeft: active ? "2px solid" : "2px solid transparent",
+                        borderLeft: active ? "3px solid" : "3px solid transparent",
                         borderLeftColor: active ? "primary.main" : "transparent",
-                        "&:hover": { bgcolor: active ? alpha("#ea580c", 0.10) : alpha("#000", 0.04) },
+                        "&:hover": { bgcolor: active ? alpha("#ea580c", 0.12) : alpha("#000", 0.04) },
                         "&.Mui-disabled": { opacity: 0.38 },
+                        transition: "all 0.16s cubic-bezier(0.4,0,0.2,1)",
                       }}
                     >
-                      <ListItemIcon sx={{ minWidth: 28, color: "inherit", opacity: 0.7 }}>
-                        <Ico n="layers" s={13} />
+                      <ListItemIcon sx={{ minWidth: 26, color: "inherit", opacity: active ? 1 : 0.6 }}>
+                        <LayersRounded sx={{ fontSize: 14 }} />
                       </ListItemIcon>
                       <ListItemText
                         primary={m.name}
                         primaryTypographyProps={{ fontSize: 12, fontWeight: active ? 700 : 400, noWrap: true }}
                       />
                       {st.fail > 0 && (
-                        <Chip label={`✗${st.fail}`} size="small" sx={{ height: 18, fontSize: 9, fontFamily: MONO, bgcolor: C.red, color: C.re, ml: 0.5 }} />
+                        <Chip label={`✗${st.fail}`} size="small" sx={{ height: 17, fontSize: 9, fontFamily: MONO, bgcolor: C.red, color: C.re, ml: 0.5, border: `1px solid ${alpha(C.re, 0.25)}` }} />
                       )}
                       {!st.fail && st.pass > 0 && (
-                        <Chip label="✓" size="small" sx={{ height: 18, fontSize: 9, fontFamily: MONO, bgcolor: C.grd, color: C.gr, ml: 0.5 }} />
+                        <CheckCircleRounded sx={{ fontSize: 14, color: C.gr, ml: 0.5 }} />
                       )}
                     </ListItemButton>
                   </motion.div>
@@ -884,20 +958,23 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
       )}
 
       {/* Footer */}
-      <Box sx={{ borderTop: `1px solid ${C.b1}`, p: 1.5, flexShrink: 0, display: "flex", alignItems: "center", gap: 1.5 }}>
-        <Avatar sx={{ width: 30, height: 30, background: "linear-gradient(135deg,#dbeafe,#bfdbfe)", color: "#1d4ed8", fontSize: 13, fontWeight: 700 }}>
+      <Box sx={{ borderTop: `1px solid ${C.b1}`, p: 1.5, flexShrink: 0, display: "flex", alignItems: "center", gap: 1.5,
+        background: "linear-gradient(135deg, rgba(255,247,237,0.5) 0%, rgba(255,255,255,0.8) 100%)" }}>
+        <Avatar sx={{ width: 32, height: 32, background: "linear-gradient(135deg,#ea580c,#c2410c)", color: "#fff", fontSize: 14, fontWeight: 700, boxShadow: "0 2px 8px rgba(234,88,12,0.35)" }}>
           {session.name?.[0]?.toUpperCase()}
         </Avatar>
         {(!collapsed || isMobile) && (
           <>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="caption" fontWeight={600} sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.name}</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>{session.name}</Typography>
               <Chip label={session.role} size="small" sx={{ height: 16, fontSize: 9, fontFamily: MONO, fontWeight: 700,
-                bgcolor: session.role === "admin" ? "#fff7ed" : C.amd, color: session.role === "admin" ? C.ac : C.am }} />
+                bgcolor: session.role === "admin" ? alpha("#ea580c", 0.12) : C.amd,
+                color: session.role === "admin" ? C.ac : C.am,
+                border: `1px solid ${session.role === "admin" ? alpha("#ea580c", 0.25) : "transparent"}` }} />
             </Box>
             <Tooltip title="Logout">
-              <IconButton size="small" onClick={onLogout} sx={{ color: "error.main" }}>
-                <Ico n="logout" s={15} />
+              <IconButton size="small" onClick={onLogout} sx={{ color: "error.main", "&:hover": { bgcolor: alpha("#dc2626", 0.08) } }}>
+                <LogoutRounded sx={{ fontSize: 17 }} />
               </IconButton>
             </Tooltip>
           </>
@@ -918,9 +995,11 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
   return (
     <Box sx={{
       width: drawerWidth, flexShrink: 0, display: "flex", flexDirection: "column",
-      bgcolor: "rgba(255,255,255,0.90)", backdropFilter: "blur(12px)",
-      borderRight: `1px solid ${C.b1}`, overflow: "hidden",
-      transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
+      bgcolor: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      borderRight: `1px solid rgba(245,222,206,0.8)`,
+      boxShadow: "2px 0 20px rgba(234,88,12,0.04)",
+      overflow: "hidden",
+      transition: "width 0.25s cubic-bezier(0.4,0,0.2,1)",
     }}>
       {content}
     </Box>
@@ -976,10 +1055,10 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   };
 
   const statCards = [
-    { label: "Total Steps", value: total, color: "primary.main", sub: `${modList.length} modules` },
-    { label: "Passed", value: totalPass, color: "success.main", sub: `${total ? Math.round((totalPass / total) * 100) : 0}% rate` },
-    { label: "Failed", value: totalFail, color: "error.main", sub: `${modStats.filter(m => m.fail > 0).length} modules` },
-    { label: "Pending", value: pending, color: "warning.main", sub: `${modStats.filter(m => m.pass + m.fail === m.total && m.total > 0).length} complete` },
+    { label: "Total Steps", value: total, color: "primary.main", bgColor: "#fff7ed", borderColor: alpha("#ea580c", 0.2), icon: <LayersRounded sx={{ fontSize: 22, color: "#ea580c" }} />, sub: `${modList.length} modules` },
+    { label: "Passed", value: totalPass, color: "success.main", bgColor: "#f0fdf4", borderColor: alpha("#16a34a", 0.2), icon: <CheckCircleRounded sx={{ fontSize: 22, color: "#16a34a" }} />, sub: `${total ? Math.round((totalPass / total) * 100) : 0}% rate` },
+    { label: "Failed", value: totalFail, color: "error.main", bgColor: "#fff5f5", borderColor: alpha("#dc2626", 0.2), icon: <CancelRounded sx={{ fontSize: 22, color: "#dc2626" }} />, sub: `${modStats.filter(m => m.fail > 0).length} modules` },
+    { label: "Pending", value: pending, color: "warning.main", bgColor: "#fffbeb", borderColor: alpha("#d97706", 0.2), icon: <RefreshRounded sx={{ fontSize: 22, color: "#d97706" }} />, sub: `${modStats.filter(m => m.pass + m.fail === m.total && m.total > 0).length} complete` },
   ];
 
   return (
@@ -998,11 +1077,21 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
         <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? 1 : 1.5, mb: isMobile ? 2 : 2.5 }}>
           {statCards.map((card, i) => (
             <motion.div key={card.label} custom={i} variants={cardVariants} initial="initial" animate="animate">
-              <motion.div whileHover={{ y: -3, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }} transition={{ duration: 0.18 }}>
-                <Paper elevation={1} sx={{ p: isMobile ? 1.5 : 2, borderRadius: 3, border: `1px solid ${C.b1}`, cursor: "default" }}>
-                  <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px", display: "block", mb: 0.5 }}>
-                    {card.label}
-                  </Typography>
+              <motion.div whileHover={{ y: -4, boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+                <Paper elevation={0} sx={{
+                  p: isMobile ? 1.5 : 2, borderRadius: 3, overflow: "hidden",
+                  border: `1px solid ${card.borderColor}`,
+                  bgcolor: card.bgColor,
+                  cursor: "default",
+                  position: "relative",
+                }}>
+                  <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, bgcolor: card.color, opacity: 0.7, borderRadius: "3px 3px 0 0" }} />
+                  <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={0.5}>
+                    <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", display: "block" }}>
+                      {card.label}
+                    </Typography>
+                    {!isMobile && card.icon}
+                  </Stack>
                   <Typography variant="h4" fontWeight={800} sx={{ color: card.color, lineHeight: 1.1, mb: 0.5 }}>{card.value.toLocaleString()}</Typography>
                   <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO }}>{card.sub}</Typography>
                 </Paper>
@@ -1013,20 +1102,23 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
 
         {/* Filter bar */}
         <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
-          <Typography variant="body2" fontWeight={600}>
-            Modules <Box component="span" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 400 }}>({filtered.length})</Box>
+          <Typography variant="body2" fontWeight={700} sx={{ color: "text.primary" }}>
+            Modules{" "}
+            <Box component="span" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 400, fontSize: 12 }}>({filtered.length})</Box>
           </Typography>
-          <Stack direction="row" gap={0.75} flexWrap="wrap">
+          <Stack direction="row" gap={0.5} flexWrap="wrap">
             {[["all","All"],["active","In Progress"],["pass","All Pass"],["fail","Has Failures"],["empty","Not Started"]].map(([k,l]) => (
               <Chip key={k} label={l} size="small" clickable
                 onClick={() => setFilter(k)}
                 sx={{
-                  fontFamily: MONO, fontSize: 10, height: 24,
-                  bgcolor: filter === k ? alpha("#ea580c", 0.12) : "transparent",
-                  color: filter === k ? "primary.main" : "text.secondary",
-                  border: `1px solid ${filter === k ? alpha("#ea580c", 0.3) : C.b1}`,
-                  fontWeight: filter === k ? 700 : 400,
-                  "&:hover": { bgcolor: filter === k ? alpha("#ea580c", 0.15) : alpha("#000", 0.04) },
+                  fontFamily: MONO, fontSize: 10, height: 26,
+                  bgcolor: filter === k ? "primary.main" : "transparent",
+                  color: filter === k ? "#fff" : "text.secondary",
+                  border: `1px solid ${filter === k ? "transparent" : C.b1}`,
+                  fontWeight: filter === k ? 700 : 500,
+                  boxShadow: filter === k ? "0 2px 8px rgba(234,88,12,0.30)" : "none",
+                  "&:hover": { bgcolor: filter === k ? "primary.dark" : alpha("#000", 0.04) },
+                  transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
                 }}
               />
             ))}
@@ -1039,47 +1131,62 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
             const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
             const passW = m.total ? (m.pass / m.total) * 100 : 0;
             const failW = m.total ? (m.fail / m.total) * 100 : 0;
-            const borderColor = m.fail > 0 ? "#fca5a5" : m.pass === m.total && m.total > 0 ? "#86efac" : C.b1;
+            const isDone = m.pass === m.total && m.total > 0;
+            const hasFail = m.fail > 0;
+            const borderColor = hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1;
             return (
               <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-                whileHover={{ y: -2 }} transition={{ duration: 0.16 }}>
-                <Paper elevation={0} sx={{ border: `1px solid ${borderColor}`, borderRadius: 2.5, overflow: "hidden", transition: "border-color 0.15s" }}>
-                  <Box sx={{ p: isMobile ? "12px 14px" : "13px 16px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }}
+                whileHover={{ y: -3, boxShadow: "0 12px 32px rgba(0,0,0,0.10)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+                <Paper elevation={0} sx={{
+                  border: `1px solid ${borderColor}`, borderRadius: 3, overflow: "hidden",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  bgcolor: hasFail ? "rgba(255,245,245,0.6)" : isDone ? "rgba(240,253,244,0.6)" : "background.paper",
+                }}>
+                  <Box sx={{ p: isMobile ? "12px 14px" : "14px 18px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }}
                     onClick={() => onSelect(m.id)}>
+                    {/* Status dot */}
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                      bgcolor: hasFail ? C.re : isDone ? C.gr : m.pass > 0 ? C.am : C.b2,
+                      boxShadow: hasFail ? `0 0 0 3px ${alpha(C.re,0.15)}` : isDone ? `0 0 0 3px ${alpha(C.gr,0.15)}` : "none",
+                    }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography fontWeight={600} sx={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</Typography>
+                      <Typography fontWeight={700} sx={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</Typography>
                       <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>
-                        {m.testCount}t · {m.total}s
-                        {m.pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 1 }}>✓{m.pass}</Box>}
-                        {m.fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5 }}>✗{m.fail}</Box>}
-                        {m.total - m.pass - m.fail > 0 && <Box component="span" sx={{ color: "text.disabled", ml: 0.5 }}>⟳{m.total - m.pass - m.fail}</Box>}
+                        {m.testCount} tests · {m.total} steps
+                        {m.pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 1, fontWeight: 700 }}>✓{m.pass}</Box>}
+                        {m.fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5, fontWeight: 700 }}>✗{m.fail}</Box>}
+                        {m.total - m.pass - m.fail > 0 && <Box component="span" sx={{ color: "text.disabled", ml: 0.5 }}>·{m.total - m.pass - m.fail}</Box>}
                       </Typography>
                     </Box>
-                    <Typography fontWeight={700} sx={{ fontSize: 13, fontFamily: MONO, color: pct === 100 ? C.gr : m.fail > 0 ? C.am : "text.secondary", flexShrink: 0 }}>
-                      {pct}%
-                    </Typography>
+                    <Chip label={`${pct}%`} size="small" sx={{
+                      fontFamily: MONO, fontWeight: 800, fontSize: 11, height: 24,
+                      bgcolor: pct === 100 ? alpha(C.gr, 0.12) : hasFail ? alpha(C.re, 0.10) : alpha("#ea580c", 0.10),
+                      color: pct === 100 ? C.gr : hasFail ? C.re : "primary.main",
+                      border: `1px solid ${pct === 100 ? alpha(C.gr, 0.25) : hasFail ? alpha(C.re, 0.25) : alpha("#ea580c", 0.25)}`,
+                    }} />
                     {isAdmin && (
                       <IconButton size="small" sx={{ color: "error.main", "&:hover": { bgcolor: alpha("#dc2626", 0.08) } }}
                         onClick={e => { e.stopPropagation(); setConfirmDel(m.id); }}>
-                        <Ico n="trash" s={13} />
+                        <DeleteRounded sx={{ fontSize: 16 }} />
                       </IconButton>
                     )}
-                    <Ico n="chevR" s={14} color={C.t3} />
+                    <ChevronRightRounded sx={{ fontSize: 18, color: C.t3 }} />
                   </Box>
                   {/* Dual-color progress strip */}
                   <Box sx={{ height: 4, display: "flex", bgcolor: C.s3 }}>
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.6, ease: "easeOut" }}
-                      style={{ background: C.gr, minWidth: 0 }} />
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
-                      style={{ background: C.re, minWidth: 0 }} />
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.7, ease: [0.4,0,0.2,1] }}
+                      style={{ background: `linear-gradient(90deg, #22c55e, #16a34a)`, minWidth: 0 }} />
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.7, ease: [0.4,0,0.2,1], delay: 0.1 }}
+                      style={{ background: `linear-gradient(90deg, #f87171, #dc2626)`, minWidth: 0 }} />
                   </Box>
                 </Paper>
               </motion.div>
             );
           })}
           {filtered.length === 0 && (
-            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 13 }}>
-              No modules match.
+            <Box sx={{ textAlign: "center", py: 8, color: "text.disabled" }}>
+              <LayersRounded sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
+              <Typography sx={{ fontFamily: MONO, fontSize: 13 }}>No modules match.</Typography>
             </Box>
           )}
         </Stack>
@@ -1099,13 +1206,14 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
 // ── Divider Row ───────────────────────────────────────────────────────────────────
 function DividerRow({ label }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 0.75,
-      background: "linear-gradient(90deg,#fff7ed,#fef9f5)", borderBottom: `1px solid ${C.b1}` }}>
-      <Box sx={{ width: 10, height: 1, bgcolor: C.b2, flexShrink: 0 }} />
-      <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "1.2px", whiteSpace: "nowrap" }}>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 0.85,
+      background: "linear-gradient(90deg,#fff7ed 0%,#fef9f5 60%,rgba(255,255,255,0) 100%)",
+      borderBottom: `1px solid ${C.b1}` }}>
+      <Box sx={{ width: 4, height: 4, borderRadius: "50%", bgcolor: "primary.main", flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "1.5px", whiteSpace: "nowrap", fontSize: 10 }}>
         {label}
       </Typography>
-      <Box sx={{ flex: 1, height: 1, bgcolor: C.b2 }} />
+      <Box sx={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${C.b2} 0%, transparent 100%)` }} />
     </Box>
   );
 }
@@ -1119,24 +1227,26 @@ function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, ro
     <Button size="small" variant={step.status === "pass" ? "contained" : "outlined"}
       onClick={e => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
       sx={{
-        borderRadius: 5, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        borderRadius: 6, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        minWidth: 0, gap: 0.4,
         ...(step.status === "pass"
-          ? { bgcolor: C.grd, color: C.gr, borderColor: "#86efac", boxShadow: "none", "&:hover": { bgcolor: "#dcfce7" } }
-          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.grd, borderColor: "#86efac" } }),
+          ? { bgcolor: "#16a34a", color: "#fff", borderColor: "#16a34a", boxShadow: "0 2px 8px rgba(22,163,74,.30)", "&:hover": { bgcolor: "#15803d" } }
+          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.grd, borderColor: "#86efac", color: C.gr } }),
       }}>
-      <Ico n="check" s={10} /> PASS
+      <CheckRounded sx={{ fontSize: 12 }} /> PASS
     </Button>
   );
   const FailBtn = (
     <Button size="small" variant={step.status === "fail" ? "contained" : "outlined"}
       onClick={e => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
       sx={{
-        borderRadius: 5, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        borderRadius: 6, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        minWidth: 0, gap: 0.4,
         ...(step.status === "fail"
-          ? { bgcolor: C.red, color: C.re, borderColor: "#fca5a5", boxShadow: "none", "&:hover": { bgcolor: "#fee2e2" } }
-          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.red, borderColor: "#fca5a5" } }),
+          ? { bgcolor: "#dc2626", color: "#fff", borderColor: "#dc2626", boxShadow: "0 2px 8px rgba(220,38,38,.30)", "&:hover": { bgcolor: "#b91c1c" } }
+          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.red, borderColor: "#fca5a5", color: C.re } }),
       }}>
-      <Ico n="x" s={10} /> FAIL
+      <CloseRounded sx={{ fontSize: 12 }} /> FAIL
     </Button>
   );
 
@@ -1712,59 +1822,69 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
 
             return (
               <motion.div key={t.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-                whileHover={!cardBlocked ? { y: -2 } : {}} transition={{ duration: 0.16 }}>
-                <Paper elevation={0} sx={{ border: `1px solid ${borderColor}`, borderRadius: 2.5, overflow: "hidden",
-                  bgcolor: bgColor, opacity: lockedByOther ? 0.88 : blockedByMyLock ? 0.55 : 1, cursor: cardBlocked ? "not-allowed" : "pointer" }}
+                whileHover={!cardBlocked ? { y: -3, boxShadow: "0 10px 28px rgba(0,0,0,0.09)" } : {}} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+                <Paper elevation={0} sx={{ border: `1px solid ${borderColor}`, borderRadius: 3, overflow: "hidden",
+                  bgcolor: bgColor, opacity: lockedByOther ? 0.88 : blockedByMyLock ? 0.5 : 1,
+                  cursor: cardBlocked ? "not-allowed" : "pointer",
+                  transition: "border-color 0.2s, box-shadow 0.2s, opacity 0.2s" }}
                   onClick={() => !cardBlocked && openTest(realIdx)}>
                   <Box sx={{ p: isMobile ? "12px 14px" : "14px 18px", display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 1 : 1.5, flexDirection: isMobile ? "column" : "row" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, width: "100%" }}>
                       {/* Serial badge */}
-                      <Box sx={{ width: 36, height: 36, borderRadius: 2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                        bgcolor: lockedByOther ? "#fef3c7" : isMyLockedTest ? "#dcfce7" : C.s3,
-                        border: `1px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
-                        fontFamily: MONO, fontSize: 14, fontWeight: 700,
-                        color: lockedByOther ? C.am : isMyLockedTest ? C.gr : C.t2 }}>
-                        {lockedByOther ? <Ico n="lock" s={15} /> : isMyLockedTest ? <Ico n="check" s={15} /> : t.serialNo}
+                      <Box sx={{ width: 38, height: 38, borderRadius: 2.5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                        background: lockedByOther ? "linear-gradient(135deg,#fef9c3,#fef3c7)" : isMyLockedTest ? "linear-gradient(135deg,#dcfce7,#bbf7d0)" : "linear-gradient(135deg,#fef3e2,#fde8d0)",
+                        border: `1.5px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
+                        fontFamily: MONO, fontSize: 14, fontWeight: 800,
+                        color: lockedByOther ? C.am : isMyLockedTest ? C.gr : C.t2,
+                        boxShadow: isMyLockedTest ? "0 2px 8px rgba(22,163,74,0.20)" : "none",
+                      }}>
+                        {lockedByOther ? <LockRounded sx={{ fontSize: 17 }} /> : isMyLockedTest ? <CheckCircleRounded sx={{ fontSize: 17 }} /> : t.serialNo}
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography fontWeight={600} sx={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</Typography>
+                        <Typography fontWeight={700} sx={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</Typography>
                         {(lock && lock.userId !== session.id || isMyLockedTest) && (
                           <Box mt={0.3}>
-                            {lockedByOther && <Chip label={`🔒 In use by ${lock.userName}`} size="small" sx={{ fontSize: 10, height: 18, bgcolor: "#fef3c7", color: C.am, fontFamily: MONO, fontWeight: 700, border: `1px solid #fcd34d` }} />}
-                            {isMyLockedTest && <Chip label="▶ Your active test" size="small" sx={{ fontSize: 10, height: 18, bgcolor: "#dcfce7", color: C.gr, fontFamily: MONO, fontWeight: 700, border: `1px solid #86efac` }} />}
+                            {lockedByOther && <Chip icon={<LockRounded sx={{ fontSize: 11, ml: "6px !important" }} />} label={`In use by ${lock.userName}`} size="small" sx={{ fontSize: 10, height: 20, bgcolor: "#fef3c7", color: C.am, fontFamily: MONO, fontWeight: 700, border: `1px solid #fcd34d` }} />}
+                            {isMyLockedTest && <Chip icon={<TaskAltRounded sx={{ fontSize: 11, ml: "6px !important" }} />} label="Your active test" size="small" sx={{ fontSize: 10, height: 20, bgcolor: "#dcfce7", color: C.gr, fontFamily: MONO, fontWeight: 700, border: `1px solid #86efac` }} />}
                           </Box>
                         )}
                         {t.description && <Typography variant="caption" sx={{ color: C.t2, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</Typography>}
                         <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>
-                          {t.steps.length} steps · {pass}✓ {fail}✗ {pending}…
+                          {t.steps.length} steps
+                          {pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 0.75, fontWeight: 700 }}>· {pass}✓</Box>}
+                          {fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5, fontWeight: 700 }}>{fail}✗</Box>}
+                          {pending > 0 && <Box component="span" sx={{ color: C.t3, ml: 0.5 }}>{pending} pending</Box>}
                         </Typography>
                       </Box>
                       <Stack direction="row" gap={0.75} sx={{ flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                         {isAdmin && !isMobile && (
-                          <Button size="small" variant="outlined" color="error" onClick={() => deleteTest(realIdx)}
-                            sx={{ borderColor: "#fca5a5", color: "error.main", minWidth: 0, px: 1 }}>
-                            <Ico n="trash" s={11} />
-                          </Button>
+                          <IconButton size="small" color="error" onClick={() => deleteTest(realIdx)}
+                            sx={{ bgcolor: alpha("#dc2626", 0.06), "&:hover": { bgcolor: alpha("#dc2626", 0.12) } }}>
+                            <DeleteRounded sx={{ fontSize: 15 }} />
+                          </IconButton>
                         )}
                         {lockedByOther ? (
-                          <Button size="small" variant="outlined" disabled sx={{ borderColor: "#fcd34d", color: C.am }}>
-                            <Ico n="lock" s={11} /> {!isMobile && " Locked"}
+                          <Button size="small" variant="outlined" disabled sx={{ borderColor: "#fcd34d", color: C.am, borderRadius: 2 }}>
+                            <LockRounded sx={{ fontSize: 13 }} />{!isMobile && <Box component="span" sx={{ ml: 0.5 }}>Locked</Box>}
                           </Button>
                         ) : isMyLockedTest ? (
-                          <Button size="small" variant="contained" color="success" onClick={() => openTest(realIdx)}>
-                            <Ico n="back" s={11} /> Return
+                          <Button size="small" variant="contained" color="success" onClick={() => openTest(realIdx)} sx={{ borderRadius: 2 }}
+                            startIcon={<ArrowBackRounded sx={{ fontSize: 14 }} />}>
+                            Return
                           </Button>
                         ) : blockedByMyLock ? (
-                          <Button size="small" variant="outlined" disabled sx={{ opacity: 0.4 }}><Ico n="lock" s={11} /></Button>
+                          <Button size="small" variant="outlined" disabled sx={{ opacity: 0.4, borderRadius: 2 }}><LockRounded sx={{ fontSize: 13 }} /></Button>
                         ) : (
-                          <Button size="small" variant="contained" onClick={() => openTest(realIdx)} endIcon={<Ico n="chevR" s={11} />}>
+                          <Button size="small" variant="contained" onClick={() => openTest(realIdx)}
+                            endIcon={<ChevronRightRounded sx={{ fontSize: 15 }} />} sx={{ borderRadius: 2, px: 1.5 }}>
                             {!isMobile && "Open"}
                           </Button>
                         )}
                         {isAdmin && isMobile && (
-                          <Button size="small" variant="outlined" color="error" onClick={() => deleteTest(realIdx)} sx={{ borderColor: "#fca5a5", color: "error.main", minWidth: 0, px: 1 }}>
-                            <Ico n="trash" s={11} />
-                          </Button>
+                          <IconButton size="small" color="error" onClick={() => deleteTest(realIdx)}
+                            sx={{ bgcolor: alpha("#dc2626", 0.06) }}>
+                            <DeleteRounded sx={{ fontSize: 15 }} />
+                          </IconButton>
                         )}
                       </Stack>
                       {!isMobile && (
@@ -1775,16 +1895,21 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
                       )}
                     </Box>
                   </Box>
-                  <Box sx={{ height: 3, display: "flex", bgcolor: C.s3 }}>
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.5, ease: "easeOut" }} style={{ background: C.gr }} />
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }} style={{ background: C.re }} />
+                  <Box sx={{ height: 4, display: "flex", bgcolor: C.s3 }}>
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.65, ease: [0.4,0,0.2,1] }}
+                      style={{ background: "linear-gradient(90deg, #22c55e, #16a34a)", minWidth: 0 }} />
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.65, ease: [0.4,0,0.2,1], delay: 0.1 }}
+                      style={{ background: "linear-gradient(90deg, #f87171, #dc2626)", minWidth: 0 }} />
                   </Box>
                 </Paper>
               </motion.div>
             );
           })}
           {filtered.length === 0 && (
-            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>No tests match.</Box>
+            <Box sx={{ textAlign: "center", py: 8, color: "text.disabled" }}>
+              <DescriptionRounded sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
+              <Typography sx={{ fontFamily: MONO, fontSize: 12 }}>No tests match.</Typography>
+            </Box>
           )}
         </Stack>
       </Box>
@@ -1838,8 +1963,8 @@ function ReportView({ modules, toast }) {
           <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>Failures only</Typography>
           <Switch size="small" checked={failOnly} onChange={e => setFailOnly(e.target.checked)} color="primary" />
         </Stack>
-        <Button size="small" variant="outlined" startIcon={<Ico n="down" s={12} />} onClick={exportAllCSV}
-          sx={{ borderColor: C.b2, color: "text.secondary" }}>
+        <Button size="small" variant="outlined" startIcon={<FileDownloadRounded sx={{ fontSize: 15 }} />} onClick={exportAllCSV}
+          sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>
           Export All
         </Button>
       </Topbar>
@@ -1853,10 +1978,16 @@ function ReportView({ modules, toast }) {
       <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
         {/* Summary */}
         <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)", gap: 1.5, mb: 2.5 }}>
-          {[["Total Steps",total,"primary.main"],["Passed",pass,"success.main"],["Failed",fail,"error.main"],["Pending",total-pass-fail,"warning.main"]].map(([l,v,c],i) => (
+          {[
+            ["Total Steps", total, "primary.main", alpha("#ea580c",0.10), alpha("#ea580c",0.2)],
+            ["Passed", pass, "success.main", "#f0fdf4", alpha("#16a34a",0.2)],
+            ["Failed", fail, "error.main", "#fff5f5", alpha("#dc2626",0.2)],
+            ["Pending", total-pass-fail, "warning.main", "#fffbeb", alpha("#d97706",0.2)],
+          ].map(([l,v,c,bg,border],i) => (
             <motion.div key={l} custom={i} variants={cardVariants} initial="initial" animate="animate">
-              <Paper elevation={1} sx={{ p: isMobile ? 1.5 : 2, borderRadius: 2.5, border: `1px solid ${C.b1}` }}>
-                <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", fontWeight: 600, display: "block" }}>{l}</Typography>
+              <Paper elevation={0} sx={{ p: isMobile ? 1.5 : 2, borderRadius: 3, border: `1px solid ${border}`, bgcolor: bg, position: "relative", overflow: "hidden" }}>
+                <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, bgcolor: c, opacity: 0.7 }} />
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.8px", display: "block", mb: 0.5 }}>{l}</Typography>
                 <Typography variant="h5" fontWeight={800} sx={{ color: c }}>{v.toLocaleString()}</Typography>
               </Paper>
             </motion.div>
@@ -1867,18 +1998,26 @@ function ReportView({ modules, toast }) {
           {filtered.map((m, i) => {
             const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
             const isExp = exp.has(m.id);
+            const hasFail = m.fail > 0;
+            const isDone = m.pass === m.total && m.total > 0;
             return (
               <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate">
-                <Paper elevation={0} sx={{ border: `1px solid ${m.fail > 0 ? "#fca5a5" : m.pass === m.total && m.total > 0 ? "#86efac" : C.b1}`, borderRadius: 2.5, overflow: "hidden" }}>
-                  <Box sx={{ p: "12px 16px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }} onClick={() => toggleExp(m.id)}>
-                    <Ico n={isExp ? "chevD" : "chevR"} s={14} color={C.t3} />
-                    <Typography fontWeight={600} sx={{ flex: 1, fontSize: 14 }}>{m.name}</Typography>
-                    <Stack direction="row" gap={0.5} alignItems="center">
-                      {m.pass > 0 && <Chip label={`✓${m.pass}`} size="small" sx={{ height: 20, fontSize: 10, fontFamily: MONO, bgcolor: C.grd, color: C.gr }} />}
-                      {m.fail > 0 && <Chip label={`✗${m.fail}`} size="small" sx={{ height: 20, fontSize: 10, fontFamily: MONO, bgcolor: C.red, color: C.re }} />}
-                      <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: pct === 100 ? C.gr : m.fail > 0 ? C.am : "text.secondary" }}>{pct}%</Typography>
+                <Paper elevation={0} sx={{ border: `1px solid ${hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1}`, borderRadius: 3, overflow: "hidden",
+                  bgcolor: hasFail ? "rgba(255,245,245,0.5)" : isDone ? "rgba(240,253,244,0.5)" : "background.paper" }}>
+                  <Box sx={{ p: "13px 18px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer",
+                    "&:hover": { bgcolor: alpha("#000",0.015) }, transition: "background 0.15s" }} onClick={() => toggleExp(m.id)}>
+                    <motion.div animate={{ rotate: isExp ? 90 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 25 }}>
+                      <ChevronRightRounded sx={{ fontSize: 18, color: C.t3 }} />
+                    </motion.div>
+                    <Typography fontWeight={700} sx={{ flex: 1, fontSize: 14 }}>{m.name}</Typography>
+                    <Stack direction="row" gap={0.75} alignItems="center">
+                      {m.pass > 0 && <Chip label={`${m.pass} passed`} size="small" sx={{ height: 22, fontSize: 10, fontFamily: MONO, fontWeight: 700, bgcolor: alpha(C.gr,0.10), color: C.gr, border: `1px solid ${alpha(C.gr,0.25)}` }} />}
+                      {m.fail > 0 && <Chip label={`${m.fail} failed`} size="small" sx={{ height: 22, fontSize: 10, fontFamily: MONO, fontWeight: 700, bgcolor: alpha(C.re,0.10), color: C.re, border: `1px solid ${alpha(C.re,0.25)}` }} />}
+                      <Chip label={`${pct}%`} size="small" sx={{ height: 22, fontSize: 11, fontFamily: MONO, fontWeight: 800,
+                        bgcolor: pct === 100 ? alpha(C.gr,0.10) : hasFail ? alpha(C.re,0.08) : alpha("#ea580c",0.08),
+                        color: pct === 100 ? C.gr : hasFail ? C.re : "primary.main" }} />
                     </Stack>
-                    <Box sx={{ width: 80 }}><PBar pct={pct} fail={m.fail > 0} /></Box>
+                    <Box sx={{ width: 90 }}><PBar pct={pct} fail={hasFail} /></Box>
                   </Box>
                   <Collapse in={isExp} timeout="auto">
                     <Box sx={{ borderTop: `1px solid ${C.b1}` }}>
@@ -1958,11 +2097,15 @@ function AuditView({ log }) {
             <Box sx={{ p: 5, textAlign: "center", color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>No events yet.</Box>
           )}
           {log.map((e, i) => (
-            <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i * 0.02, 0.4) }}>
-              <Box sx={{ px: 2, py: 1.25, borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "flex-start", gap: 1.5 }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: dotColor[e.type] || C.t3, flexShrink: 0, mt: 0.5 }} />
+            <motion.div key={i} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i * 0.018, 0.35), type: "spring", stiffness: 320, damping: 28 }}>
+              <Box sx={{ px: 2.5, py: 1.25, borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "flex-start", gap: 1.5,
+                "&:hover": { bgcolor: alpha("#ea580c", 0.025) }, transition: "background 0.15s" }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, mt: 0.6,
+                  bgcolor: e.type === "pass" ? C.gr : e.type === "fail" ? C.re : e.type === "warn" ? C.am : "#ea580c",
+                  boxShadow: `0 0 0 2px ${e.type === "pass" ? alpha(C.gr,0.2) : e.type === "fail" ? alpha(C.re,0.2) : e.type === "warn" ? alpha(C.am,0.2) : alpha("#ea580c",0.2)}`,
+                }} />
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" sx={{ fontSize: 12 }}>{e.action}</Typography>
+                  <Typography variant="body2" sx={{ fontSize: 12, fontWeight: 500 }}>{e.action}</Typography>
                   <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>{e.user}</Typography>
                 </Box>
                 <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", flexShrink: 0 }}>{fmt(e.ts)}</Typography>
@@ -2044,22 +2187,33 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
       <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
         <Stack gap={isMobile ? 1 : 1.25}>
           {filtered.map((u, i) => (
-            <motion.div key={u.id} custom={i} variants={cardVariants} initial="initial" animate="animate">
-              <Paper elevation={0} sx={{ border: `1px solid ${u.active ? C.b1 : "#fecaca"}`, borderRadius: 2.5, p: isMobile ? 1.5 : 2, opacity: u.active ? 1 : 0.75 }}>
+            <motion.div key={u.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
+              whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+              <Paper elevation={0} sx={{ border: `1px solid ${u.active ? C.b1 : "#fecaca"}`, borderRadius: 3, p: isMobile ? 1.5 : 2,
+                opacity: u.active ? 1 : 0.72, transition: "opacity 0.2s, box-shadow 0.2s" }}>
                 <Stack direction={isMobile ? "column" : "row"} alignItems={isMobile ? "flex-start" : "center"} gap={1.5}>
                   <Stack direction="row" alignItems="center" gap={1.5} sx={{ width: isMobile ? "100%" : undefined }}>
-                    <Avatar sx={{ width: 38, height: 38, background: "linear-gradient(135deg,#dbeafe,#bfdbfe)", color: "#1d4ed8", fontWeight: 700, fontSize: 15, flexShrink: 0 }}>
+                    <Avatar sx={{ width: 42, height: 42, background: u.role === "admin"
+                      ? "linear-gradient(135deg,#fb923c,#ea580c)"
+                      : "linear-gradient(135deg,#dbeafe,#bfdbfe)",
+                      color: u.role === "admin" ? "#fff" : "#1d4ed8",
+                      fontWeight: 700, fontSize: 16, flexShrink: 0,
+                      boxShadow: u.role === "admin" ? "0 3px 10px rgba(234,88,12,0.32)" : "0 2px 6px rgba(59,130,246,0.18)" }}>
                       {u.name?.[0]?.toUpperCase()}
                     </Avatar>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Stack direction="row" alignItems="center" gap={0.75} flexWrap="wrap">
                         <Typography fontWeight={700} sx={{ fontSize: 14 }}>{u.name}</Typography>
                         <Chip label={u.role} size="small"
-                          sx={{ height: 18, fontSize: 9, fontFamily: MONO, fontWeight: 700,
-                            bgcolor: u.role === "admin" ? "#fff7ed" : C.amd, color: u.role === "admin" ? C.ac : C.am }} />
+                          sx={{ height: 20, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                            bgcolor: u.role === "admin" ? alpha("#ea580c",0.10) : C.amd,
+                            color: u.role === "admin" ? C.ac : C.am,
+                            border: `1px solid ${u.role === "admin" ? alpha("#ea580c",0.25) : "transparent"}` }} />
                         <Chip label={u.active ? "active" : "inactive"} size="small"
-                          sx={{ height: 18, fontSize: 9, fontFamily: MONO, fontWeight: 700,
-                            bgcolor: u.active ? C.grd : C.red, color: u.active ? C.gr : C.re }} />
+                          sx={{ height: 20, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                            bgcolor: u.active ? alpha(C.gr,0.10) : alpha(C.re,0.10),
+                            color: u.active ? C.gr : C.re,
+                            border: `1px solid ${u.active ? alpha(C.gr,0.25) : alpha(C.re,0.25)}` }} />
                       </Stack>
                       <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", display: "block" }}>
                         @{u.username}{u.email ? ` · ${u.email}` : ""}
@@ -2067,8 +2221,12 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
                     </Box>
                     {isMobile && (
                       <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
-                        <IconButton size="small" onClick={() => openEdit(u)} sx={{ color: "primary.main" }}><Ico n="edit" s={14} /></IconButton>
-                        {u.id !== session.id && <IconButton size="small" onClick={() => setConfirm(u)} sx={{ color: "error.main" }}><Ico n="trash" s={14} /></IconButton>}
+                        <IconButton size="small" onClick={() => openEdit(u)} sx={{ color: "primary.main", bgcolor: alpha("#ea580c",0.06) }}>
+                          <EditRounded sx={{ fontSize: 16 }} />
+                        </IconButton>
+                        {u.id !== session.id && <IconButton size="small" onClick={() => setConfirm(u)} sx={{ color: "error.main", bgcolor: alpha("#dc2626",0.06) }}>
+                          <DeleteRounded sx={{ fontSize: 16 }} />
+                        </IconButton>}
                       </Stack>
                     )}
                   </Stack>
@@ -2076,10 +2234,10 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
                     <Stack direction="row" alignItems="center" gap={1} sx={{ ml: "auto", flexShrink: 0 }}>
                       <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>Active</Typography>
                       <Switch size="small" checked={u.active} onChange={() => toggle(u)} disabled={u.id === session.id} color="success" />
-                      <Button size="small" variant="outlined" startIcon={<Ico n="edit" s={12} />} onClick={() => openEdit(u)}
-                        sx={{ borderColor: C.b2, color: "text.secondary" }}>Edit</Button>
+                      <Button size="small" variant="outlined" startIcon={<EditRounded sx={{ fontSize: 14 }} />} onClick={() => openEdit(u)}
+                        sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>Edit</Button>
                       {u.id !== session.id && (
-                        <Button size="small" variant="outlined" color="error" startIcon={<Ico n="trash" s={12} />} onClick={() => setConfirm(u)}
+                        <Button size="small" variant="outlined" color="error" startIcon={<DeleteRounded sx={{ fontSize: 14 }} />} onClick={() => setConfirm(u)}
                           sx={{ borderColor: "#fca5a5" }}>Delete</Button>
                       )}
                     </Stack>
@@ -2095,7 +2253,10 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
             </motion.div>
           ))}
           {filtered.length === 0 && (
-            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 13 }}>No users match.</Box>
+            <Box sx={{ textAlign: "center", py: 8, color: "text.disabled" }}>
+              <PeopleRounded sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
+              <Typography sx={{ fontFamily: MONO, fontSize: 13 }}>No users match.</Typography>
+            </Box>
           )}
         </Stack>
       </Box>
@@ -2294,9 +2455,9 @@ export default function App() {
     <ThemeProvider theme={muiTheme}>
       <CssBaseline />
       <Box sx={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default", flexDirection: "column", gap: 2 }}>
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-          <Box sx={{ width: 40, height: 40, borderRadius: 2, background: "linear-gradient(135deg,#fb923c,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6 9 17 4 12"/></svg>
+        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}>
+          <Box sx={{ width: 44, height: 44, borderRadius: 2.5, background: "linear-gradient(135deg,#fb923c,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(234,88,12,.38)" }}>
+            <TaskAltRounded sx={{ fontSize: 24, color: "#fff" }} />
           </Box>
         </motion.div>
         <Typography variant="body2" sx={{ fontFamily: MONO, color: "text.disabled" }}>Loading TestPro…</Typography>
@@ -2395,8 +2556,9 @@ export default function App() {
           {isMobile && (
             <Paper elevation={0} sx={{
               position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
-              bgcolor: "rgba(255,255,255,0.88)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-              borderTop: `1px solid rgba(221,226,234,0.6)`, boxShadow: "0 -2px 20px rgba(0,0,0,.07)",
+              bgcolor: "rgba(255,255,255,0.92)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+              borderTop: `1px solid rgba(245,222,206,0.7)`,
+              boxShadow: "0 -4px 24px rgba(234,88,12,0.07), 0 -1px 0 rgba(245,222,206,0.6)",
               pb: "env(safe-area-inset-bottom, 0px)",
             }}>
               <BottomNavigation value={currentMobileNavVal} showLabels
