@@ -1123,127 +1123,289 @@ function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
+  const pwRef = useRef();
+
   const go = () => {
-    const found = users.find(
-      (x) => x.username === u.trim() && x.password === p && x.active
-    );
-    found ? onLogin(found) : setErr("Invalid credentials or account inactive.");
+    if (!u.trim() || !p) { setErr("Please enter your username and password."); return; }
+    setLoading(true);
+    // Small delay so the button state is visible before any UI re-render
+    setTimeout(() => {
+      const found = users.find(
+        (x) => x.username === u.trim() && x.password === p && x.active
+      );
+      if (found) {
+        onLogin(found);
+      } else {
+        setErr("Invalid credentials or account inactive.");
+        setLoading(false);
+      }
+    }, 120);
   };
+
+  // Eye icon for password toggle
+  const EyeIcon = ({ open }) => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {open ? (
+        <>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </>
+      ) : (
+        <>
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        </>
+      )}
+    </svg>
+  );
+
   return (
     <div
       style={{
-        height: "100vh",
+        minHeight: "100vh",
         display: "flex",
-        alignItems: isMobile ? "flex-start" : "center",
+        flexDirection: "column",
+        alignItems: "center",
         justifyContent: "center",
-        background: `linear-gradient(160deg,#e8f0fe 0%,#f0f2f5 60%)`,
-        padding: isMobile ? "40px 16px" : 0,
-        overflowY: "auto",
+        background: "linear-gradient(150deg,#dbeafe 0%,#ede9fe 40%,#f0f2f5 100%)",
+        padding: isMobile
+          ? `calc(env(safe-area-inset-top,0px) + 24px) 20px calc(env(safe-area-inset-bottom,0px) + 24px)`
+          : "40px 20px",
+        boxSizing: "border-box",
       }}
     >
+      {/* Card */}
       <div
         style={{
-          width: isMobile ? "100%" : 390,
-          maxWidth: 420,
-          padding: isMobile ? "36px 24px" : "48px 40px",
+          width: "100%",
+          maxWidth: isMobile ? 420 : 400,
           background: C.s1,
           border: `1px solid ${C.b1}`,
-          borderRadius: 16,
-          boxShadow: "0 8px 40px rgba(0,0,0,.10)",
+          borderRadius: isMobile ? 20 : 16,
+          boxShadow: isMobile
+            ? "0 4px 32px rgba(0,0,0,.10)"
+            : "0 8px 40px rgba(0,0,0,.10)",
+          overflow: "hidden",
         }}
       >
-        <div
-          style={{
+        {/* Top accent stripe */}
+        <div style={{
+          height: 4,
+          background: "linear-gradient(90deg,#00b4d8,#0070f3,#7c3aed)",
+        }} />
+
+        <div style={{ padding: isMobile ? "32px 28px 28px" : "44px 40px 36px" }}>
+          {/* Logo */}
+          <div style={{
             display: "flex",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 38,
-          }}
-        >
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 10,
+            flexDirection: "column",
+            alignItems: isMobile ? "center" : "flex-start",
+            marginBottom: isMobile ? 32 : 36,
+          }}>
+            <div style={{
+              width: isMobile ? 56 : 48,
+              height: isMobile ? 56 : 48,
+              borderRadius: 14,
               background: "linear-gradient(135deg,#00b4d8,#0077b6)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontFamily: F.mono,
               fontWeight: 700,
-              fontSize: 14,
+              fontSize: isMobile ? 17 : 14,
               color: "#fff",
-            }}
-          >
-            TP
-          </div>
-          <div
-            style={{
+              boxShadow: "0 4px 16px rgba(0,112,243,.25)",
+              marginBottom: 14,
+            }}>
+              TP
+            </div>
+            <div style={{
               fontFamily: F.mono,
-              fontSize: 20,
+              fontSize: isMobile ? 26 : 22,
               fontWeight: 700,
               color: C.t1,
-            }}
-          >
-            Test<span style={{ color: C.ac }}>Pro</span>
+              letterSpacing: "-0.5px",
+            }}>
+              Test<span style={{ color: C.ac }}>Pro</span>
+            </div>
+            <div style={{
+              fontSize: isMobile ? 14 : 13,
+              color: C.t2,
+              marginTop: 4,
+            }}>
+              Sign in to your workspace
+            </div>
           </div>
-        </div>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
-          Sign in
-        </div>
-        <div style={{ fontSize: 13, color: C.t2, marginBottom: 30 }}>
-          Access your testing workspace
-        </div>
-        <Field label="Username">
-          <input
-            style={inputSty}
-            value={u}
-            onChange={(e) => setU(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && go()}
-            autoFocus
-          />
-        </Field>
-        <Field label="Password">
-          <input
-            style={inputSty}
-            type="password"
-            value={p}
-            onChange={(e) => setP(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && go()}
-          />
-        </Field>
-        <button
-          onClick={go}
-          style={{
-            width: "100%",
-            padding: 13,
-            border: "none",
-            borderRadius: 6,
-            background: C.ac,
-            color: "#fff",
-            fontFamily: F.mono,
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            boxShadow: `0 2px 8px rgba(0,112,243,.3)`,
-          }}
-        >
-          Sign In →
-        </button>
-        {err && (
-          <div
-            style={{
+
+          {/* Error banner */}
+          {err && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: C.red,
+              border: `1px solid rgba(220,38,38,.25)`,
               color: C.re,
-              fontSize: 12,
-              textAlign: "center",
-              marginTop: 14,
+              fontSize: 13,
+              fontFamily: F.sans,
+              marginBottom: 20,
+              lineHeight: 1.4,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {err}
+            </div>
+          )}
+
+          {/* Username */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{
+              display: "block",
+              fontSize: 11,
               fontFamily: F.mono,
+              color: C.t2,
+              textTransform: "uppercase",
+              letterSpacing: "1.2px",
+              marginBottom: 7,
+              fontWeight: 600,
+            }}>
+              Username
+            </label>
+            <input
+              value={u}
+              onChange={(e) => { setU(e.target.value); setErr(""); }}
+              onKeyDown={(e) => e.key === "Enter" && (pwRef.current?.focus())}
+              autoFocus
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{
+                ...inputSty,
+                padding: isMobile ? "14px 14px" : "10px 13px",
+                fontSize: isMobile ? 16 : 14,
+                borderRadius: 10,
+                border: `1.5px solid ${err ? "rgba(220,38,38,.4)" : C.b2}`,
+                transition: "border-color .15s",
+              }}
+            />
+          </div>
+
+          {/* Password */}
+          <div style={{ marginBottom: 24 }}>
+            <label style={{
+              display: "block",
+              fontSize: 11,
+              fontFamily: F.mono,
+              color: C.t2,
+              textTransform: "uppercase",
+              letterSpacing: "1.2px",
+              marginBottom: 7,
+              fontWeight: 600,
+            }}>
+              Password
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                ref={pwRef}
+                type={showPw ? "text" : "password"}
+                value={p}
+                onChange={(e) => { setP(e.target.value); setErr(""); }}
+                onKeyDown={(e) => e.key === "Enter" && go()}
+                autoComplete="current-password"
+                style={{
+                  ...inputSty,
+                  padding: isMobile ? "14px 48px 14px 14px" : "10px 42px 10px 13px",
+                  fontSize: isMobile ? 16 : 14,
+                  borderRadius: 10,
+                  border: `1.5px solid ${err ? "rgba(220,38,38,.4)" : C.b2}`,
+                  transition: "border-color .15s",
+                  width: "100%",
+                }}
+              />
+              <button
+                onClick={() => setShowPw((s) => !s)}
+                tabIndex={-1}
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: showPw ? C.ac : C.t3,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: 4,
+                  borderRadius: 4,
+                  transition: "color .15s",
+                }}
+                title={showPw ? "Hide password" : "Show password"}
+              >
+                <EyeIcon open={showPw} />
+              </button>
+            </div>
+          </div>
+
+          {/* Sign In button */}
+          <button
+            onClick={go}
+            disabled={loading}
+            style={{
+              width: "100%",
+              padding: isMobile ? "15px" : "13px",
+              border: "none",
+              borderRadius: 10,
+              background: loading ? "#5ba4f5" : C.ac,
+              color: "#fff",
+              fontFamily: F.mono,
+              fontSize: isMobile ? 15 : 13,
+              fontWeight: 700,
+              cursor: loading ? "default" : "pointer",
+              boxShadow: "0 2px 12px rgba(0,112,243,.35)",
+              letterSpacing: "0.3px",
+              transition: "background .15s, box-shadow .15s",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
             }}
           >
-            {err}
-          </div>
-        )}
+            {loading ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                  style={{ animation: "spin 0.8s linear infinite" }}>
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Signing in…
+              </>
+            ) : (
+              "Sign In →"
+            )}
+          </button>
+
+          <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        marginTop: 20,
+        fontSize: 11,
+        fontFamily: F.mono,
+        color: "rgba(100,116,139,.7)",
+        textAlign: "center",
+      }}>
+        TestPro · Internal Testing Tool
       </div>
     </div>
   );
