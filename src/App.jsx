@@ -7,10 +7,10 @@ const store = {
   async loadAll() {
     try {
       const [
-        { data: users,   error: usersErr },
-        { data: modules, error: modsErr  },
-        { data: tests,   error: testsErr },
-        { data: steps,   error: stepsErr },
+        { data: users },
+        { data: modules },
+        { data: tests },
+        { data: steps },
       ] = await Promise.all([
         supabase.from("users").select("*").limit(10_000),
         supabase.from("modules").select("*").order("position").limit(10_000),
@@ -18,36 +18,14 @@ const store = {
         supabase.from("steps").select("*").order("position").limit(10_000_000),
       ]);
 
-      // Surface Supabase errors so they are not silently swallowed
-      if (usersErr)  console.error("Load users error",   usersErr);
-      if (modsErr)   console.error("Load modules error", modsErr);
-      if (testsErr)  console.error("Load tests error",   testsErr);
-      if (stepsErr)  console.error("Load steps error",   stepsErr);
-
-      // If any critical table fails, return empty so App falls back to seed
-      if (modsErr || testsErr || stepsErr) {
-        return { users: users || [], modules: {} };
-      }
-
       // Rebuild nested structure: modules → tests → steps
       const stepsByTest = {};
       for (const s of steps || []) {
         if (!stepsByTest[s.test_id]) stepsByTest[s.test_id] = [];
-        // Explicitly map only the fields the app needs — never spread the raw DB row.
-        // Spreading would keep snake_case DB columns (like is_divider) on the object,
-        // which then leak into upsert payloads via ...(existing||{}) in importCSV,
-        // causing PostgREST to receive is_divider:1 (integer) instead of true (boolean).
         stepsByTest[s.test_id].push({
-          id:        s.id,
-          test_id:   s.test_id,
-          position:  s.position,
+          ...s,
           serialNo:  s.serial_no,
-          serial_no: s.serial_no,
-          action:    s.action   ?? "",
-          result:    s.result   ?? "",
-          remarks:   s.remarks  ?? "",
-          status:    s.status   ?? "pending",
-          isDivider: s.is_divider === true || s.is_divider === 1,
+          isDivider: s.is_divider ?? false,
         });
       }
 
@@ -69,7 +47,7 @@ const store = {
       return { users: users || [], modules: modulesMap };
     } catch (e) {
       console.error("Load error", e);
-      return { users: [], modules: {} };
+      return { users: SEED_USERS, modules: buildModules() };
     }
   },
 
@@ -84,12 +62,15 @@ const store = {
     // Only attempt if there are surviving UUID users to use as the exclusion list.
     const liveUUIDs = toUpsert.map(u => u.id);
     if (liveUUIDs.length) {
-      await supabase
-        .from("users")
-        .delete()
-        .not("id", "in", `(${liveUUIDs.join(",")})`);
+      // Fetch all existing user IDs, delete any not in our live set
+      const { data: existing } = await supabase.from("users").select("id");
+      const liveSet = new Set(liveUUIDs);
+      const stale = (existing || []).map(r => r.id).filter(id => !liveSet.has(id));
+      for (let i = 0; i < stale.length; i += 500) {
+        await supabase.from("users").delete().in("id", stale.slice(i, i + 500));
+      }
     } else if (!toInsert.length) {
-      // No live users at all — wipe the table (edge case: all users deleted)
+      // No live users at all — wipe the table
       await supabase.from("users").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     }
 
@@ -118,84 +99,6 @@ const store = {
     }
   },
 
-  // ── saveSteps: surgical save for a single test's steps ─────────────────────
-  // Called by commit() in TestDetail — only touches the one test that changed.
-  // Much faster than saveModules which would rebuild all 120 modules.
-  async saveSteps(testId, moduleId, steps, testMeta) {
-    const CHUNK = 500;
-
-    // 1. Ensure parent module + test rows exist in DB (FK constraints require them).
-    //    These are lightweight no-ops if the rows already exist.
-    if (moduleId) {
-      const { error: modErr } = await supabase
-        .from("modules")
-        .upsert({ id: moduleId, name: testMeta?.moduleName ?? moduleId, position: 0 }, { onConflict: "id" });
-      if (modErr) console.error("saveSteps: ensure module error:", modErr);
-    }
-    if (testMeta) {
-      const { error: testErr } = await supabase
-        .from("tests")
-        .upsert({
-          id:          testId,
-          module_id:   moduleId,
-          serial_no:   testMeta.serialNo ?? 0,
-          name:        testMeta.name ?? testId,
-          description: testMeta.description ?? "",
-        }, { onConflict: "id" });
-      if (testErr) console.error("saveSteps: ensure test error:", testErr);
-    }
-
-    // 2. Build step rows
-    const stepsWithPosition = steps.map((s, position) => ({
-      id:         s.id,
-      test_id:    testId,
-      position,
-      serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
-      action:     s.action   ?? "",
-      result:     s.result   ?? "",
-      remarks:    s.remarks  ?? "",
-      status:     s.status   ?? "pending",
-      is_divider: !!s.isDivider,
-    }));
-
-    // 3. Upsert all steps for this test
-    for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
-      const { error } = await supabase
-        .from("steps")
-        .upsert(stepsWithPosition.slice(i, i + CHUNK), { onConflict: "id" });
-      if (error) {
-        console.error("Upsert steps error:", error);
-        return;
-      }
-    }
-
-    // 4. Delete steps that are no longer in the current list (e.g. after reset/reimport)
-    if (stepsWithPosition.length > 0) {
-      const liveIds = new Set(stepsWithPosition.map((s) => s.id));
-      const { data: existing, error: fetchErr } = await supabase
-        .from("steps")
-        .select("id")
-        .eq("test_id", testId);
-      if (fetchErr) { console.error("Fetch steps for cleanup error:", fetchErr); return; }
-      const stale = (existing || []).map((r) => r.id).filter((id) => !liveIds.has(id));
-      for (let i = 0; i < stale.length; i += CHUNK) {
-        const { error } = await supabase
-          .from("steps")
-          .delete()
-          .in("id", stale.slice(i, i + CHUNK));
-        if (error) console.error("Delete stale steps error:", error);
-      }
-    } else {
-      // All steps removed — wipe the test's steps entirely
-      const { error } = await supabase
-        .from("steps")
-        .delete()
-        .eq("test_id", testId);
-      if (error) console.error("Delete all steps error:", error);
-    }
-  },
-
-  // ── saveModules: full save used for structural changes (add/delete/rename module or test) ──
   async saveModules(modulesMap) {
     const modules = Object.values(modulesMap);
     const allTests = modules.flatMap((m) =>
@@ -209,26 +112,67 @@ const store = {
     const liveTestIds   = allTests.map((t) => t.id);
     const liveStepIds   = allSteps.map((s) => s.id);
 
+    // ── Delete removed rows BEFORE upserting ────────────────────────────────
+    // Steps first (FK child), then tests (FK parent).
+    // For large step counts the .not("id","in","(...)") string exceeds URL limits.
+    // Strategy: fetch all existing IDs for live tests, then delete any not in
+    // the current live set using chunked .in() calls instead of .not().
+
     const CHUNK = 500;
 
+    // Helper: delete rows whose id IS in a list, in chunks
     const deleteInChunks = async (table, ids) => {
       for (let i = 0; i < ids.length; i += CHUNK) {
-        const { error } = await supabase
-          .from(table).delete().in("id", ids.slice(i, i + CHUNK));
-        if (error) console.error(`Delete ${table} error`, error);
+        await supabase.from(table).delete().in("id", ids.slice(i, i + CHUNK));
       }
     };
 
-    // ── 1. Upsert modules ────────────────────────────────────────────────────
-    const moduleRows = modules.map(({ id, name }, i) => ({ id, name, position: i }));
-    for (let i = 0; i < moduleRows.length; i += CHUNK) {
-      const { error } = await supabase
-        .from("modules")
-        .upsert(moduleRows.slice(i, i + CHUNK), { onConflict: "id" });
-      if (error) { console.error("Upsert modules error", error); return; }
+    // 0 & 1. For steps: fetch existing step IDs under live tests, find stale ones, delete
+    if (liveTestIds.length) {
+      // Fetch in chunks to avoid URL-length issues on the IN filter too
+      const existingStepIds = [];
+      for (let i = 0; i < liveTestIds.length; i += CHUNK) {
+        const { data } = await supabase
+          .from("steps")
+          .select("id")
+          .in("test_id", liveTestIds.slice(i, i + CHUNK))
+          .limit(1_000_000);
+        if (data) existingStepIds.push(...data.map((r) => r.id));
+      }
+      const liveStepSet = new Set(liveStepIds);
+      const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
+      if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
     }
 
-    // ── 2. Upsert tests ──────────────────────────────────────────────────────
+    // 2. For tests: fetch existing test IDs under live modules, find stale ones, delete
+    if (liveModuleIds.length) {
+      const existingTestIds = [];
+      for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
+        const { data } = await supabase
+          .from("tests")
+          .select("id")
+          .in("module_id", liveModuleIds.slice(i, i + CHUNK));
+        if (data) existingTestIds.push(...data.map((r) => r.id));
+      }
+      const liveTestSet = new Set(liveTestIds);
+      const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
+      if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
+    }
+
+    // 3. Delete module rows that no longer exist in local state
+    if (liveModuleIds.length) {
+      const { data: existingMods } = await supabase.from("modules").select("id");
+      const liveModSet = new Set(liveModuleIds);
+      const staleMods = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
+      if (staleMods.length) await deleteInChunks("modules", staleMods);
+    }
+
+    // ── Upsert surviving rows ────────────────────────────────────────────────
+    const { error: modErr } = await supabase
+      .from("modules")
+      .upsert(modules.map(({ id, name }, i) => ({ id, name, position: i })), { onConflict: "id" });
+    if (modErr) { console.error("Upsert modules error", modErr); return; }
+
     if (allTests.length) {
       const testRows = allTests.map((t) => ({
         id:          t.id,
@@ -238,15 +182,17 @@ const store = {
         description: t.description ?? "",
       }));
       for (let i = 0; i < testRows.length; i += CHUNK) {
-        const { error } = await supabase
+        const { error: testErr } = await supabase
           .from("tests")
           .upsert(testRows.slice(i, i + CHUNK), { onConflict: "id" });
-        if (error) { console.error("Upsert tests error", error); return; }
+        if (testErr) { console.error("Upsert tests error", testErr); return; }
       }
     }
 
-    // ── 3. Upsert steps ──────────────────────────────────────────────────────
     if (allSteps.length) {
+      // Track per-test position counters so each step gets its correct array
+      // index within its own test. This is stored in `position` and used for
+      // DB ordering on reload — keeps dividers in their correct slots.
       const testPositionCounters = {};
       const stepsWithPosition = allSteps.map((s) => {
         if (testPositionCounters[s.test_id] === undefined) testPositionCounters[s.test_id] = 0;
@@ -260,49 +206,17 @@ const store = {
           result:     s.result   ?? "",
           remarks:    s.remarks  ?? "",
           status:     s.status   ?? "pending",
-          is_divider: !!s.isDivider,
+          is_divider: s.isDivider ?? false,
         };
       });
+      // Chunk into batches of 500 so any number of steps persists correctly.
       for (let i = 0; i < stepsWithPosition.length; i += CHUNK) {
-        const { error } = await supabase
+        const chunk = stepsWithPosition.slice(i, i + CHUNK);
+        const { error: stepErr } = await supabase
           .from("steps")
-          .upsert(stepsWithPosition.slice(i, i + CHUNK), { onConflict: "id" });
-        if (error) { console.error("Upsert steps error", error); return; }
+          .upsert(chunk, { onConflict: "id" });
+        if (stepErr) { console.error("Upsert steps error", stepErr); break; }
       }
-    }
-
-    // ── 4. Delete stale rows after upserts succeed ───────────────────────────
-    try {
-      if (liveTestIds.length) {
-        const existingStepIds = [];
-        for (let i = 0; i < liveTestIds.length; i += CHUNK) {
-          const { data } = await supabase
-            .from("steps").select("id")
-            .in("test_id", liveTestIds.slice(i, i + CHUNK));
-          if (data) existingStepIds.push(...data.map((r) => r.id));
-        }
-        const liveStepSet  = new Set(liveStepIds);
-        const staleStepIds = existingStepIds.filter((id) => !liveStepSet.has(id));
-        if (staleStepIds.length) await deleteInChunks("steps", staleStepIds);
-      }
-      if (liveModuleIds.length) {
-        const existingTestIds = [];
-        for (let i = 0; i < liveModuleIds.length; i += CHUNK) {
-          const { data } = await supabase
-            .from("tests").select("id")
-            .in("module_id", liveModuleIds.slice(i, i + CHUNK));
-          if (data) existingTestIds.push(...data.map((r) => r.id));
-        }
-        const liveTestSet  = new Set(liveTestIds);
-        const staleTestIds = existingTestIds.filter((id) => !liveTestSet.has(id));
-        if (staleTestIds.length) await deleteInChunks("tests", staleTestIds);
-      }
-      const { data: existingMods } = await supabase.from("modules").select("id");
-      const liveModSet = new Set(liveModuleIds);
-      const staleMods  = (existingMods || []).map((r) => r.id).filter((id) => !liveModSet.has(id));
-      if (staleMods.length) await deleteInChunks("modules", staleMods);
-    } catch (e) {
-      console.error("Cleanup stale rows error", e);
     }
   },
 
@@ -502,9 +416,12 @@ function csvParse(line) {
   const cols = [];
   let cur = "";
   let q = false;
-  for (const c of line) {
-    if (c === '"') q = !q;
-    else if (c === "," && !q) {
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (q && line[i + 1] === '"') { cur += '"'; i++; } // escaped quote ""
+      else q = !q;
+    } else if (c === "," && !q) {
       cols.push(cur.trim());
       cur = "";
     } else cur += c;
@@ -540,7 +457,9 @@ const F = {
 };
 // ── Mobile detection ───────────────────────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
-  const [mobile, setMobile] = useState(() => window.innerWidth < breakpoint);
+  const [mobile, setMobile] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < breakpoint
+  );
   useEffect(() => {
     const handler = () => setMobile(window.innerWidth < breakpoint);
     window.addEventListener("resize", handler);
@@ -618,7 +537,7 @@ const PATHS = {
     ["M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"],
   ],
   plus: [["M12 5v14"], ["M5 12h14"]],
-  search: [["M11 11m-6 0a6 6 0 1 0 12 0 6 6 0 0 0-12 0"], ["M21 21l-3.5-3.5"]],
+  search: [["M21 21l-4.35-4.35"], ["M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"]],
   dash: [["M22 12h-4l-3 9L9 3l-3 9H2"]],
   report: [
     ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"],
@@ -805,7 +724,11 @@ function ExportMenu({ onCSV, onPDF }) {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
   }, [open]);
 
   return (
@@ -1303,11 +1226,11 @@ function Sidebar({
     [modList, search]
   );
 
-  // Aggregate pass/fail across all tests→steps for each module
+  // Aggregate pass/fail across all tests→steps for each module (dividers excluded)
   const modStats = useMemo(() => {
     const s = {};
     modList.forEach((m) => {
-      const allSteps = m.tests.flatMap((t) => t.steps);
+      const allSteps = m.tests.flatMap((t) => t.steps).filter((s) => !s.isDivider);
       s[m.id] = {
         pass: allSteps.filter((s) => s.status === "pass").length,
         fail: allSteps.filter((s) => s.status === "fail").length,
@@ -1601,7 +1524,7 @@ function Sidebar({
             border: `1px solid ${C.b1}`,
           }}
         >
-          {session.name[0]}
+          {(session.name || "?")[0]}
         </div>
         {!collapsed && (
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1646,7 +1569,7 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   const modStats = useMemo(
     () =>
       modList.map((m) => {
-        const allSteps = m.tests.flatMap((t) => t.steps);
+        const allSteps = m.tests.flatMap((t) => t.steps).filter((s) => !s.isDivider);
         const pass = allSteps.filter((s) => s.status === "pass").length;
         const fail = allSteps.filter((s) => s.status === "fail").length;
         return {
@@ -1684,21 +1607,11 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
     let n = keys.length + 1;
     while (modules[`m${n}`]) n++;
     const modId = `m${n}`;
-    const modName = `Module ${n}`;
     const tests = Array.from({ length: 5 }, (_, i) =>
       makeTest(modId, i + 1, 10)
     );
-    const newMod = { id: modId, name: modName, tests };
-    saveMods({ ...modules, [modId]: newMod }, true);
-    // Save each new test's default steps surgically (saveModules skips empty-step tests)
-    tests.forEach((t) => {
-      store.saveSteps(t.id, modId, t.steps, {
-        moduleName:  modName,
-        serialNo:    t.serialNo ?? 0,
-        name:        t.name,
-        description: t.description ?? "",
-      }).catch((e) => console.error("addModule saveSteps error:", e));
-    });
+    const newMod = { id: modId, name: `Module ${n}`, tests };
+    saveMods({ ...modules, [modId]: newMod });
     toast(`Module ${n} added`, "success");
     addLog({
       ts: Date.now(),
@@ -1715,13 +1628,13 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
     }
     const updated = { ...modules };
     delete updated[id];
-    saveMods(updated, true);
+    saveMods(updated);
     toast("Module deleted", "info");
     addLog({
       ts: Date.now(),
       user: session.name,
       action: `Deleted module "${modules[id]?.name}"`,
-      type: "info",
+      type: "warn",
     });
     setConfirmDel(null);
   };
@@ -2071,77 +1984,20 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   );
 }
 
-// ── CSV Import Modal — shows upload picker, then a live progress bar during DB sync ──
-function CsvImportModal({ onImport, onClose, importing, importProgress, importStatus }) {
+// ── CSV Import Modal (Tests → Steps only) ──────────────────────────────────────
+function CsvImportModal({ onImport, onClose }) {
   const [drag, setDrag] = useState(false);
   const fileRef = useRef();
-
   const handleFile = (f) => {
+    if (!f.name.match(/\.(csv|txt)$/i)) {
+      alert("Please select a .csv or .txt file");
+      return;
+    }
     const r = new FileReader();
     r.onload = (e) => onImport(e.target.result);
+    r.onerror = () => alert("Failed to read file — please try again");
     r.readAsText(f);
   };
-
-  // Once importing starts, replace the picker with a progress screen
-  if (importing) {
-    const pct   = Math.round(importProgress * 100);
-    const done  = importProgress >= 1;
-    return (
-      <Modal
-        title="Importing CSV…"
-        sub={importStatus}
-        onClose={done ? onClose : undefined} // block close until done
-        width={420}
-      >
-        {/* Progress bar track */}
-        <div style={{
-          height: 10,
-          background: C.s3,
-          borderRadius: 99,
-          overflow: "hidden",
-          margin: "18px 0 10px",
-        }}>
-          <div style={{
-            height: "100%",
-            width: `${pct}%`,
-            background: done ? C.gr : C.ac,
-            borderRadius: 99,
-            transition: "width .25s ease, background .3s",
-          }} />
-        </div>
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: 11,
-          fontFamily: F.mono,
-          color: C.t3,
-          marginBottom: 20,
-        }}>
-          <span>{importStatus}</span>
-          <span style={{ color: done ? C.gr : C.ac, fontWeight: 700 }}>{pct}%</span>
-        </div>
-        {done && (
-          <ModalActions>
-            <button style={grBtn()} onClick={onClose}>
-              <Ico n="check" s={12} /> Done
-            </button>
-          </ModalActions>
-        )}
-        {!done && (
-          <div style={{
-            textAlign: "center",
-            fontSize: 11,
-            fontFamily: F.mono,
-            color: C.t3,
-            padding: "4px 0 8px",
-          }}>
-            Please wait — do not close this tab
-          </div>
-        )}
-      </Modal>
-    );
-  }
-
   return (
     <Modal
       title="Import CSV"
@@ -2149,7 +2005,10 @@ function CsvImportModal({ onImport, onClose, importing, importProgress, importSt
       onClose={onClose}
     >
       <div
-        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDrag(true);
+        }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => {
           e.preventDefault();
@@ -2180,25 +2039,31 @@ function CsvImportModal({ onImport, onClose, importing, importProgress, importSt
         type="file"
         accept=".csv,.txt"
         style={{ display: "none" }}
-        onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); }}
+        onChange={(e) => {
+          if (e.target.files[0]) handleFile(e.target.files[0]);
+        }}
       />
-      <div style={{
-        background: C.s2,
-        border: `1px solid ${C.b1}`,
-        borderRadius: 6,
-        padding: "10px 14px",
-        fontFamily: F.mono,
-        fontSize: 11,
-        color: C.t2,
-        lineHeight: 1.9,
-      }}>
+      <div
+        style={{
+          background: C.s2,
+          border: `1px solid ${C.b1}`,
+          borderRadius: 6,
+          padding: "10px 14px",
+          fontFamily: F.mono,
+          fontSize: 11,
+          color: C.t2,
+          lineHeight: 1.9,
+        }}
+      >
         <div>1,Navigate to login page,Login page loads correctly</div>
         <div>2,Enter valid credentials,Fields accept input</div>
         <div>3,Click Submit,User is redirected to dashboard</div>
-        <div style={{ color: "#9ca3af", marginTop: 4 }}>$$$Section Title — creates a divider row</div>
+        <div style={{color:"#9ca3af",marginTop:4}}>$$$Section Title — creates a divider row</div>
       </div>
       <ModalActions>
-        <button style={btn()} onClick={onClose}>Cancel</button>
+        <button style={btn()} onClick={onClose}>
+          Cancel
+        </button>
       </ModalActions>
     </Modal>
   );
@@ -2446,9 +2311,6 @@ function TestDetail({
   const isAdmin = session.role === "admin";
   const [steps, setSteps] = useState(test.steps);
   const [csvOpen, setCsvOpen] = useState(false);
-  const [importing, setImporting] = useState(false);       // true while DB sync is running
-  const [importProgress, setImportProgress] = useState(0); // 0–1
-  const [importStatus, setImportStatus] = useState("");     // human-readable status line
   const [search, setSearch] = useState("");
   const [fStat, setFStat] = useState("all");
   const [addCount, setAddCount] = useState(10);
@@ -2477,14 +2339,9 @@ function TestDetail({
 
   // Re-sync steps when a remote RT update arrives (different user changed a step).
   // Skips if we just committed locally (to avoid overwriting in-progress remarks).
-  const testStepsFingerprint = useMemo(
-    () =>
-      test.steps
-        .map((s) => s.id + ":" + s.status + ":" + (s.remarks || ""))
-        .join("|"),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [test.steps]
-  );
+  const testStepsFingerprint = test.steps
+    .map((s) => s.id + ":" + s.status + ":" + (s.remarks || ""))
+    .join("|");
   useEffect(() => {
     if (localCommitRef.current) {
       localCommitRef.current = false;
@@ -2513,19 +2370,6 @@ function TestDetail({
     return () => clearTimeout(t);
   }, [activeIdx]);
 
-  // Debounce ref for step saves — keeps DB write rate sane during rapid changes
-  const stepsTimerRef = useRef(null);
-  const latestStepsRef = useRef(test.steps);
-
-  // Reset step ref whenever we open a different test — prevents stale data bleed
-  useEffect(() => {
-    latestStepsRef.current = test.steps;
-    if (stepsTimerRef.current) {
-      clearTimeout(stepsTimerRef.current);
-      stepsTimerRef.current = null;
-    }
-  }, [test.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const commit = useCallback(
     (newSteps, newName, newDesc) => {
       localCommitRef.current = true; // suppress next RT echo (it's our own save)
@@ -2537,22 +2381,7 @@ function TestDetail({
       };
       const updTests = mod.tests.map((t, i) => (i === testIdx ? updTest : t));
       const updMod = { ...mod, tests: updTests };
-
-      // Update React state immediately (always)
       saveMods({ ...allModules, [mod.id]: updMod });
-
-      // ── Surgical step save: only write steps for THIS test ──────────────
-      // Debounced so rapid keystrokes / status toggles don't flood Supabase.
-      latestStepsRef.current = newSteps;
-      if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
-      stepsTimerRef.current = setTimeout(() => {
-        store.saveSteps(test.id, mod.id, latestStepsRef.current, {
-          moduleName:  mod.name,
-          serialNo:    test.serialNo ?? test.serial_no ?? 0,
-          name:        newName ?? test.name,
-          description: newDesc ?? test.description ?? "",
-        }).catch((e) => console.error("saveSteps error:", e));
-      }, 400);
     },
     [mod, test, testIdx, allModules, saveMods]
   );
@@ -2655,22 +2484,15 @@ function TestDetail({
   // preserving tester remarks/status and preventing duplicate DB rows.
   //
   // Cross-module sync: after importing, the same Action/Result/divider
-  // structure is pushed to the same test-index in every other module.
-  //
-  // Progress: steps are upserted in batches of 50 per module. After each
-  // batch a "handshake" (DB round-trip) confirms the write before continuing.
-  // The app is blocked (progress modal) until all modules are synced.
-  const importCSV = async (text) => {
-    const lines = text.trim().split("\n");
+  // structure is pushed to the same test-index in every other module,
+  // preserving each module's own existing remarks and status values.
+  const importCSV = (text) => {
+    const lines = text.trim().split(/\r?\n/);
     const start = lines[0].toLowerCase().match(/serial|action|no/) ? 1 : 0;
-    const MAX_CSV_LINES = 1000;
-    const rawDataLines = lines.slice(start);
-    if (rawDataLines.length > MAX_CSV_LINES) {
-      toast(`CSV truncated to ${MAX_CSV_LINES} lines (file had ${rawDataLines.length})`, "info");
-    }
-    const dataLines = rawDataLines.slice(0, MAX_CSV_LINES);
+    const dataLines = lines.slice(start).slice(0, 100_000);
 
-    // Helper: build a steps array for a given target test, preserving remarks/status
+    // Helper: build a steps array for a given target test, using the parsed
+    // CSV rows but preserving any existing remarks/status from that test.
     const buildStepsForTest = (targetTest, targetTestId) => {
       const existingBySN = {};
       (targetTest.steps || []).forEach((s) => {
@@ -2678,177 +2500,82 @@ function TestDetail({
           existingBySN[String(s.serialNo)] = s;
         }
       });
+
       let stepCounter = 0;
       const result = [];
+
       dataLines.forEach((line, i) => {
         const cols = csvParse(line);
         const rawFirst = (cols[0] || "").trim();
+
         if (rawFirst.startsWith("$$$")) {
           const label =
             rawFirst.slice(3).trim() ||
             cols.slice(1).map((c) => c.trim()).filter(Boolean).join(" ") ||
             "Section";
           const stableLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 40);
+          const divId = `${targetTestId}_div_${stableLabel}_${i}`;
           result.push({
-            id: `${targetTestId}_div_${stableLabel}_${i}`,
-            serialNo: null, action: label, result: "", remarks: "", status: "pending", isDivider: true,
+            id: divId,
+            serialNo: null,
+            action: label,
+            result: "",
+            remarks: "",
+            status: "pending",
+            isDivider: true,
           });
         } else {
           stepCounter++;
-          const csvSN = rawFirst !== "" ? (isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)) : stepCounter;
+          const csvSN =
+            rawFirst !== ""
+              ? isNaN(Number(rawFirst)) ? rawFirst : Number(rawFirst)
+              : stepCounter;
+
           const existing = existingBySN[String(csvSN)];
+          const stableId = existing?.id || `${targetTestId}_s${csvSN}`;
+
           result.push({
             ...(existing || {}),
-            id: existing?.id || `${targetTestId}_s${csvSN}`,
-            isDivider: false, serialNo: csvSN,
+            id: stableId,
+            isDivider: false,
+            serialNo: csvSN,
             action: cols[1] !== undefined ? cols[1] : (existing?.action ?? ""),
             result: cols[2] !== undefined ? cols[2] : (existing?.result ?? ""),
+            // Preserve each module's tester remarks + status — never overwrite
             remarks: existing?.remarks ?? "",
             status:  existing?.status  ?? "pending",
           });
         }
       });
+
       return result;
     };
 
-    // ── 1. Update local state immediately so the UI shows the new steps ──────
+    // Build steps for the current test (to update local state immediately)
     const ns = buildStepsForTest(test, test.id);
     setSteps(ns);
-    setCsvOpen(false);   // close the file picker modal
-    setImporting(true);  // open the progress modal — app is now blocked
-    setImportProgress(0);
-    setImportStatus("Preparing…");
-    localCommitRef.current = true;
 
-    // ── 2. Build per-module step arrays ──────────────────────────────────────
-    const modulesToSync = [];
+    // Now propagate to ALL modules at the same test-index (testIdx)
+    localCommitRef.current = true;
+    const updatedModules = {};
     for (const [modId, m] of Object.entries(allModules)) {
       const targetTest = m.tests[testIdx];
-      if (!targetTest) continue;
-      modulesToSync.push({
-        modId, m,
-        targetTest,
-        targetSteps: buildStepsForTest(targetTest, targetTest.id),
-      });
-    }
-
-    const HANDSHAKE_EVERY = 50; // DB round-trip after every N steps
-    const CHUNK           = 50; // upsert batch size (same as handshake interval)
-
-    // Total "units of work" = sum of ceil(steps / HANDSHAKE_EVERY) for each module
-    const totalUnits = modulesToSync.reduce(
-      (acc, { targetSteps }) => acc + Math.max(1, Math.ceil(targetSteps.length / HANDSHAKE_EVERY)),
-      0
-    );
-    let doneUnits = 0;
-
-    const updatedModules = { ...allModules };
-
-    // ── 3. Process each module serially, with per-50-step handshakes ─────────
-    for (let mi = 0; mi < modulesToSync.length; mi++) {
-      const { modId, m, targetTest, targetSteps } = modulesToSync[mi];
-      setImportStatus(`Syncing ${m.name} (${mi + 1}/${modulesToSync.length})…`);
-
-      // Update React state for this module
+      if (!targetTest) {
+        // Module doesn't have a test at this index — leave it unchanged
+        updatedModules[modId] = m;
+        continue;
+      }
+      const targetSteps = buildStepsForTest(targetTest, targetTest.id);
       const updTests = m.tests.map((t, i) =>
         i === testIdx ? { ...t, steps: targetSteps } : t
       );
       updatedModules[modId] = { ...m, tests: updTests };
-
-      // Ensure parent module + test rows exist (FK safety)
-      await supabase.from("modules").upsert(
-        { id: modId, name: m.name, position: 0 }, { onConflict: "id" }
-      );
-      await supabase.from("tests").upsert({
-        id:          targetTest.id,
-        module_id:   modId,
-        serial_no:   targetTest.serialNo ?? targetTest.serial_no ?? 0,
-        name:        targetTest.name,
-        description: targetTest.description ?? "",
-      }, { onConflict: "id" });
-
-      // Build DB rows
-      const stepsWithPosition = targetSteps.map((s, position) => ({
-        id:         s.id,
-        test_id:    targetTest.id,
-        position,
-        serial_no:  s.isDivider ? null : (s.serialNo ?? s.serial_no ?? null),
-        action:     s.action   ?? "",
-        result:     s.result   ?? "",
-        remarks:    s.remarks  ?? "",
-        status:     s.status   ?? "pending",
-        is_divider: !!s.isDivider,
-      }));
-
-      // Upsert in batches of HANDSHAKE_EVERY, confirm each batch (handshake)
-      if (stepsWithPosition.length === 0) {
-        // No steps — just wipe
-        await supabase.from("steps").delete().eq("test_id", targetTest.id);
-        doneUnits++;
-        setImportProgress(doneUnits / totalUnits);
-      } else {
-        for (let si = 0; si < stepsWithPosition.length; si += CHUNK) {
-          const batch = stepsWithPosition.slice(si, si + CHUNK);
-
-          // Upsert batch
-          const { error: upErr } = await supabase
-            .from("steps")
-            .upsert(batch, { onConflict: "id" });
-          if (upErr) {
-            console.error(`Upsert steps error (${modId} batch ${si}):`, upErr);
-            toast(`Sync error on ${m.name} — retrying…`, "error");
-            // Retry once
-            const { error: retryErr } = await supabase
-              .from("steps")
-              .upsert(batch, { onConflict: "id" });
-            if (retryErr) {
-              console.error(`Retry failed (${modId} batch ${si}):`, retryErr);
-            }
-          }
-
-          // Handshake: verify the last step of this batch actually landed
-          const lastId = batch[batch.length - 1].id;
-          const { data: check, error: checkErr } = await supabase
-            .from("steps")
-            .select("id")
-            .eq("id", lastId)
-            .maybeSingle();
-
-          if (checkErr || !check) {
-            console.warn(`Handshake miss for step ${lastId} in ${modId} — continuing`);
-          }
-
-          doneUnits++;
-          setImportProgress(doneUnits / totalUnits);
-          setImportStatus(
-            `Syncing ${m.name} — steps ${si + batch.length}/${stepsWithPosition.length} (${mi + 1}/${modulesToSync.length} modules)`
-          );
-
-          // Yield to the browser between batches so the progress bar actually animates
-          await new Promise((r) => setTimeout(r, 0));
-        }
-
-        // Clean up stale steps for this test after all batches succeed
-        const liveIds = new Set(stepsWithPosition.map((s) => s.id));
-        const { data: existing } = await supabase
-          .from("steps").select("id").eq("test_id", targetTest.id);
-        const stale = (existing || []).map((r) => r.id).filter((id) => !liveIds.has(id));
-        if (stale.length) {
-          for (let si = 0; si < stale.length; si += CHUNK) {
-            await supabase.from("steps").delete().in("id", stale.slice(si, si + CHUNK));
-          }
-        }
-      }
     }
 
-    // ── 4. Commit final module state to React ────────────────────────────────
     saveMods(updatedModules);
+    setCsvOpen(false);
 
-    // ── 5. Finalise ──────────────────────────────────────────────────────────
-    setImportProgress(1);
-    const modCount = modulesToSync.length;
-    setImportStatus(`Done — ${dataLines.length} rows synced across ${modCount} module${modCount !== 1 ? "s" : ""}`);
-
+    const modCount = Object.values(allModules).filter((m) => m.tests[testIdx]).length;
     toast(
       `Imported ${dataLines.length} row${dataLines.length !== 1 ? "s" : ""} → synced to ${modCount} module${modCount !== 1 ? "s" : ""}`,
       "success"
@@ -2862,25 +2589,29 @@ function TestDetail({
   };
 
   const exportCSV = () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = [["Serial No", "Action", "Result", "Remarks", "Status"]];
     steps.forEach((s) => {
       if (s.isDivider) {
-        rows.push([`"$$$${s.action}"`, "", "", "", ""]);
+        rows.push([esc(`$$$${s.action}`), "", "", "", ""]);
       } else {
-        rows.push([s.serialNo, `"${s.action}"`, `"${s.result}"`, `"${s.remarks}"`, s.status]);
+        rows.push([s.serialNo ?? "", esc(s.action), esc(s.result), esc(s.remarks), s.status]);
       }
     });
     const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
       type: "text/csv",
     });
+    const url = URL.createObjectURL(b);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(b);
+    a.href = url;
     a.download = `${mod.name}_${test.name}.csv`.replace(/\s+/g, "_");
     a.click();
+    URL.revokeObjectURL(url);
     toast("CSV exported", "success");
   };
 
   const exportPDF = () => {
+    const he = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     const statusColor = (s) =>
       s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
     const statusBg = (s) =>
@@ -2892,15 +2623,9 @@ function TestDetail({
         <td style="padding:7px 10px;border:1px solid #e5e7eb;font-family:monospace;font-size:12px;text-align:center;white-space:nowrap">${
           s.serialNo || "—"
         }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px">${
-          s.action || ""
-        }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#4b5563">${
-          s.result || ""
-        }</td>
-        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#6b7280">${
-          s.remarks || ""
-        }</td>
+        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px">${he(s.action)}</td>
+        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#4b5563">${he(s.result)}</td>
+        <td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px;color:#6b7280">${he(s.remarks)}</td>
         <td style="padding:7px 10px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;font-weight:700;text-align:center;color:${statusColor(
           s.status
         )}">${s.status.toUpperCase()}</td>
@@ -2909,7 +2634,7 @@ function TestDetail({
       .join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>${mod.name} — ${test.name}</title>
+      <title>${he(mod.name)} — ${he(test.name)}</title>
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;padding:32px}
@@ -2922,8 +2647,8 @@ function TestDetail({
         @page{margin:16mm}
         @media print{body{padding:0}}
       </style></head><body>
-      <h1>${mod.name} — ${test.name}</h1>
-      ${test.description ? `<h2>${test.description}</h2>` : ""}
+      <h1>${he(mod.name)} — ${he(test.name)}</h1>
+      ${test.description ? `<h2>${he(test.description)}</h2>` : ""}
       <div class="meta">
         <div>Total <span>${steps.length}</span></div>
         <div>Pass <span style="color:#16a34a">${pass}</span></div>
@@ -2939,6 +2664,10 @@ function TestDetail({
       </body></html>`;
 
     const w = window.open("", "_blank");
+    if (!w) {
+      toast("Pop-up blocked — please allow pop-ups for this site", "error");
+      return;
+    }
     w.document.write(html);
     w.document.close();
     w.focus();
@@ -3364,27 +3093,11 @@ function TestDetail({
         </div>
       </div>
 
-      {/* Show CSV modal for file picking, OR during import for progress tracking */}
-      {(csvOpen || importing) && isAdmin && (
+      {csvOpen && isAdmin && (
         <CsvImportModal
           onImport={importCSV}
-          onClose={() => {
-            if (!importing) setCsvOpen(false);
-            else if (importProgress >= 1) { setImporting(false); setCsvOpen(false); }
-          }}
-          importing={importing}
-          importProgress={importProgress}
-          importStatus={importStatus}
+          onClose={() => setCsvOpen(false)}
         />
-      )}
-      {/* Full-screen interaction blocker while import is running */}
-      {importing && importProgress < 1 && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 190, // below the modal (z:200) but above everything else
-          cursor: "not-allowed",
-        }} onClick={(e) => e.stopPropagation()} />
       )}
     </div>
   );
@@ -3447,7 +3160,7 @@ function ModuleView({
       lockStore.heartbeat(test.id, session.id);
     }, HEARTBEAT_MS);
     return () => clearInterval(beat);
-  }, [selTestIdx, isAdmin]);
+  }, [selTestIdx, isAdmin, session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // beforeunload: best-effort release on normal tab/window close (testers only).
   // Uses activeTestIdRef so it always sees the latest open test id.
@@ -3457,17 +3170,18 @@ function ModuleView({
       const testId = activeTestIdRef.current;
       if (!testId) return;
       try {
-        // supabase.supabaseUrl is the correct property on @supabase/supabase-js v2
-        const baseUrl = supabase.supabaseUrl || supabase.storageUrl?.replace("/storage/v1", "") || "";
-        if (baseUrl) {
-          const url = `${baseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
-          const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
-          if (!sent) lockStore.release(testId, session.id);
-        } else {
-          lockStore.release(testId, session.id);
-        }
+        // keepalive fetch survives page unload and sends proper headers
+        const url = `${supabase.supabaseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
+        fetch(url, {
+          method: "DELETE",
+          keepalive: true,
+          headers: {
+            apikey: supabase.supabaseKey,
+            Authorization: `Bearer ${supabase.supabaseKey}`,
+          },
+        });
       } catch {
-        lockStore.release(testId, session.id);
+        // best-effort — TTL will expire the lock within 60s anyway
       }
     };
     window.addEventListener("beforeunload", onUnload);
@@ -3528,7 +3242,7 @@ function ModuleView({
   };
 
   const saveModName = (name) => {
-    saveMods({ ...allModules, [mod.id]: { ...mod, name } }, true);
+    saveMods({ ...allModules, [mod.id]: { ...mod, name } });
     toast("Renamed", "success");
     addLog({
       ts: Date.now(),
@@ -3542,14 +3256,7 @@ function ModuleView({
     const n = mod.tests.length + 1;
     const nt = makeTest(mod.id, n, 10);
     const updated = { ...mod, tests: [...mod.tests, nt] };
-    saveMods({ ...allModules, [mod.id]: updated }, true);
-    // saveModules only upserts test rows — save the new test's default steps surgically
-    store.saveSteps(nt.id, mod.id, nt.steps, {
-      moduleName:  mod.name,
-      serialNo:    n,
-      name:        nt.name,
-      description: nt.description ?? "",
-    }).catch((e) => console.error("addTest saveSteps error:", e));
+    saveMods({ ...allModules, [mod.id]: updated });
     toast(`Test ${n} added`, "success");
     addLog({
       ts: Date.now(),
@@ -3568,15 +3275,15 @@ function ModuleView({
       ...mod,
       tests: mod.tests
         .filter((_, i) => i !== idx)
-        .map((t, i) => ({ ...t, serialNo: i + 1, serial_no: i + 1, name: `Test ${i + 1}` })),
+        .map((t, i) => ({ ...t, serialNo: i + 1, serial_no: i + 1 })),
     };
-    saveMods({ ...allModules, [mod.id]: updated }, true);
+    saveMods({ ...allModules, [mod.id]: updated });
     toast("Test deleted", "info");
     addLog({
       ts: Date.now(),
       user: session.name,
       action: `Deleted test from ${mod.name}`,
-      type: "info",
+      type: "warn",
     });
   };
 
@@ -3596,7 +3303,7 @@ function ModuleView({
         onFinish={finishTest}
         modIdx={modIdx}
         modTotal={modTotal}
-        onNav={!isAdmin ? null : onNav}
+        onNav={onNav}
         navLocked={!isAdmin && uiLocked}
       />
     );
@@ -3969,35 +3676,40 @@ function ReportView({ modules, toast }) {
   }, [modStats, search, failOnly]);
 
   const exportAllCSV = () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = [
       ["Module", "Test", "Step", "Action", "Result", "Remarks", "Status"],
     ];
     modList.forEach((m) =>
       m.tests.forEach((t) =>
-        t.steps.forEach((s) =>
+        t.steps.forEach((s) => {
+          if (s.isDivider) return; // skip section dividers
           rows.push([
-            `"${m.name}"`,
-            `"${t.name}"`,
-            s.serialNo,
-            `"${s.action}"`,
-            `"${s.result}"`,
-            `"${s.remarks}"`,
+            esc(m.name),
+            esc(t.name),
+            s.serialNo ?? "",
+            esc(s.action),
+            esc(s.result),
+            esc(s.remarks),
             s.status,
-          ])
-        )
+          ]);
+        })
       )
     );
     const b = new Blob([rows.map((r) => r.join(",")).join("\n")], {
       type: "text/csv",
     });
+    const url = URL.createObjectURL(b);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(b);
+    a.href = url;
     a.download = `TestPro_Report_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
     toast("CSV exported", "success");
   };
 
   const exportAllPDF = () => {
+    const he = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     const sc = (s) =>
       s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
     const sb = (s) =>
@@ -4025,15 +3737,9 @@ function ReportView({ modules, toast }) {
             <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${
               s.serialNo || "—"
             }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${
-              s.action || ""
-            }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${
-              s.result || ""
-            }</td>
-            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${
-              s.remarks || ""
-            }</td>
+            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${he(s.action)}</td>
+            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${he(s.result)}</td>
+            <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${he(s.remarks)}</td>
             <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:10px;font-weight:700;text-align:center;color:${sc(
               s.status
             )}">${s.status.toUpperCase()}</td>
@@ -4106,6 +3812,10 @@ function ReportView({ modules, toast }) {
       </body></html>`;
 
     const w = window.open("", "_blank");
+    if (!w) {
+      toast("Pop-up blocked — please allow pop-ups for this site", "error");
+      return;
+    }
     w.document.write(html);
     w.document.close();
     w.focus();
@@ -4447,7 +4157,7 @@ function AuditView({ log }) {
           )}
           {log.map((e, i) => (
             <div
-              key={i}
+              key={`${e.ts}-${i}`}
               style={{
                 padding: "10px 16px",
                 borderBottom: `1px solid ${C.b1}`,
@@ -4577,7 +4287,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
       ts: Date.now(),
       user: session.name,
       action: `Deleted user "${u.name}"`,
-      type: "info",
+      type: "warn",
     });
   };
   const toggle = (u) => {
@@ -4590,7 +4300,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
       ts: Date.now(),
       user: session.name,
       action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`,
-      type: "info",
+      type: "warn",
     });
   };
 
@@ -4644,7 +4354,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
                   border: `1px solid ${C.b1}`,
                 }}
               >
-                {u.name[0].toUpperCase()}
+                {(u.name || "?")[0].toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{u.name}</div>
@@ -4821,74 +4531,39 @@ export default function App() {
   const { push: toast, Host: ToastHost } = useToast();
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const { users: dbUsers, modules: dbModules } = await store.loadAll();
+      const { users, modules } = await store.loadAll();
       const log = await store.loadLog();
-
-      // ── Users: seed DB if empty ──────────────────────────────────────────
-      let finalUsers = dbUsers;
-      if (!dbUsers.length) {
-        // Insert seed users and reload so we get real UUIDs back
-        const { data: inserted, error: seedErr } = await supabase
-          .from("users")
-          .insert(SEED_USERS.map(({ id: _skip, ...rest }) => rest))
-          .select();
-        if (seedErr) {
-          console.error("Seed users error:", seedErr);
-          toast(`DB connection error: ${seedErr.message}`, "error");
-          finalUsers = SEED_USERS; // fall back to local only
-        } else {
-          finalUsers = inserted || SEED_USERS;
-        }
-      }
-
-      // ── Modules: seed DB if empty ────────────────────────────────────────
-      let finalModules = dbModules;
-      if (!Object.keys(dbModules).length) {
-        const seedModules = buildModules();
-        finalModules = seedModules;
-        // Save seed modules to DB in background (don't block render)
-        store.saveModules(seedModules).catch((e) =>
-          console.error("Seed modules error:", e)
-        );
-      }
-
-      setUsers(finalUsers);
-      setModules(finalModules);
+      if (!alive) return;
+      setUsers(users.length ? users : SEED_USERS);
+      setModules(Object.keys(modules).length ? modules : buildModules());
       setLog(log);
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { alive = false; };
   }, []);
 
   const saveUsers = useCallback(async (u) => {
     setUsers(u);
     await store.saveUsers(u);
     // Reload from Supabase so new users get their real UUID (replaces temp new_XXXX id)
-    const { data: fresh } = await supabase.from("users").select("*");
+    const { data: fresh } = await supabase.from("users").select("*").limit(10_000);
     if (fresh && fresh.length) setUsers(fresh);
   }, []);
 
   // Always keep a ref to the latest modules so the debounced DB write
   // never uses a stale snapshot captured in an old closure.
-  const latestModulesRef   = useRef(null);
-  const saveModsTimerRef   = useRef(null);
-  const structuralFlagRef  = useRef(false); // true when a structural change needs saveModules
-
-  // saveMods(m)             — step-only change: update React state, skip saveModules
-  // saveMods(m, true)       — structural change (add/rename/delete module or test):
-  //                           update React state AND debounce saveModules
-  const saveMods = useCallback((m, structural = false) => {
+  const latestModulesRef = useRef(null);
+  const saveModsTimerRef = useRef(null);
+  // Clear pending debounce on unmount to prevent setState-after-unmount
+  useEffect(() => () => { if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current); }, []);
+  const saveMods = useCallback((m) => {
     setModules(m);
-    latestModulesRef.current = m;
-    if (structural) structuralFlagRef.current = true; // latch: once set, stays true until timer fires
-
-    // Only schedule a saveModules call when there is a structural change pending.
-    // Step saves are handled surgically by saveSteps in commit().
-    if (!structuralFlagRef.current) return;
-
+    latestModulesRef.current = m; // always track the very latest value
+    // Debounce DB writes — cancels previous timer so only the final state
+    // in a burst of rapid calls (e.g. keystrokes) is persisted.
     if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current);
     saveModsTimerRef.current = setTimeout(() => {
-      structuralFlagRef.current = false;
       store.saveModules(latestModulesRef.current); // use ref, never stale closure
     }, 400);
   }, []);
@@ -4946,7 +4621,7 @@ export default function App() {
                   action:    row.action,
                   result:    row.result,
                   serialNo:  row.serial_no,
-                  isDivider: row.is_divider === true || row.is_divider === 1,
+                  isDivider: row.is_divider ?? false,
                 };
                 const updatedTests = [...mod.tests];
                 updatedTests[testIdx] = { ...test, steps: updatedSteps };
@@ -4963,11 +4638,11 @@ export default function App() {
                 const test = mod.tests[testIdx];
                 if (test.steps.some((s) => s.id === row.id)) break; // already local
                 const updatedTests = [...mod.tests];
-                const normRow = { ...row, serialNo: row.serial_no, isDivider: row.is_divider === true || row.is_divider === 1 };
+                const normRow = { ...row, serialNo: row.serial_no, isDivider: row.is_divider ?? false };
                 updatedTests[testIdx] = {
                   ...test,
                   steps: [...test.steps, normRow].sort(
-                    (a, b) => (a.serialNo ?? 0) - (b.serialNo ?? 0)
+                    (a, b) => (a.position ?? 0) - (b.position ?? 0)
                   ),
                 };
                 next[modId] = { ...mod, tests: updatedTests };
