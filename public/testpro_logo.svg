@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" fill="none">
+  <!--
+    TestPro Logomark
+    Concept: "Run → Pass"
+    A bold play-chevron (execute tests) flows visually into a checkmark (tests pass).
+    Two strokes, white on transparent — designed to sit on the orange gradient container.
+  -->
+
+  <!-- Play / run chevron  ▷ -->
+  <polyline
+    points="6,8 17.5,18 6,28"
+    stroke="white"
+    stroke-width="3.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Check mark  ✓  (dip point aligns with chevron tip for visual unity) -->
+  <polyline
+    points="14.5,22.5 19.5,28.5 30.5,10"
+    stroke="white"
+    stroke-width="3.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.92"
+  />
+</svg>
