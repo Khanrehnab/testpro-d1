@@ -1301,7 +1301,7 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────────
-function Dashboard({ modules, session, onSelect }) {
+function Dashboard({ modules, session, onSelect, toast }) {
   const isMobile = useIsMobile();
   const modList = useMemo(() => Object.values(modules), [modules]);
   const [selModId, setSelModId] = useState(() => modList[0]?.id || "");
@@ -1326,7 +1326,7 @@ function Dashboard({ modules, session, onSelect }) {
         mod={selMod}
         onBack={() => setModView(false)}
         onExecute={() => onSelect(selModId)}
-        toast={() => {}}
+        toast={toast}
         showExecute={true}
       />
     );
@@ -2592,7 +2592,7 @@ export default function App() {
               session={session} view={view} setView={setView} modules={modules}
               selMod={selMod}
               setSelMod={id => {
-                if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
+                if (hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
                 setSelMod(id); setView("mod");
               }}
               collapsed={sideColl} setCollapsed={setSideColl}
@@ -2608,7 +2608,7 @@ export default function App() {
               setView={v => { setView(v); setMobileDrawerOpen(false); }}
               modules={modules} selMod={selMod}
               setSelMod={id => {
-                if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
+                if (hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
                 setSelMod(id); setView("mod"); setMobileDrawerOpen(false);
               }}
               collapsed={false} setCollapsed={() => {}}
@@ -2623,7 +2623,7 @@ export default function App() {
             pb: isMobile ? "calc(58px + env(safe-area-inset-bottom, 0px))" : 0 }}>
             <AnimatePresence mode="wait">
               {view === "dash" && (
-                <Dashboard key="dash" modules={modules} session={session}
+                <Dashboard key="dash" modules={modules} session={session} toast={toast}
                   onSelect={id => {
                     if (hasLock) { toast("Finish the current test first", "error"); return; }
                     setSelMod(id); setView("mod");
