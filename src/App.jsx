@@ -845,7 +845,7 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
   const navItems = [
     { id: "dash", icon: "dash", label: "Dashboard" },
     { id: "report", icon: "report", label: "Test Report" },
-    ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }, { id: "audit", icon: "log", label: "Audit Log" }] : []),
+    { id: "audit", icon: "log", label: "Audit Log" },
   ];
 
   const navRow = (item) => {
@@ -1302,7 +1302,6 @@ function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, ro
 
 // ── Test Detail ────────────────────────────────────────────────────────────────────
 function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog, toast, onBack, onFinish, modIdx, modTotal, onNav, navLocked }) {
-  const isAdmin = session.role === "admin";
   const isMobile = useIsMobile();
   const [steps, setSteps] = useState(test.steps);
   const [search, setSearch] = useState("");
@@ -1356,13 +1355,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     latestStepsRef.current = newSteps;
     if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
     stepsTimerRef.current = setTimeout(() => {
-      if (isAdmin) {
-        store.saveSteps(test.id, mod.id, latestStepsRef.current, {
-          moduleName: mod.name, serialNo: test.serialNo ?? test.serial_no ?? 0,
-          name: test.name, description: test.description ?? "",
-        }).catch(e => console.error("saveSteps error:", e));
-      } else {
-        // Tester: only persist the remarks/status of the one step that changed.
+      // Only persist remarks/status — structure is managed from the database.
         const changedStep = changedStepId
           ? latestStepsRef.current.find(s => s.id === changedStepId)
           : null;
@@ -1370,9 +1363,8 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
           store.updateStepRemarksStatus(changedStep)
             .catch(e => console.error("updateStepRemarksStatus error:", e));
         }
-      }
     }, 400);
-  }, [mod, test, testIdx, allModules, saveMods, isAdmin]);
+  }, [mod, test, testIdx, allModules, saveMods]);
 
   const setField = (i, f, v) => { const ns = [...steps]; ns[i] = { ...ns[i], [f]: v }; setSteps(ns); commit(ns, ns[i].id); };
 
@@ -1505,7 +1497,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
         {/* Row 3: action buttons */}
         <Box sx={{ px: isMobile ? 1.5 : 2.5, py: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
-          {!isAdmin && onFinish && (
+          {onFinish && (
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} style={{ marginLeft: "auto", display: isMobile ? "block" : undefined, flex: isMobile ? 1 : undefined }}>
               <Button variant="contained" color="success" size={isMobile ? "medium" : "small"}
                 startIcon={<Ico n="check" s={13} />}
@@ -1567,7 +1559,6 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
 
 // ── Module View ────────────────────────────────────────────────────────────────────
 function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, onLockChange, modIdx, modTotal }) {
-  const isAdmin = session.role === "admin";
   const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null);
   const [search, setSearch] = useState("");
@@ -1587,14 +1578,13 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
   }, []);
 
   useEffect(() => {
-    if (isAdmin || selTestIdx === null) return;
+    if (selTestIdx === null) return;
     const test = mod.tests[selTestIdx]; if (!test) return;
     const beat = setInterval(() => lockStore.heartbeat(test.id, session.id), HEARTBEAT_MS);
     return () => clearInterval(beat);
-  }, [selTestIdx, isAdmin]); // eslint-disable-line
+  }, [selTestIdx]); // eslint-disable-line
 
   useEffect(() => {
-    if (isAdmin) return;
     const onUnload = () => {
       const testId = activeTestIdRef.current; if (!testId) return;
       try {
@@ -1614,21 +1604,19 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
-  }, [isAdmin, session.id]);
+  }, [session.id]);
 
   useEffect(() => {
     const testId = activeTestIdRef.current;
-    if (!isAdmin && testId) { lockStore.release(testId, session.id); activeTestIdRef.current = null; if (onLockChange) onLockChange(false); setUiLocked(false); }
+    if (testId) { lockStore.release(testId, session.id); activeTestIdRef.current = null; if (onLockChange) onLockChange(false); setUiLocked(false); }
     setSelTestIdx(null); setSearch("");
   }, [mod.id]); // eslint-disable-line
 
   const openTest = async (idx) => {
     const test = mod.tests[idx]; if (!test) return;
-    if (!isAdmin) {
-      const result = await lockStore.acquire(test.id, session.id, session.name);
-      if (!result.ok) { toast(`"${test.name}" is in use by ${result.by}`, "error"); return; }
-      activeTestIdRef.current = test.id; setUiLocked(true); if (onLockChange) onLockChange(true);
-    }
+    const result = await lockStore.acquire(test.id, session.id, session.name);
+    if (!result.ok) { toast(`"${test.name}" is in use by ${result.by}`, "error"); return; }
+    activeTestIdRef.current = test.id; setUiLocked(true); if (onLockChange) onLockChange(true);
     setSelTestIdx(idx);
   };
 
@@ -1649,7 +1637,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
       <TestDetail
         mod={mod} test={mod.tests[selTestIdx]} testIdx={selTestIdx} allModules={allModules}
         session={session} saveMods={saveMods} addLog={addLog} toast={toast}
-        onBack={() => setSelTestIdx(null)} onFinish={!isAdmin ? finishTest : undefined}
+        onBack={() => setSelTestIdx(null)} onFinish={finishTest}
         modIdx={modIdx} modTotal={modTotal} onNav={onNav} navLocked={uiLocked}
       />
     );
@@ -1688,8 +1676,8 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
             const pct = t.steps.length ? Math.round((pass / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100) : 0;
             const lock = locks[t.id];
             const lockedByOther = lock && lock.userId !== session.id;
-            const isMyLockedTest = !isAdmin && activeTestIdRef.current === t.id;
-            const blockedByMyLock = !isAdmin && uiLocked && !isMyLockedTest;
+            const isMyLockedTest = activeTestIdRef.current === t.id;
+            const blockedByMyLock = uiLocked && !isMyLockedTest;
             const cardBlocked = lockedByOther || blockedByMyLock;
             const passW = t.steps.length ? (pass / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100 : 0;
             const failW = t.steps.length ? (fail / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100 : 0;
@@ -2188,36 +2176,12 @@ export default function App() {
         if (seedErr) { console.error("Seed users error:", seedErr); finalUsers = SEED_USERS; }
         else finalUsers = inserted || SEED_USERS;
       }
-      let finalModules = dbModules;
-      if (!Object.keys(dbModules).length) {
-        const seedModules = buildModules();
-        finalModules = seedModules;
-        store.saveModules(seedModules).catch(e => console.error("Seed modules error:", e));
-      }
-      setUsers(finalUsers); setModules(finalModules); setLog(logData);
+      setUsers(finalUsers); setModules(dbModules); setLog(logData);
     })();
   }, []); // eslint-disable-line
 
-  const saveUsers = useCallback(async u => {
-    setUsers(u); await store.saveUsers(u);
-    const { data: fresh } = await supabase.from("users").select("*");
-    if (fresh && fresh.length) setUsers(fresh);
-  }, []);
-
-  const latestModulesRef = useRef(null);
-  const saveModsTimerRef = useRef(null);
-  const structuralFlagRef = useRef(false);
-
-  const saveMods = useCallback((m, structural = false) => {
-    setModules(m); latestModulesRef.current = m;
-    if (structural) structuralFlagRef.current = true;
-    if (!structuralFlagRef.current) return;
-    if (saveModsTimerRef.current) clearTimeout(saveModsTimerRef.current);
-    saveModsTimerRef.current = setTimeout(() => {
-      structuralFlagRef.current = false;
-      store.saveModules(latestModulesRef.current);
-    }, 400);
-  }, []);
+  // saveMods: in-memory only — structure is managed from the database directly.
+  const saveMods = useCallback((m) => { setModules(m); }, []);
 
   const addLog = useCallback(async e => {
     setLog(l => [e, ...l].slice(0, 300));
@@ -2343,7 +2307,7 @@ export default function App() {
   const mobileNavItems = [
     { id: "dash", icon: "dash", label: "Dashboard" },
     { id: "report", icon: "report", label: "Report" },
-    ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }, { id: "audit", icon: "log", label: "Audit" }] : []),
+    { id: "audit", icon: "log", label: "Audit" },
     { id: "_modules", icon: "layers", label: "Modules" },
   ];
 
@@ -2393,7 +2357,7 @@ export default function App() {
               {view === "dash" && (
                 <Dashboard key="dash" modules={modules} session={session}
                   onSelect={id => {
-                    if (session.role !== "admin" && hasLock) { toast("Finish the current test first", "error"); return; }
+                    if (hasLock) { toast("Finish the current test first", "error"); return; }
                     setSelMod(id); setView("mod");
                   }}
                 />
@@ -2407,10 +2371,7 @@ export default function App() {
                 />
               )}
               {view === "report" && <ReportView key="report" modules={modules} toast={toast} />}
-              {view === "users" && session.role === "admin" && (
-                <UsersPanel key="users" users={users} session={session} saveUsers={saveUsers} addLog={addLog} toast={toast} />
-              )}
-              {view === "audit" && session.role === "admin" && (
+              {view === "audit" && (
                 <AuditView key="audit" log={log} />
               )}
             </AnimatePresence>
@@ -2429,7 +2390,7 @@ export default function App() {
                 sx={{ bgcolor: "transparent", height: 58 }}
                 onChange={(_, newVal) => {
                   if (newVal === "_modules") { setMobileDrawerOpen(true); return; }
-                  if (session.role !== "admin" && hasLock && newVal !== view) { toast("Finish the current test first", "error"); return; }
+                  if (hasLock && newVal !== view) { toast("Finish the current test first", "error"); return; }
                   setView(newVal);
                 }}>
                 {mobileNavItems.map(item => (
