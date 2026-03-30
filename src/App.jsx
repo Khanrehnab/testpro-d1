@@ -485,11 +485,11 @@ const ICO_MAP = {
   admin:  AdminPanelSettingsRounded,
   task:   TaskAltRounded,
 };
-const Ico = React.memo(function Ico({ n, s = 15, color = "currentColor" });) {
+const Ico = React.memo(function Ico({ n, s = 15, color = "currentColor" }) {
   const MuiIcon = ICO_MAP[n];
   if (MuiIcon) return <MuiIcon sx={{ fontSize: s, color, flexShrink: 0, display: "block" }} />;
   return <span style={{ width: s, height: s, flexShrink: 0, display: "inline-block" }} />;
-}
+});
 
 // ── Toast (MUI Snackbar) ──────────────────────────────────────────────────────────
 function useToast() {
@@ -560,7 +560,7 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 200, fu
 }
 
 // ── Shared: Topbar ────────────────────────────────────────────────────────────────
-const Topbar = React.memo(function Topbar({ title, sub, children });) {
+const Topbar = React.memo(function Topbar({ title, sub, children }) {
   const isMobile = useIsMobile();
   const onMenuClick = useContext(MobileMenuCtx);
   return (
@@ -593,10 +593,10 @@ const Topbar = React.memo(function Topbar({ title, sub, children });) {
       </Toolbar>
     </AppBar>
   );
-}
+});
 
 // ── Shared: Progress Bar ──────────────────────────────────────────────────────────
-const PBar = React.memo(function PBar({ pct, fail });) {
+const PBar = React.memo(function PBar({ pct, fail }) {
   return (
     <LinearProgress
       variant="determinate" value={pct}
@@ -610,10 +610,10 @@ const PBar = React.memo(function PBar({ pct, fail });) {
       }}
     />
   );
-}
+});
 
 // ── Shared: ExportMenu ────────────────────────────────────────────────────────────
-const ExportMenu = React.memo(function ExportMenu({ onCSV, onPDF });) {
+const ExportMenu = React.memo(function ExportMenu({ onCSV, onPDF }) {
   const [anchor, setAnchor] = useState(null);
   return (
     <>
@@ -638,7 +638,7 @@ const ExportMenu = React.memo(function ExportMenu({ onCSV, onPDF });) {
       </Menu>
     </>
   );
-}
+});
 
 // ── Shared: Confirm Dialog ────────────────────────────────────────────────────────
 function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmLabel = "Delete", confirmColor = "error" }) {
@@ -1043,7 +1043,7 @@ function buildArcPath(cx, cy, r, start, end) {
 }
 
 // ── Donut Chart ───────────────────────────────────────────────────────────────────
-const DonutChart = React.memo(function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 });) {
+const DonutChart = React.memo(function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 }) {
   const raw = pass + fail + pending;
   const cx = size / 2, cy = size / 2, r = (size - stroke) / 2 - 2;
   const pct = raw > 0 ? Math.round((pass / raw) * 100) : 0;
@@ -1095,10 +1095,10 @@ const DonutChart = React.memo(function DonutChart({ pass = 0, fail = 0, pending 
       </Stack>
     </Box>
   );
-}
+});
 
 // ── Test Bar Chart ─────────────────────────────────────────────────────────────────
-const TestBarChart = React.memo(function TestBarChart({ tests });) {
+const TestBarChart = React.memo(function TestBarChart({ tests }) {
   const isMobile = useIsMobile();
   return (
     <Stack spacing={1.5}>
@@ -1133,7 +1133,7 @@ const TestBarChart = React.memo(function TestBarChart({ tests });) {
       })}
     </Stack>
   );
-}
+});
 
 // ── Module Dashboard (shared by Dashboard + ReportView) ───────────────────────────
 function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) {
@@ -1492,7 +1492,7 @@ function Dashboard({ modules, session, onSelect, toast }) {
 
 
 // ── Divider Row ───────────────────────────────────────────────────────────────────
-const DividerRow = React.memo(function DividerRow({ label });) {
+const DividerRow = React.memo(function DividerRow({ label }) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 0.85,
       background: "linear-gradient(90deg,#fff7ed 0%,#fef9f5 60%,rgba(255,255,255,0) 100%)",
@@ -1504,10 +1504,10 @@ const DividerRow = React.memo(function DividerRow({ label });) {
       <Box sx={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${C.b2} 0%, transparent 100%)` }} />
     </Box>
   );
-}
+});
 
 // ── Step Row ──────────────────────────────────────────────────────────────────────
-const StepRow = React.memo(function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef });) {
+const StepRow = React.memo(function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef }) {
   const isMobile = useIsMobile();
   const rowBg = step.status === "fail" ? "#fff5f5" : step.status === "pass" ? "#f0fdf4" : isActive ? "#fff7ed" : "transparent";
 
@@ -1606,7 +1606,7 @@ const StepRow = React.memo(function StepRow({ step, idx, onChange, onStatusToggl
       </Box>
     </motion.div>
   );
-}
+});
 
 // ── Test Detail ────────────────────────────────────────────────────────────────────
 function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog, toast, onBack, onFinish, modIdx, modTotal, onNav, navLocked }) {
@@ -1622,6 +1622,8 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   const tableRef = useRef();
   const localCommitRef = useRef(false);
   const stepsTimerRef = useRef(null);
+  const stepsRef = useRef(null);
+  const commitRef = useRef(null);
   const stepsRef = useRef(null);
   const commitRef = useRef(null);
   const latestStepsRef = useRef(test.steps);
@@ -1678,6 +1680,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
         }
     }, 400);
   }, [mod, test, testIdx, allModules, saveMods]);
+  commitRef.current = commit;
   commitRef.current = commit;
 
   const setField = useCallback((i, f, v) => {
@@ -1882,7 +1885,9 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
   const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null);
   const [searchRaw, setSearchRaw] = useState("");
+  const [searchRaw, setSearchRaw] = useState("");
   const [search, setSearch] = useState("");
+  useEffect(() => { const t = setTimeout(() => setSearch(searchRaw), 200); return () => clearTimeout(t); }, [searchRaw]);
   useEffect(() => { const t = setTimeout(() => setSearch(searchRaw), 200); return () => clearTimeout(t); }, [searchRaw]);
   const [locks, setLocks] = useState({});
   const activeTestIdRef = useRef(null);
@@ -1984,7 +1989,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
 
       {isMobile && (
         <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" fullWidth />
+          <SearchBox value={searchRaw} onChange={setSearchRaw} placeholder="Search tests…" fullWidth />
         </Box>
       )}
 
@@ -2525,7 +2530,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
 }
 
 // ── Loading Spinner ──────────────────────────────────────────────────────────────
-const LoadingSpinner = React.memo(function LoadingSpinner({ size = 56 });) {
+const LoadingSpinner = React.memo(function LoadingSpinner({ size = 56 }) {
   const [progress, setProgress] = useState(10);
   useEffect(() => {
     const t = setInterval(() => {
@@ -2575,7 +2580,7 @@ const LoadingSpinner = React.memo(function LoadingSpinner({ size = 56 });) {
       </Box>
     </Box>
   );
-}
+});
 
 // ── App ────────────────────────────────────────────────────────────────────────────
 export default function App() {
