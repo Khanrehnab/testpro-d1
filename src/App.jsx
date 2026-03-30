@@ -10,7 +10,7 @@ import {
   List, ListItemButton, ListItemIcon, ListItemText,
   Chip, LinearProgress, Switch, Divider, Avatar,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Snackbar, Alert, Select, MenuItem, FormControl, InputLabel,
+  Alert, Select, MenuItem, FormControl, InputLabel,
   Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
   Tooltip, Menu, CircularProgress, BottomNavigation,
   BottomNavigationAction, Collapse,
@@ -1007,12 +1007,10 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────────
-function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
-  const isAdmin = session.role === "admin";
+function Dashboard({ modules, session, onSelect }) {
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [confirmDel, setConfirmDel] = useState(null);
 
   const modList = useMemo(() => Object.values(modules), [modules]);
   const modStats = useMemo(() => modList.map(m => {
@@ -1036,24 +1034,6 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
     return l;
   }, [modStats, filter, search]);
 
-  const deleteModule = (id) => {
-    const m = { ...modules }; delete m[id];
-    saveMods(m, true);
-    addLog({ ts: Date.now(), user: session.name, action: `Deleted module "${modules[id].name}"`, type: "warn" });
-    toast(`Module "${modules[id].name}" deleted`, "info");
-    setConfirmDel(null);
-  };
-
-  const addModule = () => {
-    const n = prompt("Module name:");
-    if (!n?.trim()) return;
-    const id = `m_${Date.now()}`;
-    const updated = { ...modules, [id]: { id, name: n.trim(), tests: [makeTest(id, 1, 0)] } };
-    saveMods(updated, true);
-    addLog({ ts: Date.now(), user: session.name, action: `Created module "${n.trim()}"`, type: "info" });
-    toast(`Module "${n.trim()}" created`, "success");
-  };
-
   const statCards = [
     { label: "Total Steps", value: total, color: "primary.main", bgColor: "#fff7ed", borderColor: alpha("#ea580c", 0.2), icon: <LayersRounded sx={{ fontSize: 22, color: "#ea580c" }} />, sub: `${modList.length} modules` },
     { label: "Passed", value: totalPass, color: "success.main", bgColor: "#f0fdf4", borderColor: alpha("#16a34a", 0.2), icon: <CheckCircleRounded sx={{ fontSize: 22, color: "#16a34a" }} />, sub: `${total ? Math.round((totalPass / total) * 100) : 0}% rate` },
@@ -1066,7 +1046,6 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
       style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar title="Dashboard" sub={`Welcome back, ${session.name}`}>
         {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" />}
-        {isAdmin && <Button variant="contained" size="small" startIcon={<Ico n="plus" s={13} />} onClick={addModule}>Add Module</Button>}
       </Topbar>
 
       <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2.5 }}>
@@ -1164,12 +1143,6 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
                       color: pct === 100 ? C.gr : hasFail ? C.re : "primary.main",
                       border: `1px solid ${pct === 100 ? alpha(C.gr, 0.25) : hasFail ? alpha(C.re, 0.25) : alpha("#ea580c", 0.25)}`,
                     }} />
-                    {isAdmin && (
-                      <IconButton size="small" sx={{ color: "error.main", "&:hover": { bgcolor: alpha("#dc2626", 0.08) } }}
-                        onClick={e => { e.stopPropagation(); setConfirmDel(m.id); }}>
-                        <DeleteRounded sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    )}
                     <ChevronRightRounded sx={{ fontSize: 18, color: C.t3 }} />
                   </Box>
                   {/* Dual-color progress strip */}
@@ -1191,14 +1164,6 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
           )}
         </Stack>
       </Box>
-
-      <ConfirmDialog
-        open={Boolean(confirmDel)}
-        title="Delete Module?"
-        description={`Delete "${modules[confirmDel]?.name}"? All its tests and steps will be permanently removed.`}
-        onConfirm={() => deleteModule(confirmDel)}
-        onCancel={() => setConfirmDel(null)}
-      />
     </motion.div>
   );
 }
@@ -1327,12 +1292,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   const [steps, setSteps] = useState(test.steps);
   const [search, setSearch] = useState("");
   const [fStat, setFStat] = useState("all");
-  const [addCount, setAddCount] = useState(10);
-  const [renaming, setRenaming] = useState(false);
-  const [renVal, setRenVal] = useState(test.name);
-  const [descVal, setDescVal] = useState(test.description || "");
   const [activeIdx, setActiveIdx] = useState(0);
-  const renRef = useRef();
   const rowRefs = useRef({});
   const tableRef = useRef();
   const localCommitRef = useRef(false);
@@ -1340,7 +1300,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   const latestStepsRef = useRef(test.steps);
 
   useEffect(() => {
-    setSteps(test.steps); setRenVal(test.name); setDescVal(test.description || "");
+    setSteps(test.steps);
     const firstPending = test.steps.findIndex(s => !s.isDivider && s.status === "pending");
     setActiveIdx(firstPending >= 0 ? firstPending : 0);
     localCommitRef.current = false;
@@ -1373,9 +1333,9 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     if (stepsTimerRef.current) { clearTimeout(stepsTimerRef.current); stepsTimerRef.current = null; }
   }, [test.id]); // eslint-disable-line
 
-  const commit = useCallback((newSteps, newName, newDesc) => {
+  const commit = useCallback((newSteps) => {
     localCommitRef.current = true;
-    const updTest = { ...test, steps: newSteps, name: newName ?? test.name, description: newDesc ?? test.description };
+    const updTest = { ...test, steps: newSteps };
     const updTests = mod.tests.map((t, i) => i === testIdx ? updTest : t);
     saveMods({ ...allModules, [mod.id]: { ...mod, tests: updTests } });
     latestStepsRef.current = newSteps;
@@ -1383,7 +1343,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     stepsTimerRef.current = setTimeout(() => {
       store.saveSteps(test.id, mod.id, latestStepsRef.current, {
         moduleName: mod.name, serialNo: test.serialNo ?? test.serial_no ?? 0,
-        name: newName ?? test.name, description: newDesc ?? test.description ?? "",
+        name: test.name, description: test.description ?? "",
       }).catch(e => console.error("saveSteps error:", e));
     }, 400);
   }, [mod, test, testIdx, allModules, saveMods]);
@@ -1408,20 +1368,6 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
       if (nextPending) setActiveIdx(nextPending._i);
       else { const fp = updVisible.find(s => s.status === "pending"); if (fp) setActiveIdx(fp._i); }
     }
-  };
-
-  const addSteps = () => {
-    if (steps.length >= 100_000) { toast("Maximum 100,000 steps per test", "error"); return; }
-    const n = Math.min(addCount, 100_000 - steps.length);
-    const start = steps.length + 1;
-    const ns = [...steps, ...Array.from({ length: n }, (_, i) => makeStep(test.id, start + i))];
-    setSteps(ns); commit(ns); toast(`Added ${n} step${n > 1 ? "s" : ""}`, "success");
-  };
-
-  const resetAll = () => {
-    const ns = steps.map(s => s.isDivider ? s : { ...s, status: "pending" });
-    setSteps(ns); commit(ns); setActiveIdx(0); toast("Steps reset", "info");
-    addLog({ ts: Date.now(), user: session.name, action: `Reset ${mod.name} › ${test.name}`, type: "info" });
   };
 
   const exportCSV = () => {
@@ -1463,33 +1409,6 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     w.focus(); setTimeout(() => w.print(), 500); toast("PDF ready", "info");
   };
 
-  const importCSV = (e) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const lines = ev.target.result.split("\n").filter(l => l.trim());
-        const start = lines[0]?.toLowerCase().includes("serial") ? 1 : 0;
-        const newSteps = [];
-        let sno = 1;
-        for (let i = start; i < lines.length; i++) {
-          const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
-          if (cols[0]?.startsWith("$$$")) {
-            newSteps.push({ id: `${test.id}_div_${Date.now()}_${i}`, isDivider: true, action: cols[0].slice(3), serialNo: null, result: "", remarks: "", status: "pending" });
-          } else {
-            const sn = parseInt(cols[0]); const serialNo = !isNaN(sn) ? sn : sno;
-            newSteps.push({ id: `${test.id}_s${serialNo}`, serialNo, action: cols[1] || "", result: cols[2] || "", remarks: cols[3] || "", status: cols[4]?.trim() || "pending", isDivider: false });
-            sno++;
-          }
-        }
-        setSteps(newSteps); commit(newSteps);
-        toast(`Imported ${newSteps.filter(s => !s.isDivider).length} steps`, "success");
-        addLog({ ts: Date.now(), user: session.name, action: `Imported CSV → ${mod.name} › ${test.name}`, type: "info" });
-      } catch { toast("CSV parse error", "error"); }
-    };
-    reader.readAsText(file); e.target.value = "";
-  };
-
   const realSteps = steps.filter(s => !s.isDivider);
   const pass = realSteps.filter(s => s.status === "pass").length;
   const fail = realSteps.filter(s => s.status === "fail").length;
@@ -1514,25 +1433,11 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
               <Ico n="back" s={16} />
             </IconButton>
           </Tooltip>
-          {renaming ? (
-            <TextField ref={renRef} value={renVal} onChange={e => setRenVal(e.target.value)} size="small" autoFocus
-              onBlur={() => { setRenaming(false); commit(steps, renVal); }}
-              onKeyDown={e => { if (e.key === "Enter") { setRenaming(false); commit(steps, renVal); } }}
-              InputProps={{ sx: { fontWeight: 700, fontSize: 14, borderRadius: 1.5 } }}
-              sx={{ flex: 1 }}
-            />
-          ) : (
-            <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
-              <Typography fontWeight={700} sx={{ fontSize: isMobile ? 14 : 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {test.name}
-              </Typography>
-              {isAdmin && (
-                <IconButton size="small" onClick={() => { setRenaming(true); setTimeout(() => renRef.current?.querySelector?.("input")?.select?.(), 20); }} sx={{ color: "text.disabled", flexShrink: 0 }}>
-                  <Ico n="edit" s={12} />
-                </IconButton>
-              )}
-            </Box>
-          )}
+          <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+            <Typography fontWeight={700} sx={{ fontSize: isMobile ? 14 : 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {test.name}
+            </Typography>
+          </Box>
           {/* Progress pill */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexShrink: 0, bgcolor: C.s2, border: `1px solid ${C.b1}`, borderRadius: 5, px: 1.5, py: 0.5 }}>
             {!isMobile && (
@@ -1563,11 +1468,9 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
 
         {/* Row 2: description + progress bar */}
         <Box sx={{ px: isMobile ? 1.5 : 2.5, py: 0.75, display: "flex", alignItems: "center", gap: 1.5, bgcolor: C.s2, borderBottom: `1px solid ${C.b1}` }}>
-          <TextField
-            value={descVal} onChange={e => { setDescVal(e.target.value); commit(steps, renVal, e.target.value); }}
-            placeholder="Add a description…" variant="standard" fullWidth
-            InputProps={{ disableUnderline: true, sx: { fontSize: 12, color: C.t2 } }}
-          />
+          <Typography variant="body2" sx={{ flex: 1, fontSize: 12, color: test.description ? C.t2 : C.t3, fontStyle: test.description ? "normal" : "italic" }}>
+            {test.description || "No description"}
+          </Typography>
           <Box sx={{ width: isMobile ? 80 : 120, flexShrink: 0 }}>
             <PBar pct={pct} fail={fail > 0} />
           </Box>
@@ -1576,18 +1479,6 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
         {/* Row 3: action buttons */}
         <Box sx={{ px: isMobile ? 1.5 : 2.5, py: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
-          {isAdmin && (
-            <>
-              <Button size="small" variant="outlined" color="error" startIcon={<Ico n="reset" s={12} />} onClick={resetAll}
-                sx={{ borderColor: "#fca5a5", color: "error.main" }}>
-                Reset
-              </Button>
-              <Button size="small" variant="outlined" component="label" startIcon={<Ico n="upload" s={12} />}
-                sx={{ borderColor: C.b2, color: "text.secondary" }}>
-                Import CSV <input type="file" accept=".csv" hidden onChange={importCSV} />
-              </Button>
-            </>
-          )}
           {!isAdmin && onFinish && (
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} style={{ marginLeft: "auto", display: isMobile ? "block" : undefined, flex: isMobile ? 1 : undefined }}>
               <Button variant="contained" color="success" size={isMobile ? "medium" : "small"}
@@ -1598,7 +1489,6 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
               </Button>
             </motion.div>
           )}
-          {isAdmin && <Box sx={{ flex: 1 }} />}
         </Box>
       </Box>
 
@@ -1616,21 +1506,6 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
           ))}
           <SearchBox value={search} onChange={setSearch} placeholder="Search steps…" width={isMobile ? "100%" : 170} fullWidth={isMobile} />
         </Stack>
-        {isAdmin && (
-          <Stack direction="row" alignItems="center" gap={0.75} sx={{ width: isMobile ? "100%" : "auto" }}>
-            <FormControl size="small" sx={{ width: isMobile ? "auto" : 90 }}>
-              <Select value={addCount} onChange={e => setAddCount(Number(e.target.value))}
-                sx={{ fontSize: 12, fontFamily: MONO, bgcolor: C.s2, borderRadius: 1.5 }}>
-                {[1,5,10,25,50,100,250,500,1000,5000].map(n => <MenuItem key={n} value={n} sx={{ fontSize: 12, fontFamily: MONO }}>+{n}</MenuItem>)}
-              </Select>
-            </FormControl>
-            <Button size="small" variant="outlined" color="success" startIcon={<Ico n="plus" s={11} />}
-              onClick={addSteps} disabled={steps.length >= 100_000}
-              sx={{ flex: isMobile ? 1 : undefined, borderColor: "#86efac", color: C.gr }}>
-              Add Steps
-            </Button>
-          </Stack>
-        )}
       </Box>
 
       {/* Step Table */}
@@ -1649,7 +1524,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
           )}
           {visible.length === 0 && (
             <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>
-              {steps.length === 0 ? (isAdmin ? "No steps yet — import a CSV or add steps." : "No steps available.") : "No steps match."}
+              {steps.length === 0 ? "No steps available." : "No steps match."}
             </Box>
           )}
           {visible.map(s => s.isDivider ? <DividerRow key={s.id} label={s.action} /> : (
@@ -1670,10 +1545,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
   const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null);
   const [search, setSearch] = useState("");
-  const [renaming, setRenaming] = useState(false);
-  const [renVal, setRenVal] = useState(mod.name);
   const [locks, setLocks] = useState({});
-  const renRef = useRef();
   const activeTestIdRef = useRef(null);
   const selTestIdxRef = useRef(null);
   const modTestsRef = useRef(mod.tests);
@@ -1715,7 +1587,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
   useEffect(() => {
     const testId = activeTestIdRef.current;
     if (!isAdmin && testId) { lockStore.release(testId, session.id); activeTestIdRef.current = null; if (onLockChange) onLockChange(false); setUiLocked(false); }
-    setSelTestIdx(null); setSearch(""); setRenVal(mod.name);
+    setSelTestIdx(null); setSearch("");
   }, [mod.id]); // eslint-disable-line
 
   const openTest = async (idx) => {
@@ -1732,24 +1604,6 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
     const testId = activeTestIdRef.current;
     if (testId) { await lockStore.release(testId, session.id); activeTestIdRef.current = null; }
     setUiLocked(false); if (onLockChange) onLockChange(false); setSelTestIdx(null);
-  };
-
-  const deleteTest = (idx) => {
-    const t = mod.tests[idx]; if (!t) return;
-    const updated = { ...allModules, [mod.id]: { ...mod, tests: mod.tests.filter((_, i) => i !== idx) } };
-    saveMods(updated, true);
-    addLog({ ts: Date.now(), user: session.name, action: `Deleted ${mod.name} › ${t.name}`, type: "warn" });
-    toast(`"${t.name}" deleted`, "info");
-  };
-
-  const addTest = () => {
-    const n = prompt("Test name:");
-    if (!n?.trim()) return;
-    const newT = { ...makeTest(mod.id, mod.tests.length + 1, 0), name: n.trim() };
-    const updated = { ...allModules, [mod.id]: { ...mod, tests: [...mod.tests, newT] } };
-    saveMods(updated, true);
-    addLog({ ts: Date.now(), user: session.name, action: `Created test "${n.trim()}" in ${mod.name}`, type: "info" });
-    toast(`Test "${n.trim()}" created`, "success");
   };
 
   const filtered = useMemo(() => {
@@ -1773,19 +1627,10 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar
-        title={renaming
-          ? <TextField ref={renRef} value={renVal} size="small" autoFocus
-              onChange={e => setRenVal(e.target.value)}
-              onBlur={() => { setRenaming(false); const m2 = { ...allModules, [mod.id]: { ...mod, name: renVal.trim() || mod.name } }; saveMods(m2, true); }}
-              onKeyDown={e => { if (e.key === "Enter") { setRenaming(false); const m2 = { ...allModules, [mod.id]: { ...mod, name: renVal.trim() || mod.name } }; saveMods(m2, true); } }}
-              InputProps={{ sx: { fontWeight: 700, fontSize: 15, borderRadius: 1.5 } }}
-            />
-          : <span onClick={() => isAdmin && setRenaming(true)} style={{ cursor: isAdmin ? "text" : "default" }}>{mod.name}</span>
-        }
+        title={mod.name}
         sub={`${mod.tests.length} tests · ${mod.tests.flatMap(t => t.steps).filter(s => s.status === "pass").length} passed`}
       >
         {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" width={190} />}
-        {isAdmin && <Button size="small" variant="contained" startIcon={<Ico n="plus" s={13} />} onClick={addTest}>Add Test</Button>}
         {!isMobile && modIdx !== undefined && (
           <Stack direction="row" alignItems="center" gap={0.5}>
             <IconButton size="small" onClick={() => onNav?.(-1)} disabled={modIdx === 0 || uiLocked}><Ico n="chevL" s={14} /></IconButton>
@@ -1857,12 +1702,6 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
                         </Typography>
                       </Box>
                       <Stack direction="row" gap={0.75} sx={{ flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                        {isAdmin && !isMobile && (
-                          <IconButton size="small" color="error" onClick={() => deleteTest(realIdx)}
-                            sx={{ bgcolor: alpha("#dc2626", 0.06), "&:hover": { bgcolor: alpha("#dc2626", 0.12) } }}>
-                            <DeleteRounded sx={{ fontSize: 15 }} />
-                          </IconButton>
-                        )}
                         {lockedByOther ? (
                           <Button size="small" variant="outlined" disabled sx={{ borderColor: "#fcd34d", color: C.am, borderRadius: 2 }}>
                             <LockRounded sx={{ fontSize: 13 }} />{!isMobile && <Box component="span" sx={{ ml: 0.5 }}>Locked</Box>}
@@ -1879,12 +1718,6 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
                             endIcon={<ChevronRightRounded sx={{ fontSize: 15 }} />} sx={{ borderRadius: 2, px: 1.5 }}>
                             {!isMobile && "Open"}
                           </Button>
-                        )}
-                        {isAdmin && isMobile && (
-                          <IconButton size="small" color="error" onClick={() => deleteTest(realIdx)}
-                            sx={{ bgcolor: alpha("#dc2626", 0.06) }}>
-                            <DeleteRounded sx={{ fontSize: 15 }} />
-                          </IconButton>
                         )}
                       </Stack>
                       {!isMobile && (
@@ -2531,7 +2364,6 @@ export default function App() {
                     if (session.role !== "admin" && hasLock) { toast("Finish the current test first", "error"); return; }
                     setSelMod(id); setView("mod");
                   }}
-                  saveMods={saveMods} addLog={addLog} toast={toast}
                 />
               )}
               {view === "mod" && selMod && modules[selMod] && (
