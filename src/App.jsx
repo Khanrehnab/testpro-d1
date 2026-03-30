@@ -1196,8 +1196,9 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
   ];
 
   return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <Box sx={{ p: isMobile ? 2 : 3, overflow: "hidden" }}>
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", p: isMobile ? 2 : 3 }}>
         {/* Header */}
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap" gap={1.5}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
@@ -1333,9 +1334,10 @@ function Dashboard({ modules, session, onSelect, toast }) {
   }
 
   return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <Box sx={{ p: isMobile ? 2 : 3, overflow: "hidden" }}>
-        <Topbar title="Dashboard" sub={`${modList.length} modules`} />
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <Topbar title="Dashboard" sub={`${modList.length} modules`} />
+      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", p: isMobile ? 2 : 3 }}>
 
         {/* Module selector + live donut */}
         <AnimatePresence mode="wait">
@@ -2071,9 +2073,9 @@ function ReportView({ modules, toast }) {
   }
 
   return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <Box sx={{ p: isMobile ? 2 : 3, overflow: "hidden" }}>
-        <Topbar title="Test Report" sub={`${totalSteps.toLocaleString()} steps across ${modList.length} modules`}>
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+      <Topbar title="Test Report" sub={`${totalSteps.toLocaleString()} steps across ${modList.length} modules`}>
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Button variant="outlined" size="small" startIcon={<Ico n="down" s={15} />} onClick={exportAllCSV}
               sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>
@@ -2081,6 +2083,7 @@ function ReportView({ modules, toast }) {
             </Button>
           </motion.div>
         </Topbar>
+      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", p: isMobile ? 2 : 3 }}>
 
         {/* Overall stat pills */}
         <Box sx={{ display: "flex", gap: 1.5, mb: 3, flexWrap: "wrap" }}>
@@ -2619,7 +2622,7 @@ export default function App() {
           )}
 
           {/* Main Content */}
-          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0,
+          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", overflowY: "auto", minWidth: 0,
             pb: isMobile ? "calc(58px + env(safe-area-inset-bottom, 0px))" : 0 }}>
             <AnimatePresence mode="wait">
               {view === "dash" && (
