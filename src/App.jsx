@@ -134,9 +134,13 @@ const store = {
   },
   async updateStepRemarksStatus(step) {
     if (!step || step.isDivider) return;
-    const { error } = await supabase.from("steps")
-      .update({ remarks: step.remarks ?? "", status: step.status ?? "pending" })
-      .eq("id", step.id);
+    // Combined RPC: set_config + UPDATE run in one transaction,
+    // preventing PgBouncer connection-pool role leakage (Bug #2).
+    const { error } = await supabase.rpc("update_step_as_tester", {
+      p_id: step.id,
+      p_remarks: step.remarks ?? "",
+      p_status: step.status ?? "pending",
+    });
     if (error) console.error("updateStepRemarksStatus error:", error);
   },
   async saveModules(modulesMap) {
@@ -685,7 +689,8 @@ function LoginPage({ users, onLogin }) {
       const found = users.find(x => x.username === u.trim() && x.password === p && x.active);
       if (found) {
         // Set session-level GUC so RLS policies can read the role for this connection.
-        await supabase.rpc("set_app_role", { p_role: found.role }).catch(() => {});
+        const { error: rpcErr } = await supabase.rpc("set_app_role", { p_role: found.role });
+        if (rpcErr) console.warn("set_app_role error", rpcErr);
         onLogin(found);
       } else { setErr("Invalid credentials or account inactive."); setLoading(false); }
     }, 150);
@@ -1593,11 +1598,17 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
     const onUnload = () => {
       const testId = activeTestIdRef.current; if (!testId) return;
       try {
-        const baseUrl = supabase.supabaseUrl || supabase.storageUrl?.replace("/storage/v1", "") || "";
+        // Fix #4: supabase.storageUrl does not exist on the JS v2 client.
+        // Fix #5: sendBeacon always POSTs — use fetch with keepalive: true for DELETE.
+        const baseUrl = supabase.supabaseUrl || "";
         if (baseUrl) {
           const url = `${baseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
-          const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
-          if (!sent) lockStore.release(testId, session.id);
+          const key = supabase.supabaseKey || "";
+          fetch(url, {
+            method: "DELETE",
+            keepalive: true,
+            headers: { apikey: key, Authorization: `Bearer ${key}` },
+          }).catch(() => lockStore.release(testId, session.id));
         } else lockStore.release(testId, session.id);
       } catch { lockStore.release(testId, session.id); }
     };
