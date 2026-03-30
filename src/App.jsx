@@ -1198,7 +1198,7 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <Box sx={{ p: isMobile ? 2 : 3, overflow: "hidden" }}>
-        {/* Header */
+        {/* Header */}
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap" gap={1.5}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
             <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}>
