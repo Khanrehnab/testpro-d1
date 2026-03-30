@@ -1387,53 +1387,103 @@ function Dashboard({ modules, session, onSelect, toast }) {
           </motion.div>
         </AnimatePresence>
 
-        {/* Module grid */}
-        <Typography sx={{ fontWeight: 700, fontSize: 12, color: C.t3, fontFamily: MONO, letterSpacing: "0.8px", mb: 1.5 }}>
-          ALL MODULES ({modList.length})
-        </Typography>
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+        {/* Module list */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+          <Typography sx={{ fontWeight: 700, fontSize: 12, color: C.t3, fontFamily: MONO, letterSpacing: "0.8px" }}>
+            ALL MODULES ({modList.length})
+          </Typography>
+          <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>
+            {modStats.filter(m => m.pass + m.fail > 0).length} active
+          </Typography>
+        </Stack>
+        <Stack spacing={1.25}>
           {modStats.map((m, i) => {
             const pct = m.total ? Math.round((m.pass / m.total) * 100) : 0;
             const isDone = m.pass === m.total && m.total > 0;
             const hasFail = m.fail > 0;
-            const bc = hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1;
             const isActive = selModId === m.id;
+            const accentColor = hasFail ? "#dc2626" : isDone ? "#16a34a" : isActive ? "#ea580c" : "#e2d5c3";
+            const passW = m.total ? (m.pass / m.total) * 100 : 0;
+            const failW = m.total ? (m.fail / m.total) * 100 : 0;
             return (
               <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-                whileHover={{ y: -3, scale: 1.01 }} whileTap={{ scale: 0.98 }}
-                style={{ flex: "1 1 200px", minWidth: 180, maxWidth: 280, cursor: "pointer" }}
+                whileHover={{ x: 4 }} whileTap={{ scale: 0.99 }}
+                style={{ cursor: "pointer" }}
                 onClick={() => { setSelModId(m.id); setModView(true); }}>
                 <Paper sx={{
-                  p: 2.5, border: `1.5px solid ${isActive ? "#ea580c" : bc}`,
-                  borderRadius: 3, bgcolor: isActive ? alpha("#ea580c", 0.03) : hasFail ? "#fff5f5" : isDone ? "#f0fdf4" : "background.paper",
-                  transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
-                  boxShadow: isActive ? "0 4px 20px rgba(234,88,12,0.15)" : "none",
+                  borderRadius: 3, overflow: "hidden",
+                  border: `1px solid ${isActive ? alpha("#ea580c", 0.35) : hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1}`,
+                  boxShadow: isActive ? "0 4px 18px rgba(234,88,12,0.13)" : "0 1px 4px rgba(0,0,0,0.04)",
+                  bgcolor: isActive ? alpha("#ea580c", 0.02) : "background.paper",
+                  transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
+                  "&:hover": { boxShadow: "0 6px 24px rgba(0,0,0,0.10)" },
                 }}>
-                  <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1.5}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.t1, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", pr: 1 }}>
-                      {m.name}
-                    </Typography>
-                    <Typography sx={{ fontSize: 16, fontWeight: 800, fontFamily: MONO, color: hasFail ? "#dc2626" : isDone ? "#16a34a" : C.t3, flexShrink: 0 }}>
-                      {pct}%
-                    </Typography>
-                  </Stack>
-                  <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3, mb: 1 }}>
-                    {m.tests.length} tests · {m.total} steps
-                  </Typography>
-                  <Box sx={{ height: 5, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex" }}>
-                    <Box sx={{ width: `${m.total ? (m.pass / m.total) * 100 : 0}%`, bgcolor: "#16a34a", borderRadius: "99px 0 0 99px" }} />
-                    <Box sx={{ width: `${m.total ? (m.fail / m.total) * 100 : 0}%`, bgcolor: "#dc2626" }} />
+                  {/* Left accent bar + content */}
+                  <Box sx={{ display: "flex" }}>
+                    {/* Accent bar */}
+                    <Box sx={{ width: 4, flexShrink: 0, bgcolor: accentColor, transition: "background-color 0.2s" }} />
+                    {/* Main content */}
+                    <Box sx={{ flex: 1, p: "14px 16px", minWidth: 0 }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.75}>
+                        <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, pr: 1 }}>
+                          {m.name}
+                        </Typography>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <Typography sx={{ fontSize: 15, fontWeight: 800, fontFamily: MONO, color: hasFail ? "#dc2626" : isDone ? "#16a34a" : C.t2, lineHeight: 1 }}>
+                            {pct}%
+                          </Typography>
+                          <Ico n="chevR" s={14} color={C.t3} />
+                        </Stack>
+                      </Stack>
+
+                      {/* Progress bar */}
+                      <Box sx={{ height: 6, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex", mb: 1 }}>
+                        <motion.div
+                          style={{ height: "100%", background: "linear-gradient(90deg,#4ade80,#16a34a)", borderRadius: "99px 0 0 99px" }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${passW}%` }}
+                          transition={{ delay: i * 0.03 + 0.1, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                        />
+                        <motion.div
+                          style={{ height: "100%", background: "linear-gradient(90deg,#f87171,#dc2626)" }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${failW}%` }}
+                          transition={{ delay: i * 0.03 + 0.2, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                        />
+                      </Box>
+
+                      {/* Stats row */}
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>
+                          {m.tests.length} tests · {m.total} steps
+                        </Typography>
+                        <Box sx={{ flex: 1 }} />
+                        {m.pass > 0 && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 99, px: 1, py: 0.2 }}>
+                            <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#16a34a" }} />
+                            <Typography sx={{ fontSize: 10, fontWeight: 700, fontFamily: MONO, color: "#16a34a" }}>{m.pass}</Typography>
+                          </Box>
+                        )}
+                        {m.fail > 0 && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, bgcolor: "#fff5f5", border: "1px solid #fca5a5", borderRadius: 99, px: 1, py: 0.2 }}>
+                            <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#dc2626" }} />
+                            <Typography sx={{ fontSize: 10, fontWeight: 700, fontFamily: MONO, color: "#dc2626" }}>{m.fail}</Typography>
+                          </Box>
+                        )}
+                        {m.pending > 0 && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, bgcolor: "#fafafa", border: `1px solid ${C.b1}`, borderRadius: 99, px: 1, py: 0.2 }}>
+                            <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: C.t3 }} />
+                            <Typography sx={{ fontSize: 10, fontWeight: 600, fontFamily: MONO, color: C.t3 }}>{m.pending}</Typography>
+                          </Box>
+                        )}
+                      </Stack>
+                    </Box>
                   </Box>
-                  <Stack direction="row" spacing={1.5} mt={1}>
-                    {m.pass > 0 && <Typography sx={{ fontSize: 10, fontFamily: MONO, color: "#16a34a" }}>✓{m.pass}</Typography>}
-                    {m.fail > 0 && <Typography sx={{ fontSize: 10, fontFamily: MONO, color: "#dc2626" }}>✗{m.fail}</Typography>}
-                    {m.pending > 0 && <Typography sx={{ fontSize: 10, fontFamily: MONO, color: C.t3 }}>·{m.pending}</Typography>}
-                  </Stack>
                 </Paper>
               </motion.div>
             );
           })}
-        </Box>
+        </Stack>
       </Box>
     </motion.div>
   );
@@ -2158,41 +2208,77 @@ function ReportView({ modules, toast }) {
         <Typography sx={{ fontWeight: 700, fontSize: 12, color: C.t3, fontFamily: MONO, letterSpacing: "0.8px", mb: 1.5 }}>
           ALL MODULES ({modList.length})
         </Typography>
-        <Stack spacing={1.5}>
+        <Stack spacing={1.25}>
           {modStats.map((m, i) => {
             const pct = m.total ? Math.round((m.pass / m.total) * 100) : 0;
             const hasFail = m.fail > 0;
             const isDone = m.pass === m.total && m.total > 0;
+            const accentColor = hasFail ? "#dc2626" : isDone ? "#16a34a" : "#e2d5c3";
+            const passW = m.total ? (m.pass / m.total) * 100 : 0;
+            const failW = m.total ? (m.fail / m.total) * 100 : 0;
             return (
               <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-                whileHover={{ x: 3 }} whileTap={{ scale: 0.99 }}>
+                whileHover={{ x: 4 }} whileTap={{ scale: 0.99 }}
+                style={{ cursor: "pointer" }}
+                onClick={() => { setSelModId(m.id); setModView(true); }}>
                 <Paper sx={{
-                  p: isMobile ? 2 : 2.5, border: `1px solid ${hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1}`,
-                  borderRadius: 3, cursor: "pointer",
-                  bgcolor: hasFail ? "#fff5f5" : isDone ? "#f0fdf4" : "background.paper",
-                  "&:hover": { boxShadow: "0 4px 20px rgba(0,0,0,0.08)" },
-                  transition: "all 0.18s",
-                }}
-                  onClick={() => { setSelModId(m.id); setModView(true); }}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
-                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>{m.name}</Typography>
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <Typography sx={{ fontSize: 14, fontWeight: 800, fontFamily: MONO, color: hasFail ? "#dc2626" : isDone ? "#16a34a" : C.t3 }}>
-                        {pct}%
-                      </Typography>
-                      <Ico n="chevR" s={16} color={C.t3} />
-                    </Stack>
-                  </Stack>
-                  <Box sx={{ height: 6, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex", mb: 1 }}>
-                    <Box sx={{ width: `${m.total ? (m.pass / m.total) * 100 : 0}%`, bgcolor: "#16a34a", borderRadius: "99px 0 0 99px" }} />
-                    <Box sx={{ width: `${m.total ? (m.fail / m.total) * 100 : 0}%`, bgcolor: "#dc2626" }} />
+                  borderRadius: 3, overflow: "hidden",
+                  border: `1px solid ${hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1}`,
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                  bgcolor: "background.paper",
+                  transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
+                  "&:hover": { boxShadow: "0 6px 24px rgba(0,0,0,0.09)", borderColor: hasFail ? "#f87171" : isDone ? "#4ade80" : C.b2 },
+                }}>
+                  <Box sx={{ display: "flex" }}>
+                    <Box sx={{ width: 4, flexShrink: 0, bgcolor: accentColor, transition: "background-color 0.2s" }} />
+                    <Box sx={{ flex: 1, p: "14px 16px", minWidth: 0 }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.75}>
+                        <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, pr: 1 }}>
+                          {m.name}
+                        </Typography>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <Typography sx={{ fontSize: 15, fontWeight: 800, fontFamily: MONO, color: hasFail ? "#dc2626" : isDone ? "#16a34a" : C.t2 }}>
+                            {pct}%
+                          </Typography>
+                          <Ico n="chevR" s={14} color={C.t3} />
+                        </Stack>
+                      </Stack>
+                      <Box sx={{ height: 6, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex", mb: 1 }}>
+                        <motion.div
+                          style={{ height: "100%", background: "linear-gradient(90deg,#4ade80,#16a34a)", borderRadius: "99px 0 0 99px" }}
+                          initial={{ width: 0 }} animate={{ width: `${passW}%` }}
+                          transition={{ delay: i * 0.03 + 0.1, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                        />
+                        <motion.div
+                          style={{ height: "100%", background: "linear-gradient(90deg,#f87171,#dc2626)" }}
+                          initial={{ width: 0 }} animate={{ width: `${failW}%` }}
+                          transition={{ delay: i * 0.03 + 0.2, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                        />
+                      </Box>
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>{m.tests.length} tests · {m.total} steps</Typography>
+                        <Box sx={{ flex: 1 }} />
+                        {m.pass > 0 && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 99, px: 1, py: 0.2 }}>
+                            <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#16a34a" }} />
+                            <Typography sx={{ fontSize: 10, fontWeight: 700, fontFamily: MONO, color: "#16a34a" }}>{m.pass}</Typography>
+                          </Box>
+                        )}
+                        {m.fail > 0 && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, bgcolor: "#fff5f5", border: "1px solid #fca5a5", borderRadius: 99, px: 1, py: 0.2 }}>
+                            <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#dc2626" }} />
+                            <Typography sx={{ fontSize: 10, fontWeight: 700, fontFamily: MONO, color: "#dc2626" }}>{m.fail}</Typography>
+                          </Box>
+                        )}
+                        {m.pending > 0 && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, bgcolor: "#fafafa", border: `1px solid ${C.b1}`, borderRadius: 99, px: 1, py: 0.2 }}>
+                            <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: C.t3 }} />
+                            <Typography sx={{ fontSize: 10, fontWeight: 600, fontFamily: MONO, color: C.t3 }}>{m.pending}</Typography>
+                          </Box>
+                        )}
+                      </Stack>
+                    </Box>
                   </Box>
-                  <Stack direction="row" spacing={2}>
-                    <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>{m.total} steps</Typography>
-                    {m.pass > 0 && <Typography sx={{ fontSize: 11, fontFamily: MONO, color: "#16a34a" }}>✓ {m.pass}</Typography>}
-                    {m.fail > 0 && <Typography sx={{ fontSize: 11, fontFamily: MONO, color: "#dc2626" }}>✗ {m.fail}</Typography>}
-                    {m.pending > 0 && <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>· {m.pending} pending</Typography>}
-                  </Stack>
                 </Paper>
               </motion.div>
             );
