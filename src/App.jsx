@@ -27,7 +27,7 @@ import {
   PersonRounded, AdminPanelSettingsRounded, TaskAltRounded,
 } from "@mui/icons-material";
 
-// ── Storage ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Storage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const store = {
   async loadAll() {
@@ -225,7 +225,7 @@ const store = {
   },
 };
 
-// ── Test Lock System ─────────────────────────────────────────────────────────────
+// â”€â”€ Test Lock System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const LOCK_TTL_MS  = 60_000;
 const HEARTBEAT_MS = 25_000;
 const lockStore = {
@@ -264,7 +264,7 @@ const lockStore = {
   },
 };
 
-// ── Seed Users ───────────────────────────────────────────────────────────────────
+// â”€â”€ Seed Users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SEED_USERS = [
   { id: "1", username: "admin", password: "admin123", role: "admin", name: "Administrator", email: "admin@testpro.io", active: true },
   { id: "2", username: "tester1", password: "test123", role: "tester", name: "Alex Johnson", email: "alex@testpro.io", active: true },
@@ -286,7 +286,7 @@ function buildModules() {
   return out;
 }
 
-// ── MUI Theme ────────────────────────────────────────────────────────────────────
+// â”€â”€ MUI Theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const muiTheme = createTheme({
   palette: {
     primary:    { main: "#ea580c", light: "#fb923c", dark: "#c2410c", contrastText: "#fff" },
@@ -410,7 +410,7 @@ const muiTheme = createTheme({
   },
 });
 
-// ── Design tokens (kept for complex components) ──────────────────────────────────
+// â”€â”€ Design tokens (kept for complex components) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = {
   bg: "#fdf5ee", s1: "#ffffff", s2: "#fef9f5", s3: "#fdf0e6",
   b1: "#f5dece", b2: "#ecc9a8", ac: "#ea580c",
@@ -421,7 +421,7 @@ const C = {
 };
 const MONO = "'JetBrains Mono', 'Fira Code', monospace";
 
-// ── Mobile detection ──────────────────────────────────────────────────────────────
+// â”€â”€ Mobile detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useIsMobile(breakpoint = 768) {
   const [mobile, setMobile] = useState(() => window.innerWidth < breakpoint);
   useEffect(() => {
@@ -433,7 +433,7 @@ function useIsMobile(breakpoint = 768) {
 }
 const MobileMenuCtx = React.createContext(null);
 
-// ── Framer Motion Variants ────────────────────────────────────────────────────────
+// â”€â”€ Framer Motion Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const pageVariants = {
   initial: { opacity: 0, y: 14, scale: 0.99 },
   animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } },
@@ -454,7 +454,7 @@ const listItem = {
   animate: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 340, damping: 30 } },
 };
 
-// ── MUI Icon Map ─────────────────────────────────────────────────────────────────
+// â”€â”€ MUI Icon Map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ICO_MAP = {
   check:  CheckRounded,
   x:      CloseRounded,
@@ -490,7 +490,7 @@ function Ico({ n, s = 15, color = "currentColor" }) {
   return <span style={{ width: s, height: s, flexShrink: 0, display: "inline-block" }} />;
 }
 
-// ── Toast (MUI Snackbar) ──────────────────────────────────────────────────────────
+// â”€â”€ Toast (MUI Snackbar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useToast() {
   const [queue, setQueue] = useState([]);
   const push = useCallback((msg, type = "info") => {
@@ -536,8 +536,8 @@ function useToast() {
   return { push, Host };
 }
 
-// ── Shared: SearchBox ─────────────────────────────────────────────────────────────
-function SearchBox({ value, onChange, placeholder = "Search…", width = 200, fullWidth = false }) {
+// â”€â”€ Shared: SearchBox â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SearchBox({ value, onChange, placeholder = "Searchâ€¦", width = 200, fullWidth = false }) {
   return (
     <TextField
       value={value}
@@ -558,7 +558,7 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 200, fu
   );
 }
 
-// ── Shared: Topbar ────────────────────────────────────────────────────────────────
+// â”€â”€ Shared: Topbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Topbar({ title, sub, children }) {
   const isMobile = useIsMobile();
   const onMenuClick = useContext(MobileMenuCtx);
@@ -594,7 +594,7 @@ function Topbar({ title, sub, children }) {
   );
 }
 
-// ── Shared: Progress Bar ──────────────────────────────────────────────────────────
+// â”€â”€ Shared: Progress Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PBar({ pct, fail }) {
   return (
     <LinearProgress
@@ -611,7 +611,7 @@ function PBar({ pct, fail }) {
   );
 }
 
-// ── Shared: ExportMenu ────────────────────────────────────────────────────────────
+// â”€â”€ Shared: ExportMenu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ExportMenu({ onCSV, onPDF }) {
   const [anchor, setAnchor] = useState(null);
   return (
@@ -639,7 +639,7 @@ function ExportMenu({ onCSV, onPDF }) {
   );
 }
 
-// ── Shared: Confirm Dialog ────────────────────────────────────────────────────────
+// â”€â”€ Shared: Confirm Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmLabel = "Delete", confirmColor = "error" }) {
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth
@@ -656,7 +656,7 @@ function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmL
   );
 }
 
-// ── Shared: FormDialog ────────────────────────────────────────────────────────────
+// â”€â”€ Shared: FormDialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function FormDialog({ open, onClose, title, subtitle, children, actions, width = 460 }) {
   const isMobile = useIsMobile();
   return (
@@ -673,7 +673,7 @@ function FormDialog({ open, onClose, title, subtitle, children, actions, width =
   );
 }
 
-// ── Login Page ────────────────────────────────────────────────────────────────────
+// â”€â”€ Login Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
@@ -825,7 +825,7 @@ function LoginPage({ users, onLogin }) {
   );
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────────────────
+// â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed, setCollapsed, locked, mobileOpen, onMobileClose, onLogout }) {
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
@@ -923,7 +923,7 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
             Modules ({modList.length})
           </Typography>
           <Box sx={{ px: 1, mb: 1, flexShrink: 0 }}>
-            <TextField value={search} onChange={e => setSearch(e.target.value)} placeholder="Search modules…"
+            <TextField value={search} onChange={e => setSearch(e.target.value)} placeholder="Search modulesâ€¦"
               size="small" fullWidth
               InputProps={{
                 startAdornment: <InputAdornment position="start"><Ico n="search" s={12} color={C.t3} /></InputAdornment>,
@@ -965,7 +965,7 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
                         primaryTypographyProps={{ fontSize: 12, fontWeight: active ? 700 : 400, noWrap: true }}
                       />
                       {st.fail > 0 && (
-                        <Chip label={`✗${st.fail}`} size="small" sx={{ height: 17, fontSize: 9, fontFamily: MONO, bgcolor: C.red, color: C.re, ml: 0.5, border: `1px solid ${alpha(C.re, 0.25)}` }} />
+                        <Chip label={`âœ—${st.fail}`} size="small" sx={{ height: 17, fontSize: 9, fontFamily: MONO, bgcolor: C.red, color: C.re, ml: 0.5, border: `1px solid ${alpha(C.re, 0.25)}` }} />
                       )}
                       {!st.fail && st.pass > 0 && (
                         <CheckCircleRounded sx={{ fontSize: 14, color: C.gr, ml: 0.5 }} />
@@ -1028,7 +1028,7 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
   );
 }
 
-// ── Chart Helpers ─────────────────────────────────────────────────────────────────
+// â”€â”€ Chart Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function polarToCart(cx, cy, r, deg) {
   const rad = ((deg - 90) * Math.PI) / 180;
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -1041,7 +1041,7 @@ function buildArcPath(cx, cy, r, start, end) {
   return `M${s.x.toFixed(2)},${s.y.toFixed(2)} A${r},${r},0,${end - start > 180 ? 1 : 0},1,${e.x.toFixed(2)},${e.y.toFixed(2)}`;
 }
 
-// ── Donut Chart ───────────────────────────────────────────────────────────────────
+// â”€â”€ Donut Chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 }) {
   const raw = pass + fail + pending;
   const cx = size / 2, cy = size / 2, r = (size - stroke) / 2 - 2;
@@ -1088,7 +1088,7 @@ function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 }
         {[{ c: "#16a34a", l: "Pass", v: pass }, { c: "#dc2626", l: "Fail", v: fail }, { c: "#e2d5c3", l: "Pending", v: pending }].map(s => (
           <Stack key={s.l} direction="row" alignItems="center" spacing={0.5}>
             <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: s.c, border: "1px solid rgba(0,0,0,0.12)", flexShrink: 0 }} />
-            <Typography sx={{ fontSize: 11, color: "#57534e", fontFamily: MONO }}>{s.l} · {s.v}</Typography>
+            <Typography sx={{ fontSize: 11, color: "#57534e", fontFamily: MONO }}>{s.l} Â· {s.v}</Typography>
           </Stack>
         ))}
       </Stack>
@@ -1096,7 +1096,7 @@ function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 }
   );
 }
 
-// ── Test Bar Chart ─────────────────────────────────────────────────────────────────
+// â”€â”€ Test Bar Chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TestBarChart({ tests }) {
   const isMobile = useIsMobile();
   return (
@@ -1134,7 +1134,7 @@ function TestBarChart({ tests }) {
   );
 }
 
-// ── Module Dashboard (shared by Dashboard + ReportView) ───────────────────────────
+// â”€â”€ Module Dashboard (shared by Dashboard + ReportView) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) {
   const isMobile = useIsMobile();
   const real = mod.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
@@ -1174,7 +1174,7 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
       th{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;padding:8px 10px;border-bottom:2px solid #f0f0f0;text-align:left}
       td{padding:8px 10px;border-bottom:1px solid #f9f9f9;font-size:13px}tr:hover td{background:#fafafa}
     </style></head><body>
-      <h1>${mod.name}</h1><p class="sub">Generated ${new Date().toLocaleString()} · ${mod.tests.length} tests · ${total} steps</p>
+      <h1>${mod.name}</h1><p class="sub">Generated ${new Date().toLocaleString()} Â· ${mod.tests.length} tests Â· ${total} steps</p>
       <div class="stats">
         <div class="stat"><div class="v" style="color:#ea580c">${total}</div><div class="l">Total</div></div>
         <div class="stat"><div class="v" style="color:#16a34a">${pass}</div><div class="l">Passed</div></div>
@@ -1210,7 +1210,7 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
             <Box>
               <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 800 }}>{mod.name}</Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", fontFamily: MONO }}>
-                {mod.tests.length} tests · {total} steps
+                {mod.tests.length} tests Â· {total} steps
               </Typography>
             </Box>
           </Stack>
@@ -1301,7 +1301,7 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
   );
 }
 
-// ── Dashboard ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Dashboard({ modules, session, onSelect, toast }) {
   const isMobile = useIsMobile();
   const modList = useMemo(() => Object.values(modules), [modules]);
@@ -1455,7 +1455,7 @@ function Dashboard({ modules, session, onSelect, toast }) {
                       {/* Stats row */}
                       <Stack direction="row" alignItems="center" spacing={1.5}>
                         <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>
-                          {m.tests.length} tests · {m.total} steps
+                          {m.tests.length} tests Â· {m.total} steps
                         </Typography>
                         <Box sx={{ flex: 1 }} />
                         {m.pass > 0 && (
@@ -1490,7 +1490,7 @@ function Dashboard({ modules, session, onSelect, toast }) {
 }
 
 
-// ── Divider Row ───────────────────────────────────────────────────────────────────
+// â”€â”€ Divider Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function DividerRow({ label }) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 0.85,
@@ -1505,7 +1505,7 @@ function DividerRow({ label }) {
   );
 }
 
-// ── Step Row ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Step Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef }) {
   const isMobile = useIsMobile();
   const rowBg = step.status === "fail" ? "#fff5f5" : step.status === "pass" ? "#f0fdf4" : isActive ? "#fff7ed" : "transparent";
@@ -1544,8 +1544,8 @@ function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, ro
           outline: isActive ? `2px solid ${C.ac}` : "none", outlineOffset: -2 }}>
         <Stack direction="row" alignItems="center" gap={1} mb={1}>
           <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.t3, minWidth: 28 }}>
-            {isActive && <Box component="span" sx={{ color: "primary.main", mr: 0.3 }}>●</Box>}
-            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
+            {isActive && <Box component="span" sx={{ color: "primary.main", mr: 0.3 }}>â—</Box>}
+            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "â€”"}
           </Typography>
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" gap={0.75} sx={{ width: 160 }}>{PassBtn}{FailBtn}</Stack>
@@ -1560,7 +1560,7 @@ function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, ro
           </Box>
         )}
         <TextField
-          value={step.remarks} multiline rows={2} placeholder="Add remarks…" fullWidth size="small"
+          value={step.remarks} multiline rows={2} placeholder="Add remarksâ€¦" fullWidth size="small"
           onChange={e => onChange(idx, "remarks", e.target.value)}
           onClick={e => e.stopPropagation()}
           InputProps={{ sx: { fontSize: 12, bgcolor: C.s2, borderRadius: 1.5 } }}
@@ -1574,7 +1574,7 @@ function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, ro
     <Box sx={{ p: "7px 10px", display: "flex", alignItems: "flex-start", borderRight: `1px solid ${C.b1}`, minHeight: 42 }}>
       {text
         ? <Typography variant="caption" sx={{ color, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12 }}>{text}</Typography>
-        : <Typography variant="caption" sx={{ color: C.t3, fontStyle: "italic", fontFamily: MONO }}>—</Typography>}
+        : <Typography variant="caption" sx={{ color: C.t3, fontStyle: "italic", fontFamily: MONO }}>â€”</Typography>}
     </Box>
   );
 
@@ -1586,14 +1586,14 @@ function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, ro
       <Box sx={{ p: "7px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${C.b1}` }}>
         {isActive && <Box sx={{ width: 4, height: 4, borderRadius: "50%", bgcolor: "primary.main", mr: 0.5, flexShrink: 0 }} />}
         <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 600, color: step.serialNo != null ? C.t2 : C.t3, fontSize: 12 }}>
-          {step.serialNo != null && step.serialNo !== "" ? step.serialNo : "—"}
+          {step.serialNo != null && step.serialNo !== "" ? step.serialNo : "â€”"}
         </Typography>
       </Box>
       {cell(step.action, C.t1)}
       {cell(step.result, C.t2)}
       <Box sx={{ p: "4px 8px", borderRight: `1px solid ${C.b1}` }}>
         <TextField
-          value={step.remarks} multiline rows={2} placeholder="Remarks…" fullWidth
+          value={step.remarks} multiline rows={2} placeholder="Remarksâ€¦" fullWidth
           onChange={e => onChange(idx, "remarks", e.target.value)}
           onClick={e => e.stopPropagation()}
           variant="standard"
@@ -1607,7 +1607,7 @@ function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, ro
   );
 }
 
-// ── Test Detail ────────────────────────────────────────────────────────────────────
+// â”€â”€ Test Detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog, toast, onBack, onFinish, modIdx, modTotal, onNav, navLocked }) {
   const isMobile = useIsMobile();
   const [steps, setSteps] = useState(test.steps);
@@ -1662,7 +1662,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     latestStepsRef.current = newSteps;
     if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
     stepsTimerRef.current = setTimeout(() => {
-      // Only persist remarks/status — structure is managed from the database.
+      // Only persist remarks/status â€” structure is managed from the database.
         const changedStep = changedStepId
           ? latestStepsRef.current.find(s => s.id === changedStepId)
           : null;
@@ -1679,7 +1679,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     const ns = [...steps]; const newStatus = ns[i].status === status ? "pending" : status;
     ns[i] = { ...ns[i], status: newStatus }; setSteps(ns); commit(ns, ns[i].id);
     if (newStatus !== "pending") {
-      addLog({ ts: Date.now(), user: session.name, action: `${mod.name} › ${test.name} · Step ${ns[i].serialNo} → ${newStatus.toUpperCase()}`, type: newStatus });
+      addLog({ ts: Date.now(), user: session.name, action: `${mod.name} â€º ${test.name} Â· Step ${ns[i].serialNo} â†’ ${newStatus.toUpperCase()}`, type: newStatus });
     }
     if (newStatus !== "pending") {
       const updVisible = ns.map((s, idx) => ({ ...s, _i: idx })).filter(s => {
@@ -1713,7 +1713,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     const stepRows = steps.map(s => s.isDivider
       ? `<tr><td colspan="5" style="padding:6px 12px;background:#fff7ed;font-size:11px;font-family:monospace;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px">${s.action}</td></tr>`
       : `<tr style="background:${sb(s.status)}">
-          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${s.serialNo||"—"}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${s.serialNo||"â€”"}</td>
           <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${s.action||""}</td>
           <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${s.result||""}</td>
           <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${s.remarks||""}</td>
@@ -1722,9 +1722,9 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     ).join("");
     const pass = steps.filter(s => !s.isDivider && s.status === "pass").length;
     const fail = steps.filter(s => !s.isDivider && s.status === "fail").length;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${mod.name} — ${test.name}</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${mod.name} â€” ${test.name}</title>
       <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;color:#111;padding:28px;font-size:14px}h1{font-size:20px;font-weight:700;margin-bottom:4px}.meta{font-family:monospace;font-size:11px;color:#6b7280;margin-bottom:20px}@page{margin:14mm}@media print{body{padding:0}}</style></head>
-      <body><h1>${mod.name} › ${test.name}</h1><div class="meta">✓${pass} ✗${fail} ⟳${steps.length-pass-fail} · Generated ${new Date().toLocaleString()}</div>
+      <body><h1>${mod.name} â€º ${test.name}</h1><div class="meta">âœ“${pass} âœ—${fail} âŸ³${steps.length-pass-fail} Â· Generated ${new Date().toLocaleString()}</div>
       <table style="width:100%;border-collapse:collapse">
         <thead><tr>
           ${["S.No","Action","Expected Result","Remarks","Status"].map(h=>`<th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">${h}</th>`).join("")}
@@ -1767,9 +1767,9 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexShrink: 0, bgcolor: C.s2, border: `1px solid ${C.b1}`, borderRadius: 5, px: 1.5, py: 0.5 }}>
             {!isMobile && (
               <>
-                <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.gr }}>{pass}✓</Typography>
-                {fail > 0 && <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.re }}>{fail}✗</Typography>}
-                <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>{pending}…</Typography>
+                <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.gr }}>{pass}âœ“</Typography>
+                {fail > 0 && <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.re }}>{fail}âœ—</Typography>}
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>{pending}â€¦</Typography>
                 <Box sx={{ width: 1, height: 12, bgcolor: C.b2 }} />
               </>
             )}
@@ -1808,7 +1808,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} style={{ marginLeft: "auto", display: isMobile ? "block" : undefined, flex: isMobile ? 1 : undefined }}>
               <Button variant="contained" color="success" size={isMobile ? "medium" : "small"}
                 startIcon={<Ico n="check" s={13} />}
-                onClick={() => { commit(steps); addLog({ ts: Date.now(), user: session.name, action: `Finished ${mod.name} › ${test.name}`, type: "info" }); toast("Test finished — progress saved & lock released", "success"); onFinish(steps); }}
+                onClick={() => { commit(steps); addLog({ ts: Date.now(), user: session.name, action: `Finished ${mod.name} â€º ${test.name}`, type: "info" }); toast("Test finished â€” progress saved & lock released", "success"); onFinish(steps); }}
                 sx={{ fontWeight: 700, boxShadow: "0 3px 10px rgba(22,163,74,.28)", ...(isMobile ? { width: "100%", py: 1.2, fontSize: 14 } : {}) }}>
                 Finish Test
               </Button>
@@ -1829,7 +1829,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
               }}
             />
           ))}
-          <SearchBox value={search} onChange={setSearch} placeholder="Search steps…" width={isMobile ? "100%" : 170} fullWidth={isMobile} />
+          <SearchBox value={search} onChange={setSearch} placeholder="Search stepsâ€¦" width={isMobile ? "100%" : 170} fullWidth={isMobile} />
         </Stack>
       </Box>
 
@@ -1864,7 +1864,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   );
 }
 
-// ── Module View ────────────────────────────────────────────────────────────────────
+// â”€â”€ Module View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, onLockChange, modIdx, modTotal }) {
   const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null);
@@ -1896,7 +1896,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
       const testId = activeTestIdRef.current; if (!testId) return;
       try {
         // Fix #4: supabase.storageUrl does not exist on the JS v2 client.
-        // Fix #5: sendBeacon always POSTs — use fetch with keepalive: true for DELETE.
+        // Fix #5: sendBeacon always POSTs â€” use fetch with keepalive: true for DELETE.
         const baseUrl = supabase.supabaseUrl || "";
         if (baseUrl) {
           const url = `${baseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
@@ -1955,9 +1955,9 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
       style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar
         title={mod.name}
-        sub={`${mod.tests.length} tests · ${mod.tests.flatMap(t => t.steps).filter(s => s.status === "pass").length} passed`}
+        sub={`${mod.tests.length} tests Â· ${mod.tests.flatMap(t => t.steps).filter(s => s.status === "pass").length} passed`}
       >
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" width={190} />}
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search testsâ€¦" width={190} />}
         {!isMobile && modIdx !== undefined && (
           <Stack direction="row" alignItems="center" gap={0.5}>
             <IconButton size="small" onClick={() => onNav?.(-1)} disabled={modIdx === 0 || uiLocked}><Ico n="chevL" s={14} /></IconButton>
@@ -1969,7 +1969,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
 
       {isMobile && (
         <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" fullWidth />
+          <SearchBox value={search} onChange={setSearch} placeholder="Search testsâ€¦" fullWidth />
         </Box>
       )}
 
@@ -2024,8 +2024,8 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
                         {t.description && <Typography variant="caption" sx={{ color: C.t2, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</Typography>}
                         <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>
                           {t.steps.length} steps
-                          {pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 0.75, fontWeight: 700 }}>· {pass}✓</Box>}
-                          {fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5, fontWeight: 700 }}>{fail}✗</Box>}
+                          {pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 0.75, fontWeight: 700 }}>Â· {pass}âœ“</Box>}
+                          {fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5, fontWeight: 700 }}>{fail}âœ—</Box>}
                           {pending > 0 && <Box component="span" sx={{ color: C.t3, ml: 0.5 }}>{pending} pending</Box>}
                         </Typography>
                       </Box>
@@ -2078,7 +2078,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
   );
 }
 
-// ── Report View ───────────────────────────────────────────────────────────────────
+// â”€â”€ Report View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ReportView({ modules, toast }) {
   const isMobile = useIsMobile();
   const modList = useMemo(() => Object.values(modules), [modules]);
@@ -2256,7 +2256,7 @@ function ReportView({ modules, toast }) {
                         />
                       </Box>
                       <Stack direction="row" alignItems="center" spacing={1.5}>
-                        <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>{m.tests.length} tests · {m.total} steps</Typography>
+                        <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>{m.tests.length} tests Â· {m.total} steps</Typography>
                         <Box sx={{ flex: 1 }} />
                         {m.pass > 0 && (
                           <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 99, px: 1, py: 0.2 }}>
@@ -2290,7 +2290,7 @@ function ReportView({ modules, toast }) {
 }
 
 
-// ── Audit View ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Audit View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function AuditView({ log }) {
   const isMobile = useIsMobile();
   const fmt = ts => new Date(ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -2328,7 +2328,7 @@ function AuditView({ log }) {
   );
 }
 
-// ── Users Panel ────────────────────────────────────────────────────────────────────
+// â”€â”€ Users Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function UsersPanel({ users, session, saveUsers, addLog, toast }) {
   const isMobile = useIsMobile();
   const [modal, setModal] = useState(null);
@@ -2381,8 +2381,8 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-      <Topbar title="User Management" sub={`${users.length} users · ${users.filter(u => u.active).length} active`}>
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search users…" />}
+      <Topbar title="User Management" sub={`${users.length} users Â· ${users.filter(u => u.active).length} active`}>
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search usersâ€¦" />}
         <Button variant="contained" size="small" startIcon={<Ico n="plus" s={13} />} onClick={openAdd}>
           {isMobile ? "" : "Add User"}
         </Button>
@@ -2390,7 +2390,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
 
       {isMobile && (
         <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search users…" fullWidth />
+          <SearchBox value={search} onChange={setSearch} placeholder="Search usersâ€¦" fullWidth />
         </Box>
       )}
 
@@ -2426,7 +2426,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
                             border: `1px solid ${u.active ? alpha(C.gr,0.25) : alpha(C.re,0.25)}` }} />
                       </Stack>
                       <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", display: "block" }}>
-                        @{u.username}{u.email ? ` · ${u.email}` : ""}
+                        @{u.username}{u.email ? ` Â· ${u.email}` : ""}
                       </Typography>
                     </Box>
                     {isMobile && (
@@ -2509,7 +2509,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
   );
 }
 
-// ── Loading Spinner ──────────────────────────────────────────────────────────────
+// â”€â”€ Loading Spinner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LoadingSpinner({ size = 56 }) {
   const [progress, setProgress] = useState(10);
   useEffect(() => {
@@ -2562,7 +2562,7 @@ function LoadingSpinner({ size = 56 }) {
   );
 }
 
-// ── App ────────────────────────────────────────────────────────────────────────────
+// â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function App() {
   const [users, setUsers] = useState(null);
   const [modules, setModules] = useState(null);
@@ -2590,7 +2590,7 @@ export default function App() {
     })();
   }, []); // eslint-disable-line
 
-  // saveMods: in-memory only — structure is managed from the database directly.
+  // saveMods: in-memory only â€” structure is managed from the database directly.
   const saveMods = useCallback((m) => { setModules(m); }, []);
 
   const addLog = useCallback(async e => {
@@ -2695,7 +2695,7 @@ export default function App() {
       <CssBaseline />
       <Box sx={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default", flexDirection: "column", gap: 2 }}>
         <LoadingSpinner />
-        <Typography variant="body2" sx={{ fontFamily: MONO, color: "text.disabled", mt: 1 }}>Loading TestPro…</Typography>
+        <Typography variant="body2" sx={{ fontFamily: MONO, color: "text.disabled", mt: 1 }}>Loading TestProâ€¦</Typography>
       </Box>
     </ThemeProvider>
   );
