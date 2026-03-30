@@ -850,16 +850,22 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
 
   const navRow = (item) => {
     const active = view === item.id;
+    const navBlocked = locked && !active;
     return (
-      <motion.div key={item.id} whileHover={{ x: active ? 0 : 3 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
-        <ListItemButton
-          onClick={() => { setView(item.id); if (onMobileClose) onMobileClose(); }}
-          sx={{
-            borderRadius: 2.5, mx: 0.75, mb: 0.4, py: 0.85,
-            bgcolor: active ? "primary.main" : "transparent",
-            color: active ? "#fff" : "text.secondary",
-            boxShadow: active ? "0 4px 14px rgba(234,88,12,0.35)" : "none",
-            "&:hover": { bgcolor: active ? "primary.dark" : alpha("#000", 0.04) },
+      <Tooltip key={item.id} title={navBlocked ? "Finish the current test first" : ""} placement="right" arrow>
+        <motion.div whileHover={{ x: active || navBlocked ? 0 : 3 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
+          <ListItemButton
+            onClick={() => { if (navBlocked) return; setView(item.id); if (onMobileClose) onMobileClose(); }}
+            disabled={navBlocked}
+            sx={{
+              borderRadius: 2.5, mx: 0.75, mb: 0.4, py: 0.85,
+              bgcolor: active ? "primary.main" : "transparent",
+              color: active ? "#fff" : "text.secondary",
+              boxShadow: active ? "0 4px 14px rgba(234,88,12,0.35)" : "none",
+              opacity: navBlocked ? 0.4 : 1,
+              cursor: navBlocked ? "not-allowed" : "pointer",
+              "&.Mui-disabled": { opacity: 0.4 },
+              "&:hover": { bgcolor: active ? "primary.dark" : alpha("#000", 0.04) },
             transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
           }}
         >
@@ -870,7 +876,8 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
             <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 700 : 500 }} />
           )}
         </ListItemButton>
-      </motion.div>
+        </motion.div>
+      </Tooltip>
     );
   };
 
@@ -1106,7 +1113,7 @@ function TestBarChart({ tests }) {
             transition={{ delay: i * 0.035, type: "spring", stiffness: 320, damping: 28 }}>
             <Stack spacing={0.4}>
               <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#1c0f07", maxWidth: isMobile ? 120 : 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#1c0f07", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {t.name}
                 </Typography>
                 <Typography sx={{ fontSize: 11, fontFamily: MONO, color: "#57534e" }}>{pass}/{real.length}</Typography>
@@ -1190,8 +1197,8 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <Box sx={{ p: isMobile ? 2 : 3 }}>
-        {/* Header */}
+      <Box sx={{ p: isMobile ? 2 : 3, overflow: "hidden" }}>
+        {/* Header */
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap" gap={1.5}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
             <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}>
@@ -1327,7 +1334,7 @@ function Dashboard({ modules, session, onSelect }) {
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <Box sx={{ p: isMobile ? 2 : 3 }}>
+      <Box sx={{ p: isMobile ? 2 : 3, overflow: "hidden" }}>
         <Topbar title="Dashboard" sub={`${modList.length} modules`} />
 
         {/* Module selector + live donut */}
@@ -1935,6 +1942,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
 
             return (
               <motion.div key={t.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
+                style={{ borderRadius: 12 }}
                 whileHover={!cardBlocked ? { y: -3, boxShadow: "0 10px 28px rgba(0,0,0,0.09)" } : {}} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
                 <Paper elevation={0} sx={{ border: `1px solid ${borderColor}`, borderRadius: 3, overflow: "hidden",
                   bgcolor: bgColor, opacity: lockedByOther ? 0.88 : blockedByMyLock ? 0.5 : 1,
@@ -2064,7 +2072,7 @@ function ReportView({ modules, toast }) {
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <Box sx={{ p: isMobile ? 2 : 3 }}>
+      <Box sx={{ p: isMobile ? 2 : 3, overflow: "hidden" }}>
         <Topbar title="Test Report" sub={`${totalSteps.toLocaleString()} steps across ${modList.length} modules`}>
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Button variant="outlined" size="small" startIcon={<Ico n="down" s={15} />} onClick={exportAllCSV}
@@ -2650,7 +2658,7 @@ export default function App() {
                 sx={{ bgcolor: "transparent", height: 58 }}
                 onChange={(_, newVal) => {
                   if (newVal === "_modules") { setMobileDrawerOpen(true); return; }
-                  if (hasLock && newVal !== view) { toast("Finish the current test first", "error"); return; }
+                  if (hasLock && newVal !== "_modules" && newVal !== view) { toast("Finish the current test first", "error"); return; }
                   setView(newVal);
                 }}>
                 {mobileNavItems.map(item => (
