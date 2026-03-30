@@ -614,141 +614,30 @@ function PBar({ pct, fail }) {
 // ── Shared: ExportMenu ────────────────────────────────────────────────────────────
 function ExportMenu({ onCSV, onPDF }) {
   const [anchor, setAnchor] = useState(null);
-  const open = Boolean(anchor);
   return (
     <>
-      <motion.div
-        whileHover={{ scale: 1.04 }}
-        whileTap={{ scale: 0.96 }}
-        transition={{ type: "spring", stiffness: 340, damping: 22 }}
-        style={{ display: "inline-block" }}
+      <Button size="small" variant="outlined" startIcon={<FileDownloadRounded sx={{ fontSize: 15 }} />}
+        onClick={e => setAnchor(e.currentTarget)}
+        sx={{ borderColor: C.b2, color: "text.secondary", bgcolor: "background.paper",
+          "&:hover": { borderColor: C.ac, color: "primary.main", bgcolor: alpha("#ea580c", 0.04) } }}
       >
-        <Button
-          size="small"
-          variant="contained"
-          endIcon={
-            <motion.span
-              animate={{ rotate: open ? 180 : 0 }}
-              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-              style={{ display: "flex", alignItems: "center" }}
-            >
-              <KeyboardArrowDownRounded sx={{ fontSize: 16 }} />
-            </motion.span>
-          }
-          onClick={e => setAnchor(e.currentTarget)}
-          sx={{
-            background: open
-              ? "linear-gradient(135deg, #c2410c 0%, #ea580c 100%)"
-              : "linear-gradient(135deg, #ea580c 0%, #fb923c 100%)",
-            color: "#fff",
-            fontWeight: 700,
-            letterSpacing: 0.3,
-            boxShadow: open
-              ? "0 4px 18px rgba(194,65,12,0.45)"
-              : "0 3px 12px rgba(234,88,12,0.35)",
-            border: "none",
-            "&:hover": {
-              background: "linear-gradient(135deg, #c2410c 0%, #ea580c 100%)",
-              boxShadow: "0 6px 22px rgba(194,65,12,0.45)",
-              transform: "none",
-            },
-            transition: "background 0.22s, box-shadow 0.22s",
-          }}
-        >
-          <FileDownloadRounded sx={{ fontSize: 15, mr: 0.6 }} />
-          Export
-        </Button>
-      </motion.div>
-
-      <Menu
-        anchorEl={anchor}
-        open={open}
-        onClose={() => setAnchor(null)}
-        PaperProps={{
-          sx: {
-            borderRadius: 2.5,
-            boxShadow: "0 12px 40px rgba(0,0,0,0.14)",
-            border: `1px solid ${C.b1}`,
-            minWidth: 188,
-            mt: 0.75,
-            overflow: "visible",
-            "&::before": {
-              content: '""',
-              display: "block",
-              position: "absolute",
-              top: -6,
-              right: 16,
-              width: 11,
-              height: 11,
-              bgcolor: "background.paper",
-              border: `1px solid ${C.b1}`,
-              borderBottom: "none",
-              borderRight: "none",
-              transform: "rotate(45deg)",
-              zIndex: 1,
-            },
-          },
-        }}
+        Export
+      </Button>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}
+        PaperProps={{ sx: { borderRadius: 2.5, boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: `1px solid ${C.b1}`, minWidth: 160 } }}
         transformOrigin={{ horizontal: "right", vertical: "top" }}
         anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
       >
-        <motion.div
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.16 }}
-        >
-          <Box sx={{ px: 0.5, py: 0.5 }}>
-            <MenuItem
-              onClick={() => { onCSV(); setAnchor(null); }}
-              sx={{
-                gap: 1.5, fontSize: 13, borderRadius: 1.5, px: 1.25, py: 1,
-                fontWeight: 600, color: "#0f766e",
-                "&:hover": { bgcolor: "rgba(20,184,166,0.09)" },
-              }}
-            >
-              <Box sx={{
-                width: 30, height: 30, borderRadius: 1.5,
-                bgcolor: "rgba(20,184,166,0.12)",
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              }}>
-                <FileDownloadRounded sx={{ fontSize: 15, color: "#0d9488" }} />
-              </Box>
-              <Box>
-                <Box sx={{ fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>Export CSV</Box>
-                <Box sx={{ fontSize: 10, color: "#57534e", fontFamily: '"'JetBrains Mono'",monospace', mt: 0.25 }}>Spreadsheet format</Box>
-              </Box>
-            </MenuItem>
-
-            <Divider sx={{ my: 0.5, borderColor: C.b1 }} />
-
-            <MenuItem
-              onClick={() => { onPDF(); setAnchor(null); }}
-              sx={{
-                gap: 1.5, fontSize: 13, borderRadius: 1.5, px: 1.25, py: 1,
-                fontWeight: 600, color: "#ea580c",
-                "&:hover": { bgcolor: "rgba(234,88,12,0.08)" },
-              }}
-            >
-              <Box sx={{
-                width: 30, height: 30, borderRadius: 1.5,
-                bgcolor: "rgba(234,88,12,0.10)",
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              }}>
-                <AssessmentRounded sx={{ fontSize: 15, color: "#ea580c" }} />
-              </Box>
-              <Box>
-                <Box sx={{ fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>Export PDF</Box>
-                <Box sx={{ fontSize: 10, color: "#57534e", fontFamily: '"'JetBrains Mono'",monospace', mt: 0.25 }}>Printable report</Box>
-              </Box>
-            </MenuItem>
-          </Box>
-        </motion.div>
+        <MenuItem onClick={() => { onCSV(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13, borderRadius: 1.5, mx: 0.5, my: 0.25 }}>
+          <FileDownloadRounded sx={{ fontSize: 16, color: C.t3 }} /> Export CSV
+        </MenuItem>
+        <MenuItem onClick={() => { onPDF(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13, borderRadius: 1.5, mx: 0.5, my: 0.25 }}>
+          <AssessmentRounded sx={{ fontSize: 16, color: C.t3 }} /> Export PDF
+        </MenuItem>
       </Menu>
     </>
   );
 }
-
-
 
 // ── Shared: Confirm Dialog ────────────────────────────────────────────────────────
 function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmLabel = "Delete", confirmColor = "error" }) {
@@ -1267,88 +1156,37 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
   };
 
   const exportPDF = () => {
-    const passRate = total ? Math.round((pass / total) * 100) : 0;
-    const overallStatus = fail > 0 ? "Needs Attention" : pass === total && total > 0 ? "All Passed" : "In Progress";
-    const statusColor = fail > 0 ? "#dc2626" : pass === total && total > 0 ? "#16a34a" : "#d97706";
-
-    const testRows = mod.tests.map((t, idx) => {
+    const testRows = mod.tests.map(t => {
       const rs = t.steps.filter(s => !s.isDivider);
       const tp = rs.filter(s => s.status === "pass").length;
       const tf = rs.filter(s => s.status === "fail").length;
-      const tpend = rs.length - tp - tf;
       const pct = rs.length ? Math.round((tp / rs.length) * 100) : 0;
-      const rsc = tf > 0 ? "#dc2626" : tp === rs.length && rs.length > 0 ? "#16a34a" : "#d97706";
-      const rsb = tf > 0 ? "#fff5f5" : tp === rs.length && rs.length > 0 ? "#f0fdf4" : "#fffbeb";
-      const rb  = idx % 2 === 0 ? "#ffffff" : "#fdf9f6";
-      return `<tr style="background:${rb}">
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;font-family:'JetBrains Mono',monospace;font-size:11px;color:#a8a29e">${t.serialNo || "—"}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;font-weight:600;color:#1c0f07;font-size:13px">${t.name}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center"><span style="background:#f0fdf4;color:#16a34a;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace">${tp}</span></td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center">${tf > 0 ? `<span style="background:#fff5f5;color:#dc2626;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace">${tf}</span>` : `<span style="color:#d1ccc7">—</span>`}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center">${tpend > 0 ? `<span style="background:#fffbeb;color:#d97706;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace">${tpend}</span>` : `<span style="color:#d1ccc7">—</span>`}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center"><span style="background:${rsb};color:${rsc};padding:4px 12px;border-radius:99px;font-size:12px;font-weight:800;font-family:'JetBrains Mono',monospace">${pct}%</span></td>
-      </tr>`;
+      const col = tf > 0 ? "#dc2626" : tp === rs.length && rs.length > 0 ? "#16a34a" : "#9ca3af";
+      return `<tr><td>${t.serialNo || ""}</td><td>${t.name}</td><td style="color:#16a34a;font-weight:700">${tp}</td><td style="color:#dc2626;font-weight:700">${tf}</td><td style="color:#d97706">${rs.length - tp - tf}</td><td style="color:${col};font-weight:800">${pct}%</td></tr>`;
     }).join("");
-
-    const html = `<!DOCTYPE html><html lang="en"><head>
-  <meta charset="utf-8"><title>${mod.name} — TestPro Report</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Plus Jakarta Sans',sans-serif;background:#fdf5ee;color:#1c0f07;padding:32px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    @media print{body{padding:0;background:#fff}@page{margin:18mm 14mm;size:A4}}
-    .hdr{display:flex;align-items:flex-start;padding-bottom:18px;border-bottom:2.5px solid #ea580c;margin-bottom:24px}
-    .logo{width:38px;height:38px;background:linear-gradient(135deg,#ea580c,#fb923c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;flex-shrink:0;margin-right:12px}
-    .brand{font-size:11px;font-weight:700;color:#ea580c;letter-spacing:1.2px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
-    .title{font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.15}
-    .meta{font-size:10px;color:#a8a29e;font-family:'JetBrains Mono',monospace;margin-top:5px}
-    .sg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-    .sc{border-radius:12px;padding:16px 14px;border:1.5px solid}
-    .sn{font-size:30px;font-weight:800;font-family:'JetBrains Mono',monospace}
-    .sl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;margin-top:5px;color:#a8a29e}
-    .sb{background:#fff;border-radius:12px;padding:14px 18px;margin-bottom:20px;border:1.5px solid #f5dece;display:flex;align-items:center;gap:18px;border-left:4px solid}
-    .sr{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:800}
-    .slbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#a8a29e;font-family:'JetBrains Mono',monospace;margin-bottom:10px}
-    .tw{background:#fff;border-radius:12px;overflow:hidden;border:1.5px solid #f5dece;box-shadow:0 2px 12px rgba(0,0,0,0.05)}
-    table{width:100%;border-collapse:collapse}
-    thead th{background:#fdf0e6;padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#a8a29e;font-family:'JetBrains Mono',monospace;text-align:left;border-bottom:1.5px solid #f5dece}
-    .ft{text-align:center;margin-top:28px;font-size:10px;color:#a8a29e;font-family:'JetBrains Mono',monospace;padding-top:16px;border-top:1px solid #f5dece}
-  </style></head><body>
-  <div class="hdr">
-    <div class="logo">T</div>
-    <div>
-      <div class="brand">TestPro · Module Report</div>
-      <div class="title">${mod.name}</div>
-      <div class="meta">Generated ${new Date().toLocaleString()} · ${mod.tests.length} tests · ${total} steps</div>
-    </div>
-  </div>
-  <div class="sg">
-    <div class="sc" style="border-color:rgba(234,88,12,.22);background:linear-gradient(145deg,#fff7ed,#fff)"><div class="sn" style="color:#ea580c">${total}</div><div class="sl">Total Steps</div></div>
-    <div class="sc" style="border-color:rgba(22,163,74,.22);background:linear-gradient(145deg,#f0fdf4,#fff)"><div class="sn" style="color:#16a34a">${pass}</div><div class="sl">Passed</div></div>
-    <div class="sc" style="border-color:rgba(220,38,38,.22);background:linear-gradient(145deg,#fff5f5,#fff)"><div class="sn" style="color:#dc2626">${fail}</div><div class="sl">Failed</div></div>
-    <div class="sc" style="border-color:rgba(217,119,6,.22);background:linear-gradient(145deg,#fffbeb,#fff)"><div class="sn" style="color:#d97706">${pending}</div><div class="sl">Pending</div></div>
-  </div>
-  <div class="sb" style="border-left-color:${statusColor}">
-    <div class="sr" style="color:${statusColor}">${passRate}%</div>
-    <div>
-      <div style="font-size:15px;font-weight:700;color:${statusColor}">${overallStatus}</div>
-      <div style="font-size:12px;color:#57534e;margin-top:3px">${pass} of ${total} steps passed · ${mod.tests.length} tests</div>
-    </div>
-  </div>
-  <div class="slbl">Test Results</div>
-  <div class="tw">
-    <table>
-      <thead><tr><th>#</th><th>Test Name</th><th style="text-align:center">Pass</th><th style="text-align:center">Fail</th><th style="text-align:center">Pending</th><th style="text-align:center">Pass Rate</th></tr></thead>
-      <tbody>${testRows}</tbody>
-    </table>
-  </div>
-  <div class="ft">TestPro · ${mod.name} · ${new Date().toLocaleString()}</div>
-</body></html>`;
-    const w = window.open("", "_blank");
-    w.document.write(html); w.document.close();
-    w.focus(); setTimeout(() => w.print(), 600);
-    toast("PDF ready — use browser print dialog to save", "info");
-  };;
+    const html = `<!DOCTYPE html><html><head><title>${mod.name}</title><style>
+      body{font-family:'Segoe UI',sans-serif;padding:28px;color:#1c0f07;background:#fff}
+      h1{font-size:22px;font-weight:800;margin:0 0 4px}p.sub{font-size:12px;color:#9ca3af;margin:0 0 20px}
+      .stats{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+      .stat{background:#f9f9f9;border-radius:10px;padding:14px 20px;min-width:100px;text-align:center;border:1px solid #eee}
+      .stat .v{font-size:28px;font-weight:800}.stat .l{font-size:11px;color:#9ca3af;margin-top:2px;text-transform:uppercase;letter-spacing:1px}
+      table{width:100%;border-collapse:collapse}
+      th{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;padding:8px 10px;border-bottom:2px solid #f0f0f0;text-align:left}
+      td{padding:8px 10px;border-bottom:1px solid #f9f9f9;font-size:13px}tr:hover td{background:#fafafa}
+    </style></head><body>
+      <h1>${mod.name}</h1><p class="sub">Generated ${new Date().toLocaleString()} · ${mod.tests.length} tests · ${total} steps</p>
+      <div class="stats">
+        <div class="stat"><div class="v" style="color:#ea580c">${total}</div><div class="l">Total</div></div>
+        <div class="stat"><div class="v" style="color:#16a34a">${pass}</div><div class="l">Passed</div></div>
+        <div class="stat"><div class="v" style="color:#dc2626">${fail}</div><div class="l">Failed</div></div>
+        <div class="stat"><div class="v" style="color:#d97706">${pending}</div><div class="l">Pending</div></div>
+        <div class="stat"><div class="v" style="color:#1c0f07">${total ? Math.round((pass/total)*100) : 0}%</div><div class="l">Pass Rate</div></div>
+      </div>
+      <table><thead><tr><th>#</th><th>Test</th><th>Pass</th><th>Fail</th><th>Pending</th><th>Rate</th></tr></thead><tbody>${testRows}</tbody></table>
+    </body></html>`;
+    const w = window.open("", "_blank"); w.document.write(html); w.document.close();
+    w.focus(); setTimeout(() => w.print(), 500); toast("PDF ready", "info");
+  };
 
   const statCards = [
     { label: "Total Steps", value: total, color: "#ea580c", bg: "#fff7ed", border: "rgba(234,88,12,0.15)" },
@@ -1870,88 +1708,31 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   };
 
   const exportPDF = () => {
-    const realS = steps.filter(s => !s.isDivider);
-    const passC = realS.filter(s => s.status === "pass").length;
-    const failC = realS.filter(s => s.status === "fail").length;
-    const pendC = realS.length - passC - failC;
-    const pctV  = realS.length ? Math.round((passC / realS.length) * 100) : 0;
-    const overallStatus = failC > 0 ? "Needs Attention" : passC === realS.length && realS.length > 0 ? "All Passed" : "In Progress";
-    const statusColor = failC > 0 ? "#dc2626" : passC === realS.length && realS.length > 0 ? "#16a34a" : "#d97706";
-
-    const stepRows = steps.map((s, idx) => {
-      if (s.isDivider) return `<tr><td colspan="5" style="padding:8px 14px;background:linear-gradient(90deg,#fff7ed,#fff);font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid #f5dece;border-left:3px solid #ea580c">${s.action || "Section"}</td></tr>`;
-      const rb  = s.status === "fail" ? "#fff8f8" : s.status === "pass" ? "#f8fffe" : idx % 2 === 0 ? "#fff" : "#fdf9f6";
-      const sBg = s.status === "pass" ? "#f0fdf4" : s.status === "fail" ? "#fff5f5" : "#f3f4f6";
-      const sC  = s.status === "pass" ? "#16a34a" : s.status === "fail" ? "#dc2626" : "#9ca3af";
-      return `<tr style="background:${rb}">
-        <td style="padding:9px 12px;border-bottom:1px solid #f5dece;font-family:'JetBrains Mono',monospace;font-size:11px;color:#a8a29e;text-align:center">${s.serialNo != null && s.serialNo !== "" ? s.serialNo : "—"}</td>
-        <td style="padding:9px 12px;border-bottom:1px solid #f5dece;font-size:12px;color:#1c0f07;font-weight:500">${(s.action || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>
-        <td style="padding:9px 12px;border-bottom:1px solid #f5dece;font-size:12px;color:#57534e">${(s.result || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>
-        <td style="padding:9px 12px;border-bottom:1px solid #f5dece;font-size:12px;color:#57534e">${s.remarks ? (s.remarks || "").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '<span style="color:#d1ccc7">—</span>'}</td>
-        <td style="padding:9px 12px;border-bottom:1px solid #f5dece;text-align:center"><span style="background:${sBg};color:${sC};padding:3px 10px;border-radius:99px;font-size:10px;font-weight:800;font-family:'JetBrains Mono',monospace">${s.status.toUpperCase()}</span></td>
-      </tr>`;
-    }).join("");
-
-    const html = `<!DOCTYPE html><html lang="en"><head>
-  <meta charset="utf-8"><title>${mod.name} — ${test.name}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Plus Jakarta Sans',sans-serif;background:#fdf5ee;color:#1c0f07;padding:32px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    @media print{body{padding:0;background:#fff}@page{margin:16mm 12mm;size:A4}tr{page-break-inside:avoid}}
-    .hdr{display:flex;align-items:flex-start;padding-bottom:18px;border-bottom:2.5px solid #ea580c;margin-bottom:20px}
-    .logo{width:36px;height:36px;background:linear-gradient(135deg,#ea580c,#fb923c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;flex-shrink:0;margin-right:12px}
-    .brand{font-size:11px;font-weight:700;color:#ea580c;letter-spacing:1.2px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
-    .bc{font-size:12px;color:#a8a29e}
-    .title{font-size:22px;font-weight:800;letter-spacing:-0.3px}
-    .meta{font-size:10px;color:#a8a29e;font-family:'JetBrains Mono',monospace;margin-top:4px}
-    .sr{display:flex;gap:10px;margin-bottom:18px}
-    .sp{border-radius:10px;padding:12px 16px;border:1.5px solid;flex:1;text-align:center}
-    .sn{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace}
-    .sl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;margin-top:4px;color:#a8a29e}
-    .smb{background:#fff;border-radius:10px;padding:12px 16px;margin-bottom:18px;border:1.5px solid #f5dece;display:flex;align-items:center;gap:16px;border-left:4px solid}
-    .slbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#a8a29e;font-family:'JetBrains Mono',monospace;margin-bottom:8px}
-    .tw{background:#fff;border-radius:12px;overflow:hidden;border:1.5px solid #f5dece;box-shadow:0 2px 10px rgba(0,0,0,0.05)}
-    table{width:100%;border-collapse:collapse}
-    thead th{background:#fdf0e6;padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#a8a29e;font-family:'JetBrains Mono',monospace;text-align:left;border-bottom:1.5px solid #f5dece}
-    .ft{text-align:center;margin-top:24px;font-size:10px;color:#a8a29e;font-family:'JetBrains Mono',monospace;padding-top:14px;border-top:1px solid #f5dece}
-  </style></head><body>
-  <div class="hdr">
-    <div class="logo">T</div>
-    <div>
-      <div class="brand">TestPro · Step Report</div>
-      <div class="bc">${mod.name}</div>
-      <div class="title">${test.name}</div>
-      <div class="meta">Generated ${new Date().toLocaleString()} · ${realS.length} steps</div>
-    </div>
-  </div>
-  <div class="sr">
-    <div class="sp" style="border-color:rgba(234,88,12,.22);background:linear-gradient(145deg,#fff7ed,#fff)"><div class="sn" style="color:#ea580c">${realS.length}</div><div class="sl">Total</div></div>
-    <div class="sp" style="border-color:rgba(22,163,74,.22);background:linear-gradient(145deg,#f0fdf4,#fff)"><div class="sn" style="color:#16a34a">${passC}</div><div class="sl">Passed</div></div>
-    <div class="sp" style="border-color:rgba(220,38,38,.22);background:linear-gradient(145deg,#fff5f5,#fff)"><div class="sn" style="color:#dc2626">${failC}</div><div class="sl">Failed</div></div>
-    <div class="sp" style="border-color:rgba(217,119,6,.22);background:linear-gradient(145deg,#fffbeb,#fff)"><div class="sn" style="color:#d97706">${pendC}</div><div class="sl">Pending</div></div>
-  </div>
-  <div class="smb" style="border-left-color:${statusColor}">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:800;color:${statusColor}">${pctV}%</div>
-    <div>
-      <div style="font-size:14px;font-weight:700;color:${statusColor}">${overallStatus}</div>
-      <div style="font-size:12px;color:#57534e;margin-top:2px">${passC} of ${realS.length} steps passed</div>
-    </div>
-  </div>
-  <div class="slbl">Step Details</div>
-  <div class="tw">
-    <table>
-      <thead><tr><th style="text-align:center;width:52px">S.No</th><th>Action</th><th>Expected Result</th><th>Remarks</th><th style="text-align:center;width:90px">Status</th></tr></thead>
-      <tbody>${stepRows}</tbody>
-    </table>
-  </div>
-  <div class="ft">TestPro · ${mod.name} › ${test.name} · ${new Date().toLocaleString()}</div>
-</body></html>`;
-    const w = window.open("", "_blank");
-    w.document.write(html); w.document.close();
-    w.focus(); setTimeout(() => w.print(), 600);
-    toast("PDF ready — use browser print dialog to save", "info");
-  };;
+    const sc = s => s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
+    const sb = s => s === "pass" ? "#f0fdf4" : s === "fail" ? "#fff5f5" : "#ffffff";
+    const stepRows = steps.map(s => s.isDivider
+      ? `<tr><td colspan="5" style="padding:6px 12px;background:#fff7ed;font-size:11px;font-family:monospace;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px">${s.action}</td></tr>`
+      : `<tr style="background:${sb(s.status)}">
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${s.serialNo||"—"}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${s.action||""}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#4b5563">${s.result||""}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280">${s.remarks||""}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:10px;font-weight:700;text-align:center;color:${sc(s.status)}">${s.status.toUpperCase()}</td>
+        </tr>`
+    ).join("");
+    const pass = steps.filter(s => !s.isDivider && s.status === "pass").length;
+    const fail = steps.filter(s => !s.isDivider && s.status === "fail").length;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${mod.name} — ${test.name}</title>
+      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;color:#111;padding:28px;font-size:14px}h1{font-size:20px;font-weight:700;margin-bottom:4px}.meta{font-family:monospace;font-size:11px;color:#6b7280;margin-bottom:20px}@page{margin:14mm}@media print{body{padding:0}}</style></head>
+      <body><h1>${mod.name} › ${test.name}</h1><div class="meta">✓${pass} ✗${fail} ⟳${steps.length-pass-fail} · Generated ${new Date().toLocaleString()}</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          ${["S.No","Action","Expected Result","Remarks","Status"].map(h=>`<th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">${h}</th>`).join("")}
+        </tr></thead><tbody>${stepRows}</tbody>
+      </table></body></html>`;
+    const w = window.open("", "_blank"); w.document.write(html); w.document.close();
+    w.focus(); setTimeout(() => w.print(), 500); toast("PDF ready", "info");
+  };
 
   const realSteps = steps.filter(s => !s.isDivider);
   const pass = realSteps.filter(s => s.status === "pass").length;
@@ -2329,93 +2110,6 @@ function ReportView({ modules, toast }) {
     toast("All data exported", "success");
   };
 
-  const exportAllPDF = () => {
-    const allModStats = modList.map(m => {
-      const all = m.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
-      const pass = all.filter(s => s.status === "pass").length;
-      const fail = all.filter(s => s.status === "fail").length;
-      const pct  = all.length ? Math.round((pass / all.length) * 100) : 0;
-      const rsc  = fail > 0 ? "#dc2626" : pass === all.length && all.length > 0 ? "#16a34a" : "#d97706";
-      const rsb  = fail > 0 ? "#fff5f5" : pass === all.length && all.length > 0 ? "#f0fdf4" : "#fffbeb";
-      return { ...m, pass, fail, pending: all.length - pass - fail, total: all.length, pct, rsc, rsb };
-    });
-    const tPass    = allModStats.reduce((a, m) => a + m.pass, 0);
-    const tFail    = allModStats.reduce((a, m) => a + m.fail, 0);
-    const tTotal   = allModStats.reduce((a, m) => a + m.total, 0);
-    const tPending = tTotal - tPass - tFail;
-    const tPct     = tTotal ? Math.round((tPass / tTotal) * 100) : 0;
-    const overallStatus = tFail > 0 ? "Needs Attention" : tPass === tTotal && tTotal > 0 ? "All Passed" : "In Progress";
-    const statusColor   = tFail > 0 ? "#dc2626" : tPass === tTotal && tTotal > 0 ? "#16a34a" : "#d97706";
-
-    const modRows = allModStats.map((m, idx) => `
-      <tr style="background:${idx % 2 === 0 ? "#fff" : "#fdf9f6"}">
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;font-weight:600;color:#1c0f07;font-size:13px">${m.name}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:#57534e">${m.tests.length}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center"><span style="background:#f0fdf4;color:#16a34a;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace">${m.pass}</span></td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center">${m.fail > 0 ? `<span style="background:#fff5f5;color:#dc2626;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace">${m.fail}</span>` : `<span style="color:#d1ccc7">—</span>`}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center">${m.pending > 0 ? `<span style="background:#fffbeb;color:#d97706;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace">${m.pending}</span>` : `<span style="color:#d1ccc7">—</span>`}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f5dece;text-align:center"><span style="background:${m.rsb};color:${m.rsc};padding:4px 12px;border-radius:99px;font-size:12px;font-weight:800;font-family:'JetBrains Mono',monospace">${m.pct}%</span></td>
-      </tr>`).join("");
-
-    const html = `<!DOCTYPE html><html lang="en"><head>
-  <meta charset="utf-8"><title>TestPro — Full Report</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Plus Jakarta Sans',sans-serif;background:#fdf5ee;color:#1c0f07;padding:32px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    @media print{body{padding:0;background:#fff}@page{margin:18mm 14mm;size:A4}}
-    .hdr{display:flex;align-items:flex-start;padding-bottom:18px;border-bottom:2.5px solid #ea580c;margin-bottom:24px}
-    .logo{width:38px;height:38px;background:linear-gradient(135deg,#ea580c,#fb923c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;flex-shrink:0;margin-right:12px}
-    .brand{font-size:11px;font-weight:700;color:#ea580c;letter-spacing:1.2px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
-    .title{font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.15}
-    .meta{font-size:10px;color:#a8a29e;font-family:'JetBrains Mono',monospace;margin-top:5px}
-    .sg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-    .sc{border-radius:12px;padding:16px 14px;border:1.5px solid}
-    .sn{font-size:30px;font-weight:800;font-family:'JetBrains Mono',monospace}
-    .sl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;margin-top:5px;color:#a8a29e}
-    .smb{background:#fff;border-radius:12px;padding:14px 18px;margin-bottom:20px;border:1.5px solid #f5dece;display:flex;align-items:center;gap:18px;border-left:4px solid}
-    .slbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#a8a29e;font-family:'JetBrains Mono',monospace;margin-bottom:10px}
-    .tw{background:#fff;border-radius:12px;overflow:hidden;border:1.5px solid #f5dece;box-shadow:0 2px 12px rgba(0,0,0,0.05)}
-    table{width:100%;border-collapse:collapse}
-    thead th{background:#fdf0e6;padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#a8a29e;font-family:'JetBrains Mono',monospace;text-align:left;border-bottom:1.5px solid #f5dece}
-    .ft{text-align:center;margin-top:28px;font-size:10px;color:#a8a29e;font-family:'JetBrains Mono',monospace;padding-top:16px;border-top:1px solid #f5dece}
-  </style></head><body>
-  <div class="hdr">
-    <div class="logo">T</div>
-    <div>
-      <div class="brand">TestPro · Full Report</div>
-      <div class="title">All Modules</div>
-      <div class="meta">Generated ${new Date().toLocaleString()} · ${modList.length} modules · ${tTotal} steps</div>
-    </div>
-  </div>
-  <div class="sg">
-    <div class="sc" style="border-color:rgba(234,88,12,.22);background:linear-gradient(145deg,#fff7ed,#fff)"><div class="sn" style="color:#ea580c">${tTotal}</div><div class="sl">Total Steps</div></div>
-    <div class="sc" style="border-color:rgba(22,163,74,.22);background:linear-gradient(145deg,#f0fdf4,#fff)"><div class="sn" style="color:#16a34a">${tPass}</div><div class="sl">Passed</div></div>
-    <div class="sc" style="border-color:rgba(220,38,38,.22);background:linear-gradient(145deg,#fff5f5,#fff)"><div class="sn" style="color:#dc2626">${tFail}</div><div class="sl">Failed</div></div>
-    <div class="sc" style="border-color:rgba(217,119,6,.22);background:linear-gradient(145deg,#fffbeb,#fff)"><div class="sn" style="color:#d97706">${tPending}</div><div class="sl">Pending</div></div>
-  </div>
-  <div class="smb" style="border-left-color:${statusColor}">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:800;color:${statusColor}">${tPct}%</div>
-    <div>
-      <div style="font-size:15px;font-weight:700;color:${statusColor}">${overallStatus}</div>
-      <div style="font-size:12px;color:#57534e;margin-top:3px">${tPass} of ${tTotal} steps passed across ${modList.length} modules</div>
-    </div>
-  </div>
-  <div class="slbl">Module Breakdown</div>
-  <div class="tw">
-    <table>
-      <thead><tr><th>Module</th><th style="text-align:center">Tests</th><th style="text-align:center">Pass</th><th style="text-align:center">Fail</th><th style="text-align:center">Pending</th><th style="text-align:center">Pass Rate</th></tr></thead>
-      <tbody>${modRows}</tbody>
-    </table>
-  </div>
-  <div class="ft">TestPro · Full Report · ${new Date().toLocaleString()}</div>
-</body></html>`;
-    const w = window.open("", "_blank");
-    w.document.write(html); w.document.close();
-    w.focus(); setTimeout(() => w.print(), 600);
-    toast("Full PDF report ready", "info");
-  };;
-
   if (modView && selMod) {
     return (
       <ModuleDashboard
@@ -2432,7 +2126,12 @@ function ReportView({ modules, toast }) {
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
       <Topbar title="Test Report" sub={`${totalSteps.toLocaleString()} steps across ${modList.length} modules`}>
-          <ExportMenu onCSV={exportAllCSV} onPDF={exportAllPDF} />
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button variant="outlined" size="small" startIcon={<Ico n="down" s={15} />} onClick={exportAllCSV}
+              sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>
+              {!isMobile && "Export All CSV"}
+            </Button>
+          </motion.div>
         </Topbar>
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", p: isMobile ? 2 : 3 }}>
 
