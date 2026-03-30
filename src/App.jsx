@@ -1021,167 +1021,415 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
   );
 }
 
-// ── Dashboard ─────────────────────────────────────────────────────────────────────
-function Dashboard({ modules, session, onSelect }) {
+// ── Chart Helpers ─────────────────────────────────────────────────────────────────
+function polarToCart(cx, cy, r, deg) {
+  const rad = ((deg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+function buildArcPath(cx, cy, r, start, end) {
+  if (end - start >= 360) end = start + 359.9;
+  if (end - start <= 0.01) return null;
+  const s = polarToCart(cx, cy, r, start);
+  const e = polarToCart(cx, cy, r, end);
+  return `M${s.x.toFixed(2)},${s.y.toFixed(2)} A${r},${r},0,${end - start > 180 ? 1 : 0},1,${e.x.toFixed(2)},${e.y.toFixed(2)}`;
+}
+
+// ── Donut Chart ───────────────────────────────────────────────────────────────────
+function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 }) {
+  const raw = pass + fail + pending;
+  const cx = size / 2, cy = size / 2, r = (size - stroke) / 2 - 2;
+  const pct = raw > 0 ? Math.round((pass / raw) * 100) : 0;
+  const segs = [];
+  let cur = 0;
+  const addSeg = (val, color) => {
+    if (val <= 0 || raw === 0) return;
+    const deg = (val / raw) * 360;
+    const d = buildArcPath(cx, cy, r, cur, cur + deg);
+    if (d) segs.push({ d, color });
+    cur += deg;
+  };
+  addSeg(pass, "#16a34a");
+  addSeg(fail, "#dc2626");
+  addSeg(pending, "#e2d5c3");
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1.5 }}>
+      <Box sx={{ position: "relative", width: size, height: size }}>
+        <svg width={size} height={size}>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f5dece" strokeWidth={stroke} />
+          {segs.map((seg, i) => (
+            <motion.path key={i} d={seg.d} fill="none" stroke={seg.color}
+              strokeWidth={stroke - 1} strokeLinecap="butt"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: 0.8, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
+            />
+          ))}
+        </svg>
+        <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.35, type: "spring", stiffness: 360, damping: 24 }}>
+            <Typography sx={{ fontSize: size * 0.165, fontWeight: 800, color: "#1c0f07", lineHeight: 1, textAlign: "center" }}>
+              {pct}%
+            </Typography>
+            <Typography sx={{ fontSize: size * 0.07, color: "#a8a29e", fontFamily: MONO, textAlign: "center" }}>
+              PASS
+            </Typography>
+          </motion.div>
+        </Box>
+      </Box>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "center" }}>
+        {[{ c: "#16a34a", l: "Pass", v: pass }, { c: "#dc2626", l: "Fail", v: fail }, { c: "#e2d5c3", l: "Pending", v: pending }].map(s => (
+          <Stack key={s.l} direction="row" alignItems="center" spacing={0.5}>
+            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: s.c, border: "1px solid rgba(0,0,0,0.12)", flexShrink: 0 }} />
+            <Typography sx={{ fontSize: 11, color: "#57534e", fontFamily: MONO }}>{s.l} · {s.v}</Typography>
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+// ── Test Bar Chart ─────────────────────────────────────────────────────────────────
+function TestBarChart({ tests }) {
   const isMobile = useIsMobile();
-  const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  return (
+    <Stack spacing={1.5}>
+      {tests.map((t, i) => {
+        const real = t.steps.filter(s => !s.isDivider);
+        const pass = real.filter(s => s.status === "pass").length;
+        const fail = real.filter(s => s.status === "fail").length;
+        const total = real.length || 1;
+        const passW = (pass / total) * 100;
+        const failW = (fail / total) * 100;
+        return (
+          <motion.div key={t.id} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.035, type: "spring", stiffness: 320, damping: 28 }}>
+            <Stack spacing={0.4}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#1c0f07", maxWidth: isMobile ? 120 : 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t.name}
+                </Typography>
+                <Typography sx={{ fontSize: 11, fontFamily: MONO, color: "#57534e" }}>{pass}/{real.length}</Typography>
+              </Stack>
+              <Box sx={{ height: 7, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex" }}>
+                <motion.div style={{ height: "100%", background: "#16a34a" }}
+                  initial={{ width: 0 }} animate={{ width: `${passW}%` }}
+                  transition={{ delay: i * 0.035 + 0.2, duration: 0.7, ease: [0.16, 1, 0.3, 1] }} />
+                <motion.div style={{ height: "100%", background: "#dc2626" }}
+                  initial={{ width: 0 }} animate={{ width: `${failW}%` }}
+                  transition={{ delay: i * 0.035 + 0.3, duration: 0.7, ease: [0.16, 1, 0.3, 1] }} />
+              </Box>
+            </Stack>
+          </motion.div>
+        );
+      })}
+    </Stack>
+  );
+}
 
-  const modList = useMemo(() => Object.values(modules), [modules]);
-  const modStats = useMemo(() => modList.map(m => {
-    const all = m.tests.flatMap(t => t.steps);
-    const pass = all.filter(s => s.status === "pass").length;
-    const fail = all.filter(s => s.status === "fail").length;
-    return { ...m, pass, fail, total: all.length, testCount: m.tests.length };
-  }), [modList]);
+// ── Module Dashboard (shared by Dashboard + ReportView) ───────────────────────────
+function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) {
+  const isMobile = useIsMobile();
+  const real = mod.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
+  const pass = real.filter(s => s.status === "pass").length;
+  const fail = real.filter(s => s.status === "fail").length;
+  const pending = real.filter(s => s.status === "pending").length;
+  const total = real.length;
 
-  const total = modStats.reduce((a, m) => a + m.total, 0);
-  const totalPass = modStats.reduce((a, m) => a + m.pass, 0);
-  const totalFail = modStats.reduce((a, m) => a + m.fail, 0);
-  const pending = total - totalPass - totalFail;
+  const exportCSV = () => {
+    const rows = [["Module", "Test", "Step", "Action", "Expected Result", "Remarks", "Status"]];
+    mod.tests.forEach(t => t.steps.forEach(s => {
+      if (s.isDivider) return;
+      rows.push([`"${mod.name}"`, `"${t.name}"`, s.serialNo || "", `"${(s.action || "").replace(/"/g, "'")}"`, `"${(s.result || "").replace(/"/g, "'")}"`, `"${(s.remarks || "").replace(/"/g, "'")}"`, s.status]);
+    }));
+    const b = new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b);
+    a.download = `${mod.name.replace(/\s+/g, "_")}_report.csv`; a.click();
+    toast("CSV exported", "success");
+  };
 
-  const filtered = useMemo(() => {
-    let l = modStats.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
-    if (filter === "active") l = l.filter(m => m.pass + m.fail > 0 && m.pass + m.fail < m.total);
-    else if (filter === "pass") l = l.filter(m => m.pass === m.total && m.total > 0);
-    else if (filter === "fail") l = l.filter(m => m.fail > 0);
-    else if (filter === "empty") l = l.filter(m => m.total === 0 || (m.pass + m.fail === 0));
-    return l;
-  }, [modStats, filter, search]);
+  const exportPDF = () => {
+    const testRows = mod.tests.map(t => {
+      const rs = t.steps.filter(s => !s.isDivider);
+      const tp = rs.filter(s => s.status === "pass").length;
+      const tf = rs.filter(s => s.status === "fail").length;
+      const pct = rs.length ? Math.round((tp / rs.length) * 100) : 0;
+      const col = tf > 0 ? "#dc2626" : tp === rs.length && rs.length > 0 ? "#16a34a" : "#9ca3af";
+      return `<tr><td>${t.serialNo || ""}</td><td>${t.name}</td><td style="color:#16a34a;font-weight:700">${tp}</td><td style="color:#dc2626;font-weight:700">${tf}</td><td style="color:#d97706">${rs.length - tp - tf}</td><td style="color:${col};font-weight:800">${pct}%</td></tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html><head><title>${mod.name}</title><style>
+      body{font-family:'Segoe UI',sans-serif;padding:28px;color:#1c0f07;background:#fff}
+      h1{font-size:22px;font-weight:800;margin:0 0 4px}p.sub{font-size:12px;color:#9ca3af;margin:0 0 20px}
+      .stats{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+      .stat{background:#f9f9f9;border-radius:10px;padding:14px 20px;min-width:100px;text-align:center;border:1px solid #eee}
+      .stat .v{font-size:28px;font-weight:800}.stat .l{font-size:11px;color:#9ca3af;margin-top:2px;text-transform:uppercase;letter-spacing:1px}
+      table{width:100%;border-collapse:collapse}
+      th{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;padding:8px 10px;border-bottom:2px solid #f0f0f0;text-align:left}
+      td{padding:8px 10px;border-bottom:1px solid #f9f9f9;font-size:13px}tr:hover td{background:#fafafa}
+    </style></head><body>
+      <h1>${mod.name}</h1><p class="sub">Generated ${new Date().toLocaleString()} · ${mod.tests.length} tests · ${total} steps</p>
+      <div class="stats">
+        <div class="stat"><div class="v" style="color:#ea580c">${total}</div><div class="l">Total</div></div>
+        <div class="stat"><div class="v" style="color:#16a34a">${pass}</div><div class="l">Passed</div></div>
+        <div class="stat"><div class="v" style="color:#dc2626">${fail}</div><div class="l">Failed</div></div>
+        <div class="stat"><div class="v" style="color:#d97706">${pending}</div><div class="l">Pending</div></div>
+        <div class="stat"><div class="v" style="color:#1c0f07">${total ? Math.round((pass/total)*100) : 0}%</div><div class="l">Pass Rate</div></div>
+      </div>
+      <table><thead><tr><th>#</th><th>Test</th><th>Pass</th><th>Fail</th><th>Pending</th><th>Rate</th></tr></thead><tbody>${testRows}</tbody></table>
+    </body></html>`;
+    const w = window.open("", "_blank"); w.document.write(html); w.document.close();
+    w.focus(); setTimeout(() => w.print(), 500); toast("PDF ready", "info");
+  };
 
   const statCards = [
-    { label: "Total Steps", value: total, color: "primary.main", bgColor: "#fff7ed", borderColor: alpha("#ea580c", 0.2), icon: <LayersRounded sx={{ fontSize: 22, color: "#ea580c" }} />, sub: `${modList.length} modules` },
-    { label: "Passed", value: totalPass, color: "success.main", bgColor: "#f0fdf4", borderColor: alpha("#16a34a", 0.2), icon: <CheckCircleRounded sx={{ fontSize: 22, color: "#16a34a" }} />, sub: `${total ? Math.round((totalPass / total) * 100) : 0}% rate` },
-    { label: "Failed", value: totalFail, color: "error.main", bgColor: "#fff5f5", borderColor: alpha("#dc2626", 0.2), icon: <CancelRounded sx={{ fontSize: 22, color: "#dc2626" }} />, sub: `${modStats.filter(m => m.fail > 0).length} modules` },
-    { label: "Pending", value: pending, color: "warning.main", bgColor: "#fffbeb", borderColor: alpha("#d97706", 0.2), icon: <RefreshRounded sx={{ fontSize: 22, color: "#d97706" }} />, sub: `${modStats.filter(m => m.pass + m.fail === m.total && m.total > 0).length} complete` },
+    { label: "Total Steps", value: total, color: "#ea580c", bg: "#fff7ed", border: "rgba(234,88,12,0.15)" },
+    { label: "Passed", value: pass, color: "#16a34a", bg: "#f0fdf4", border: "rgba(22,163,74,0.15)" },
+    { label: "Failed", value: fail, color: "#dc2626", bg: "#fff5f5", border: "rgba(220,38,38,0.15)" },
+    { label: "Pending", value: pending, color: "#d97706", bg: "#fffbeb", border: "rgba(217,119,6,0.15)" },
   ];
 
   return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-      <Topbar title="Dashboard" sub={`Welcome back, ${session.name}`}>
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" />}
-      </Topbar>
-
-      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2.5 }}>
-        {/* Search on mobile */}
-        {isMobile && <Box sx={{ mb: 1.5 }}><SearchBox value={search} onChange={setSearch} placeholder="Search modules…" fullWidth /></Box>}
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      <Box sx={{ p: isMobile ? 2 : 3 }}>
+        {/* Header */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap" gap={1.5}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}>
+              <IconButton onClick={onBack} sx={{ bgcolor: alpha("#ea580c", 0.06), color: "primary.main", "&:hover": { bgcolor: alpha("#ea580c", 0.12) } }}>
+                <Ico n="back" s={18} />
+              </IconButton>
+            </motion.div>
+            <Box>
+              <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 800 }}>{mod.name}</Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", fontFamily: MONO }}>
+                {mod.tests.length} tests · {total} steps
+              </Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1} flexWrap="wrap">
+            <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
+            {showExecute && (
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                <Button variant="contained" onClick={onExecute} endIcon={<Ico n="chevR" s={16} />}
+                  sx={{ fontWeight: 700, boxShadow: "0 3px 10px rgba(234,88,12,.28)" }}>
+                  Execute Tests
+                </Button>
+              </motion.div>
+            )}
+          </Stack>
+        </Stack>
 
         {/* Stat cards */}
-        <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? 1 : 1.5, mb: isMobile ? 2 : 2.5 }}>
-          {statCards.map((card, i) => (
-            <motion.div key={card.label} custom={i} variants={cardVariants} initial="initial" animate="animate">
-              <motion.div whileHover={{ y: -4, boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
-                <Paper elevation={0} sx={{
-                  p: isMobile ? 1.5 : 2, borderRadius: 3, overflow: "hidden",
-                  border: `1px solid ${card.borderColor}`,
-                  bgcolor: card.bgColor,
-                  cursor: "default",
-                  position: "relative",
-                }}>
-                  <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, bgcolor: card.color, opacity: 0.7, borderRadius: "3px 3px 0 0" }} />
-                  <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={0.5}>
-                    <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", display: "block" }}>
-                      {card.label}
-                    </Typography>
-                    {!isMobile && card.icon}
-                  </Stack>
-                  <Typography variant="h4" fontWeight={800} sx={{ color: card.color, lineHeight: 1.1, mb: 0.5 }}>{card.value.toLocaleString()}</Typography>
-                  <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO }}>{card.sub}</Typography>
-                </Paper>
-              </motion.div>
+        <Box sx={{ display: "flex", gap: 1.5, mb: 3, flexWrap: "wrap" }}>
+          {statCards.map((c, i) => (
+            <motion.div key={c.label} custom={i} variants={cardVariants} initial="initial" animate="animate"
+              style={{ flex: "1 1 100px", minWidth: 90 }}>
+              <Paper sx={{ p: isMobile ? 1.5 : 2, bgcolor: c.bg, border: `1px solid ${c.border}`, textAlign: "center", borderRadius: 3 }}>
+                <Typography sx={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, color: c.color, lineHeight: 1 }}>
+                  {c.value.toLocaleString()}
+                </Typography>
+                <Typography sx={{ fontSize: 10, color: "text.secondary", fontFamily: MONO, mt: 0.5, letterSpacing: "0.5px" }}>
+                  {c.label.toUpperCase()}
+                </Typography>
+              </Paper>
             </motion.div>
           ))}
         </Box>
 
-        {/* Filter bar */}
-        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
-          <Typography variant="body2" fontWeight={700} sx={{ color: "text.primary" }}>
-            Modules{" "}
-            <Box component="span" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 400, fontSize: 12 }}>({filtered.length})</Box>
-          </Typography>
-          <Stack direction="row" gap={0.5} flexWrap="wrap">
-            {[["all","All"],["active","In Progress"],["pass","All Pass"],["fail","Has Failures"],["empty","Not Started"]].map(([k,l]) => (
-              <Chip key={k} label={l} size="small" clickable
-                onClick={() => setFilter(k)}
-                sx={{
-                  fontFamily: MONO, fontSize: 10, height: 26,
-                  bgcolor: filter === k ? "primary.main" : "transparent",
-                  color: filter === k ? "#fff" : "text.secondary",
-                  border: `1px solid ${filter === k ? "transparent" : C.b1}`,
-                  fontWeight: filter === k ? 700 : 500,
-                  boxShadow: filter === k ? "0 2px 8px rgba(234,88,12,0.30)" : "none",
-                  "&:hover": { bgcolor: filter === k ? "primary.dark" : alpha("#000", 0.04) },
-                  transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
-                }}
-              />
-            ))}
-          </Stack>
-        </Stack>
+        {/* Charts row */}
+        <Box sx={{ display: "flex", gap: 2, flexWrap: isMobile ? "wrap" : "nowrap", mb: 3 }}>
+          {/* Donut */}
+          <Paper sx={{ p: 3, border: `1px solid ${C.b1}`, borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center", minWidth: isMobile ? "100%" : 220, flex: "0 0 auto" }}>
+            <DonutChart pass={pass} fail={fail} pending={pending} size={isMobile ? 140 : 170} stroke={18} />
+          </Paper>
+          {/* Bar Chart */}
+          <Paper sx={{ p: 3, border: `1px solid ${C.b1}`, borderRadius: 3, flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 2, color: C.t2, fontFamily: MONO, letterSpacing: "0.5px" }}>
+              TEST PROGRESS
+            </Typography>
+            <Box sx={{ maxHeight: 300, overflowY: "auto", pr: 0.5 }}>
+              <TestBarChart tests={mod.tests} />
+            </Box>
+          </Paper>
+        </Box>
 
-        {/* Module cards */}
-        <Stack gap={isMobile ? 1 : 1.25}>
-          {filtered.map((m, i) => {
-            const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
-            const passW = m.total ? (m.pass / m.total) * 100 : 0;
-            const failW = m.total ? (m.fail / m.total) * 100 : 0;
-            const isDone = m.pass === m.total && m.total > 0;
-            const hasFail = m.fail > 0;
-            const borderColor = hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1;
+        {/* Test detail cards */}
+        <Typography sx={{ fontWeight: 700, fontSize: 12, color: C.t3, fontFamily: MONO, letterSpacing: "0.8px", mb: 1.5 }}>
+          ALL TESTS ({mod.tests.length})
+        </Typography>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+          {mod.tests.map((t, i) => {
+            const rs = t.steps.filter(s => !s.isDivider);
+            const tp = rs.filter(s => s.status === "pass").length;
+            const tf = rs.filter(s => s.status === "fail").length;
+            const pct = rs.length ? Math.round((tp / rs.length) * 100) : 0;
+            const isDone = tp === rs.length && rs.length > 0;
+            const hasFail = tf > 0;
+            const bc = hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1;
             return (
-              <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-                whileHover={{ y: -3, boxShadow: "0 12px 32px rgba(0,0,0,0.10)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
-                <Paper elevation={0} sx={{
-                  border: `1px solid ${borderColor}`, borderRadius: 3, overflow: "hidden",
-                  transition: "border-color 0.2s, box-shadow 0.2s",
-                  bgcolor: hasFail ? "rgba(255,245,245,0.6)" : isDone ? "rgba(240,253,244,0.6)" : "background.paper",
-                }}>
-                  <Box sx={{ p: isMobile ? "12px 14px" : "14px 18px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }}
-                    onClick={() => onSelect(m.id)}>
-                    {/* Status dot */}
-                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                      bgcolor: hasFail ? C.re : isDone ? C.gr : m.pass > 0 ? C.am : C.b2,
-                      boxShadow: hasFail ? `0 0 0 3px ${alpha(C.re,0.15)}` : isDone ? `0 0 0 3px ${alpha(C.gr,0.15)}` : "none",
-                    }} />
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography fontWeight={700} sx={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</Typography>
-                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>
-                        {m.testCount} tests · {m.total} steps
-                        {m.pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 1, fontWeight: 700 }}>✓{m.pass}</Box>}
-                        {m.fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5, fontWeight: 700 }}>✗{m.fail}</Box>}
-                        {m.total - m.pass - m.fail > 0 && <Box component="span" sx={{ color: "text.disabled", ml: 0.5 }}>·{m.total - m.pass - m.fail}</Box>}
-                      </Typography>
-                    </Box>
-                    <Chip label={`${pct}%`} size="small" sx={{
-                      fontFamily: MONO, fontWeight: 800, fontSize: 11, height: 24,
-                      bgcolor: pct === 100 ? alpha(C.gr, 0.12) : hasFail ? alpha(C.re, 0.10) : alpha("#ea580c", 0.10),
-                      color: pct === 100 ? C.gr : hasFail ? C.re : "primary.main",
-                      border: `1px solid ${pct === 100 ? alpha(C.gr, 0.25) : hasFail ? alpha(C.re, 0.25) : alpha("#ea580c", 0.25)}`,
-                    }} />
-                    <ChevronRightRounded sx={{ fontSize: 18, color: C.t3 }} />
+              <motion.div key={t.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
+                style={{ flex: "1 1 180px", minWidth: 160, maxWidth: 260 }}>
+                <Paper sx={{ p: 2, border: `1px solid ${bc}`, borderRadius: 2.5, bgcolor: hasFail ? "#fff5f5" : isDone ? "#f0fdf4" : "background.paper" }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.t1, mb: 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 10, fontFamily: MONO, color: C.t3, mb: 1 }}>
+                    {rs.length} steps
+                  </Typography>
+                  <Box sx={{ height: 5, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex", mb: 1 }}>
+                    <Box sx={{ width: `${(tp / Math.max(rs.length, 1)) * 100}%`, bgcolor: "#16a34a", borderRadius: "99px 0 0 99px" }} />
+                    <Box sx={{ width: `${(tf / Math.max(rs.length, 1)) * 100}%`, bgcolor: "#dc2626" }} />
                   </Box>
-                  {/* Dual-color progress strip */}
-                  <Box sx={{ height: 4, display: "flex", bgcolor: C.s3 }}>
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.7, ease: [0.4,0,0.2,1] }}
-                      style={{ background: `linear-gradient(90deg, #22c55e, #16a34a)`, minWidth: 0 }} />
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.7, ease: [0.4,0,0.2,1], delay: 0.1 }}
-                      style={{ background: `linear-gradient(90deg, #f87171, #dc2626)`, minWidth: 0 }} />
-                  </Box>
+                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: hasFail ? "#dc2626" : isDone ? "#16a34a" : C.t3, fontFamily: MONO }}>
+                    {pct}%
+                  </Typography>
                 </Paper>
               </motion.div>
             );
           })}
-          {filtered.length === 0 && (
-            <Box sx={{ textAlign: "center", py: 8, color: "text.disabled" }}>
-              <LayersRounded sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
-              <Typography sx={{ fontFamily: MONO, fontSize: 13 }}>No modules match.</Typography>
-            </Box>
-          )}
-        </Stack>
+        </Box>
       </Box>
     </motion.div>
   );
 }
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────────
+function Dashboard({ modules, session, onSelect }) {
+  const isMobile = useIsMobile();
+  const modList = useMemo(() => Object.values(modules), [modules]);
+  const [selModId, setSelModId] = useState(() => modList[0]?.id || "");
+  const [modView, setModView] = useState(false);
+
+  const selMod = modules[selModId];
+  const selReal = selMod ? selMod.tests.flatMap(t => t.steps.filter(s => !s.isDivider)) : [];
+  const selPass = selReal.filter(s => s.status === "pass").length;
+  const selFail = selReal.filter(s => s.status === "fail").length;
+  const selPending = selReal.length - selPass - selFail;
+
+  const modStats = useMemo(() => modList.map(m => {
+    const all = m.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
+    const pass = all.filter(s => s.status === "pass").length;
+    const fail = all.filter(s => s.status === "fail").length;
+    return { ...m, pass, fail, pending: all.length - pass - fail, total: all.length };
+  }), [modList]);
+
+  if (modView && selMod) {
+    return (
+      <ModuleDashboard
+        mod={selMod}
+        onBack={() => setModView(false)}
+        onExecute={() => onSelect(selModId)}
+        toast={() => {}}
+        showExecute={true}
+      />
+    );
+  }
+
+  return (
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      <Box sx={{ p: isMobile ? 2 : 3 }}>
+        <Topbar title="Dashboard" sub={`${modList.length} modules`} />
+
+        {/* Module selector + live donut */}
+        <AnimatePresence mode="wait">
+          <motion.div key={selModId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.25 }}>
+            <Paper sx={{ p: isMobile ? 2 : 3, border: `1px solid ${C.b1}`, borderRadius: 3, mb: 3 }}>
+              <Stack direction={isMobile ? "column" : "row"} alignItems={isMobile ? "stretch" : "center"} justifyContent="space-between" gap={3}>
+                {/* Left: selector + stats */}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <FormControl fullWidth size="small" sx={{ mb: 2.5 }}>
+                    <InputLabel sx={{ fontFamily: MONO, fontSize: 13 }}>Select Module</InputLabel>
+                    <Select value={selModId} label="Select Module"
+                      onChange={e => setSelModId(e.target.value)}
+                      sx={{ borderRadius: 2.5, fontFamily: MONO, fontSize: 13 }}>
+                      {modList.map(m => (
+                        <MenuItem key={m.id} value={m.id} sx={{ fontFamily: MONO, fontSize: 13 }}>
+                          {m.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {selMod && (
+                    <Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.t1, mb: 1.5 }}>
+                        {selMod.name}
+                      </Typography>
+                      <TestBarChart tests={selMod.tests} />
+                      <Box sx={{ mt: 2 }}>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                          <Button variant="outlined" fullWidth onClick={() => setModView(true)}
+                            endIcon={<Ico n="chevR" s={16} />}
+                            sx={{ borderColor: C.b2, color: "primary.main", fontWeight: 700, borderRadius: 2.5 }}>
+                            View Full Dashboard
+                          </Button>
+                        </motion.div>
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+                {/* Right: Donut */}
+                {selMod && (
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <DonutChart pass={selPass} fail={selFail} pending={selPending} size={isMobile ? 140 : 180} stroke={20} />
+                  </Box>
+                )}
+              </Stack>
+            </Paper>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Module grid */}
+        <Typography sx={{ fontWeight: 700, fontSize: 12, color: C.t3, fontFamily: MONO, letterSpacing: "0.8px", mb: 1.5 }}>
+          ALL MODULES ({modList.length})
+        </Typography>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+          {modStats.map((m, i) => {
+            const pct = m.total ? Math.round((m.pass / m.total) * 100) : 0;
+            const isDone = m.pass === m.total && m.total > 0;
+            const hasFail = m.fail > 0;
+            const bc = hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1;
+            const isActive = selModId === m.id;
+            return (
+              <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
+                whileHover={{ y: -3, scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                style={{ flex: "1 1 200px", minWidth: 180, maxWidth: 280, cursor: "pointer" }}
+                onClick={() => { setSelModId(m.id); setModView(true); }}>
+                <Paper sx={{
+                  p: 2.5, border: `1.5px solid ${isActive ? "#ea580c" : bc}`,
+                  borderRadius: 3, bgcolor: isActive ? alpha("#ea580c", 0.03) : hasFail ? "#fff5f5" : isDone ? "#f0fdf4" : "background.paper",
+                  transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+                  boxShadow: isActive ? "0 4px 20px rgba(234,88,12,0.15)" : "none",
+                }}>
+                  <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1.5}>
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.t1, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", pr: 1 }}>
+                      {m.name}
+                    </Typography>
+                    <Typography sx={{ fontSize: 16, fontWeight: 800, fontFamily: MONO, color: hasFail ? "#dc2626" : isDone ? "#16a34a" : C.t3, flexShrink: 0 }}>
+                      {pct}%
+                    </Typography>
+                  </Stack>
+                  <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3, mb: 1 }}>
+                    {m.tests.length} tests · {m.total} steps
+                  </Typography>
+                  <Box sx={{ height: 5, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex" }}>
+                    <Box sx={{ width: `${m.total ? (m.pass / m.total) * 100 : 0}%`, bgcolor: "#16a34a", borderRadius: "99px 0 0 99px" }} />
+                    <Box sx={{ width: `${m.total ? (m.fail / m.total) * 100 : 0}%`, bgcolor: "#dc2626" }} />
+                  </Box>
+                  <Stack direction="row" spacing={1.5} mt={1}>
+                    {m.pass > 0 && <Typography sx={{ fontSize: 10, fontFamily: MONO, color: "#16a34a" }}>✓{m.pass}</Typography>}
+                    {m.fail > 0 && <Typography sx={{ fontSize: 10, fontFamily: MONO, color: "#dc2626" }}>✗{m.fail}</Typography>}
+                    {m.pending > 0 && <Typography sx={{ fontSize: 10, fontFamily: MONO, color: C.t3 }}>·{m.pending}</Typography>}
+                  </Stack>
+                </Paper>
+              </motion.div>
+            );
+          })}
+        </Box>
+      </Box>
+    </motion.div>
+  );
+}
+
 
 // ── Divider Row ───────────────────────────────────────────────────────────────────
 function DividerRow({ label }) {
@@ -1770,168 +2018,180 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
   );
 }
 
-// ── Report View ────────────────────────────────────────────────────────────────────
+// ── Report View ───────────────────────────────────────────────────────────────────
 function ReportView({ modules, toast }) {
   const isMobile = useIsMobile();
-  const [search, setSearch] = useState("");
-  const [failOnly, setFailOnly] = useState(false);
-  const [exp, setExp] = useState(new Set());
   const modList = useMemo(() => Object.values(modules), [modules]);
+  const [selModId, setSelModId] = useState(() => modList[0]?.id || "");
+  const [modView, setModView] = useState(false);
+
+  const selMod = modules[selModId];
 
   const modStats = useMemo(() => modList.map(m => {
     const all = m.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
-    return { ...m, pass: all.filter(s => s.status === "pass").length, fail: all.filter(s => s.status === "fail").length, total: all.length };
+    const pass = all.filter(s => s.status === "pass").length;
+    const fail = all.filter(s => s.status === "fail").length;
+    return { ...m, pass, fail, pending: all.length - pass - fail, total: all.length };
   }), [modList]);
 
-  const pass = modStats.reduce((a, m) => a + m.pass, 0);
-  const fail = modStats.reduce((a, m) => a + m.fail, 0);
-  const total = modStats.reduce((a, m) => a + m.total, 0);
-
-  const filtered = useMemo(() => {
-    let l = modStats.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
-    if (failOnly) l = l.filter(m => m.fail > 0);
-    return l;
-  }, [modStats, search, failOnly]);
+  const totalPass = modStats.reduce((a, m) => a + m.pass, 0);
+  const totalFail = modStats.reduce((a, m) => a + m.fail, 0);
+  const totalSteps = modStats.reduce((a, m) => a + m.total, 0);
 
   const exportAllCSV = () => {
-    const rows = [["Module","Test","Step","Action","Result","Remarks","Status"]];
-    modList.forEach(m => m.tests.forEach(t => t.steps.forEach(s => rows.push([`"${m.name}"`,`"${t.name}"`,s.serialNo,`"${s.action}"`,`"${s.result}"`,`"${s.remarks}"`,s.status]))));
+    const rows = [["Module", "Test", "Step", "Action", "Expected Result", "Remarks", "Status"]];
+    modList.forEach(m => m.tests.forEach(t => t.steps.forEach(s => {
+      if (s.isDivider) return;
+      rows.push([`"${m.name}"`, `"${t.name}"`, s.serialNo || "", `"${(s.action || "").replace(/"/g, "'")}"`, `"${(s.result || "").replace(/"/g, "'")}"`, `"${(s.remarks || "").replace(/"/g, "'")}"`, s.status]);
+    })));
     const b = new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(b);
-    a.download = `TestPro_Report_${new Date().toISOString().slice(0,10)}.csv`; a.click();
-    toast("CSV exported", "success");
+    a.download = `TestPro_All_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    toast("All data exported", "success");
   };
 
-  const statusColor = s => ({ pass: C.gr, fail: C.re, pending: C.t3 }[s] || C.t3);
-  const statusBg = s => ({ pass: "#f0fdf4", fail: "#fff5f5", pending: "#ffffff" }[s] || "#fff");
-
-  const toggleExp = id => setExp(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  if (modView && selMod) {
+    return (
+      <ModuleDashboard
+        mod={selMod}
+        onBack={() => setModView(false)}
+        onExecute={() => {}}
+        toast={toast}
+        showExecute={false}
+      />
+    );
+  }
 
   return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-      <Topbar title="Test Report" sub={`${pass} passed · ${fail} failed · ${total - pass - fail} pending`}>
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" />}
-        <Stack direction="row" alignItems="center" gap={1}>
-          <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>Failures only</Typography>
-          <Switch size="small" checked={failOnly} onChange={e => setFailOnly(e.target.checked)} color="primary" />
-        </Stack>
-        <Button size="small" variant="outlined" startIcon={<FileDownloadRounded sx={{ fontSize: 15 }} />} onClick={exportAllCSV}
-          sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>
-          Export All
-        </Button>
-      </Topbar>
+    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      <Box sx={{ p: isMobile ? 2 : 3 }}>
+        <Topbar title="Test Report" sub={`${totalSteps.toLocaleString()} steps across ${modList.length} modules`}>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button variant="outlined" size="small" startIcon={<Ico n="down" s={15} />} onClick={exportAllCSV}
+              sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>
+              {!isMobile && "Export All CSV"}
+            </Button>
+          </motion.div>
+        </Topbar>
 
-      {isMobile && (
-        <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" fullWidth />
-        </Box>
-      )}
-
-      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
-        {/* Summary */}
-        <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)", gap: 1.5, mb: 2.5 }}>
+        {/* Overall stat pills */}
+        <Box sx={{ display: "flex", gap: 1.5, mb: 3, flexWrap: "wrap" }}>
           {[
-            ["Total Steps", total, "primary.main", alpha("#ea580c",0.10), alpha("#ea580c",0.2)],
-            ["Passed", pass, "success.main", "#f0fdf4", alpha("#16a34a",0.2)],
-            ["Failed", fail, "error.main", "#fff5f5", alpha("#dc2626",0.2)],
-            ["Pending", total-pass-fail, "warning.main", "#fffbeb", alpha("#d97706",0.2)],
-          ].map(([l,v,c,bg,border],i) => (
-            <motion.div key={l} custom={i} variants={cardVariants} initial="initial" animate="animate">
-              <Paper elevation={0} sx={{ p: isMobile ? 1.5 : 2, borderRadius: 3, border: `1px solid ${border}`, bgcolor: bg, position: "relative", overflow: "hidden" }}>
-                <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, bgcolor: c, opacity: 0.7 }} />
-                <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.8px", display: "block", mb: 0.5 }}>{l}</Typography>
-                <Typography variant="h5" fontWeight={800} sx={{ color: c }}>{v.toLocaleString()}</Typography>
+            { label: "Total", value: totalSteps, color: "#ea580c", bg: "#fff7ed" },
+            { label: "Passed", value: totalPass, color: "#16a34a", bg: "#f0fdf4" },
+            { label: "Failed", value: totalFail, color: "#dc2626", bg: "#fff5f5" },
+            { label: "Pending", value: totalSteps - totalPass - totalFail, color: "#d97706", bg: "#fffbeb" },
+          ].map((c, i) => (
+            <motion.div key={c.label} custom={i} variants={cardVariants} initial="initial" animate="animate"
+              style={{ flex: "1 1 80px" }}>
+              <Paper sx={{ p: isMobile ? 1.5 : 2, bgcolor: c.bg, textAlign: "center", borderRadius: 3, border: `1px solid ${alpha(c.color, 0.15)}` }}>
+                <Typography sx={{ fontSize: isMobile ? 20 : 26, fontWeight: 800, color: c.color, lineHeight: 1 }}>
+                  {c.value.toLocaleString()}
+                </Typography>
+                <Typography sx={{ fontSize: 10, fontFamily: MONO, color: "text.secondary", mt: 0.5 }}>
+                  {c.label.toUpperCase()}
+                </Typography>
               </Paper>
             </motion.div>
           ))}
         </Box>
 
-        <Stack gap={1.25}>
-          {filtered.map((m, i) => {
-            const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
-            const isExp = exp.has(m.id);
+        {/* Module selector + preview */}
+        <AnimatePresence mode="wait">
+          <motion.div key={selModId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.22 }}>
+            <Paper sx={{ p: isMobile ? 2 : 3, border: `1px solid ${C.b1}`, borderRadius: 3, mb: 3 }}>
+              <Stack direction={isMobile ? "column" : "row"} alignItems={isMobile ? "stretch" : "center"} gap={3}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <FormControl fullWidth size="small" sx={{ mb: 2.5 }}>
+                    <InputLabel sx={{ fontFamily: MONO, fontSize: 13 }}>Select Module</InputLabel>
+                    <Select value={selModId} label="Select Module"
+                      onChange={e => setSelModId(e.target.value)}
+                      sx={{ borderRadius: 2.5, fontFamily: MONO, fontSize: 13 }}>
+                      {modList.map(m => (
+                        <MenuItem key={m.id} value={m.id} sx={{ fontFamily: MONO, fontSize: 13 }}>{m.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {selMod && (
+                    <Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.t1, mb: 1.5 }}>{selMod.name}</Typography>
+                      <TestBarChart tests={selMod.tests} />
+                      <Box sx={{ mt: 2 }}>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                          <Button variant="outlined" fullWidth onClick={() => setModView(true)}
+                            endIcon={<Ico n="chevR" s={16} />}
+                            sx={{ borderColor: C.b2, color: "primary.main", fontWeight: 700, borderRadius: 2.5 }}>
+                            View Module Report
+                          </Button>
+                        </motion.div>
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+                {selMod && (() => {
+                  const selReal = selMod.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
+                  const sp = selReal.filter(s => s.status === "pass").length;
+                  const sf = selReal.filter(s => s.status === "fail").length;
+                  return (
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <DonutChart pass={sp} fail={sf} pending={selReal.length - sp - sf} size={isMobile ? 140 : 180} stroke={20} />
+                    </Box>
+                  );
+                })()}
+              </Stack>
+            </Paper>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* All modules list */}
+        <Typography sx={{ fontWeight: 700, fontSize: 12, color: C.t3, fontFamily: MONO, letterSpacing: "0.8px", mb: 1.5 }}>
+          ALL MODULES ({modList.length})
+        </Typography>
+        <Stack spacing={1.5}>
+          {modStats.map((m, i) => {
+            const pct = m.total ? Math.round((m.pass / m.total) * 100) : 0;
             const hasFail = m.fail > 0;
             const isDone = m.pass === m.total && m.total > 0;
             return (
-              <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate">
-                <Paper elevation={0} sx={{ border: `1px solid ${hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1}`, borderRadius: 3, overflow: "hidden",
-                  bgcolor: hasFail ? "rgba(255,245,245,0.5)" : isDone ? "rgba(240,253,244,0.5)" : "background.paper" }}>
-                  <Box sx={{ p: "13px 18px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer",
-                    "&:hover": { bgcolor: alpha("#000",0.015) }, transition: "background 0.15s" }} onClick={() => toggleExp(m.id)}>
-                    <motion.div animate={{ rotate: isExp ? 90 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 25 }}>
-                      <ChevronRightRounded sx={{ fontSize: 18, color: C.t3 }} />
-                    </motion.div>
-                    <Typography fontWeight={700} sx={{ flex: 1, fontSize: 14 }}>{m.name}</Typography>
-                    <Stack direction="row" gap={0.75} alignItems="center">
-                      {m.pass > 0 && <Chip label={`${m.pass} passed`} size="small" sx={{ height: 22, fontSize: 10, fontFamily: MONO, fontWeight: 700, bgcolor: alpha(C.gr,0.10), color: C.gr, border: `1px solid ${alpha(C.gr,0.25)}` }} />}
-                      {m.fail > 0 && <Chip label={`${m.fail} failed`} size="small" sx={{ height: 22, fontSize: 10, fontFamily: MONO, fontWeight: 700, bgcolor: alpha(C.re,0.10), color: C.re, border: `1px solid ${alpha(C.re,0.25)}` }} />}
-                      <Chip label={`${pct}%`} size="small" sx={{ height: 22, fontSize: 11, fontFamily: MONO, fontWeight: 800,
-                        bgcolor: pct === 100 ? alpha(C.gr,0.10) : hasFail ? alpha(C.re,0.08) : alpha("#ea580c",0.08),
-                        color: pct === 100 ? C.gr : hasFail ? C.re : "primary.main" }} />
+              <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
+                whileHover={{ x: 3 }} whileTap={{ scale: 0.99 }}>
+                <Paper sx={{
+                  p: isMobile ? 2 : 2.5, border: `1px solid ${hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1}`,
+                  borderRadius: 3, cursor: "pointer",
+                  bgcolor: hasFail ? "#fff5f5" : isDone ? "#f0fdf4" : "background.paper",
+                  "&:hover": { boxShadow: "0 4px 20px rgba(0,0,0,0.08)" },
+                  transition: "all 0.18s",
+                }}
+                  onClick={() => { setSelModId(m.id); setModView(true); }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>{m.name}</Typography>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <Typography sx={{ fontSize: 14, fontWeight: 800, fontFamily: MONO, color: hasFail ? "#dc2626" : isDone ? "#16a34a" : C.t3 }}>
+                        {pct}%
+                      </Typography>
+                      <Ico n="chevR" s={16} color={C.t3} />
                     </Stack>
-                    <Box sx={{ width: 90 }}><PBar pct={pct} fail={hasFail} /></Box>
+                  </Stack>
+                  <Box sx={{ height: 6, borderRadius: 99, overflow: "hidden", bgcolor: "#f5dece", display: "flex", mb: 1 }}>
+                    <Box sx={{ width: `${m.total ? (m.pass / m.total) * 100 : 0}%`, bgcolor: "#16a34a", borderRadius: "99px 0 0 99px" }} />
+                    <Box sx={{ width: `${m.total ? (m.fail / m.total) * 100 : 0}%`, bgcolor: "#dc2626" }} />
                   </Box>
-                  <Collapse in={isExp} timeout="auto">
-                    <Box sx={{ borderTop: `1px solid ${C.b1}` }}>
-                      {m.tests.map(t => {
-                        const tp = t.steps.filter(s => !s.isDivider && s.status === "pass").length;
-                        const tf = t.steps.filter(s => !s.isDivider && s.status === "fail").length;
-                        if (t.steps.length === 0) return null;
-                        return (
-                          <Box key={t.id}>
-                            <Box sx={{ px: 2, py: 0.75, bgcolor: C.s2, display: "flex", alignItems: "center", gap: 1 }}>
-                              <Typography fontWeight={600} sx={{ fontSize: 12, flex: 1 }}>{t.name}</Typography>
-                              <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>✓{tp} ✗{tf} ⟳{t.steps.filter(s => !s.isDivider).length-tp-tf}</Typography>
-                            </Box>
-                            {!isMobile && (
-                              <TableContainer>
-                                <Table size="small" sx={{ tableLayout: "fixed" }}>
-                                  <TableHead>
-                                    <TableRow sx={{ bgcolor: C.s2 }}>
-                                      {["S.No","Action","Expected Result","Remarks","Status"].map(h => <TableCell key={h}>{h}</TableCell>)}
-                                    </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    {t.steps.map(s => s.isDivider ? (
-                                      <TableRow key={s.id} sx={{ bgcolor: "#fff7ed" }}>
-                                        <TableCell colSpan={5} sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "1px" }}>{s.action}</TableCell>
-                                      </TableRow>
-                                    ) : (
-                                      <TableRow key={s.id} sx={{ bgcolor: statusBg(s.status) }}>
-                                        <TableCell sx={{ fontFamily: MONO, fontSize: 11, width: 55, textAlign: "center" }}>{s.serialNo || "—"}</TableCell>
-                                        <TableCell sx={{ fontSize: 12 }}>{s.action}</TableCell>
-                                        <TableCell sx={{ fontSize: 12, color: C.t2 }}>{s.result}</TableCell>
-                                        <TableCell sx={{ fontSize: 12, color: C.t3 }}>{s.remarks}</TableCell>
-                                        <TableCell sx={{ width: 70 }}>
-                                          <Chip label={s.status.toUpperCase()} size="small"
-                                            sx={{ height: 18, fontSize: 9, fontFamily: MONO, fontWeight: 700,
-                                              color: statusColor(s.status), bgcolor: statusBg(s.status),
-                                              border: `1px solid ${statusColor(s.status)}30` }} />
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </TableContainer>
-                            )}
-                          </Box>
-                        );
-                      })}
-                    </Box>
-                  </Collapse>
+                  <Stack direction="row" spacing={2}>
+                    <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>{m.total} steps</Typography>
+                    {m.pass > 0 && <Typography sx={{ fontSize: 11, fontFamily: MONO, color: "#16a34a" }}>✓ {m.pass}</Typography>}
+                    {m.fail > 0 && <Typography sx={{ fontSize: 11, fontFamily: MONO, color: "#dc2626" }}>✗ {m.fail}</Typography>}
+                    {m.pending > 0 && <Typography sx={{ fontSize: 11, fontFamily: MONO, color: C.t3 }}>· {m.pending} pending</Typography>}
+                  </Stack>
                 </Paper>
               </motion.div>
             );
           })}
-          {filtered.length === 0 && (
-            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 13 }}>No modules match.</Box>
-          )}
         </Stack>
       </Box>
     </motion.div>
   );
 }
+
 
 // ── Audit View ─────────────────────────────────────────────────────────────────────
 function AuditView({ log }) {
