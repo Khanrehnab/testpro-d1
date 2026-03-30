@@ -18,7 +18,9 @@
     "@emotion/styled": "^11.0.0",
     "lucide-react": "^1.7.0",
     "@supabase/supabase-js": "^2.0.0",
-  }
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
   "devDependencies": {
     "@types/react": "^18.0.17",
     "@types/react-dom": "^18.0.6",
