@@ -760,14 +760,14 @@ function LoginPage({ users, onLogin }) {
           <Box sx={{ p: isMobile ? 3 : 4, position: "relative", zIndex: 2 }}>
             {/* Logo */}
             <motion.div
-              animate={{ boxShadow: ["0 4px 14px rgba(234,88,12,.30)", "0 4px 28px rgba(234,88,12,.60)", "0 4px 14px rgba(234,88,12,.30)"] }}
+              animate={{ boxShadow: ["0 4px 14px rgba(234,88,12,.30)", "0 6px 32px rgba(234,88,12,.60)", "0 4px 14px rgba(234,88,12,.30)"] }}
               transition={{ duration: 2.5, repeat: Infinity }}
-              style={{ display: "inline-flex", borderRadius: 16, marginBottom: 20 }}
+              style={{ display: "inline-flex", borderRadius: "50%", marginBottom: 20 }}
             >
-              <Box sx={{ width: 56, height: 56, borderRadius: 3.5, background: "linear-gradient(135deg,#fb923c,#ea580c)",
+              <Box sx={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg,#fb923c,#ea580c)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 boxShadow: "0 4px 14px rgba(234,88,12,.30)" }}>
-                <TaskAltRounded sx={{ fontSize: 30, color: "#fff" }} />
+                <TaskAltRounded sx={{ fontSize: 32, color: "#fff" }} />
               </Box>
             </motion.div>
 
@@ -2509,6 +2509,59 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
   );
 }
 
+// ── Loading Spinner ──────────────────────────────────────────────────────────────
+function LoadingSpinner({ size = 56 }) {
+  const [progress, setProgress] = useState(10);
+  useEffect(() => {
+    const t = setInterval(() => {
+      setProgress(p => (p >= 100 ? 0 : p + 10));
+    }, 800);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <Box sx={{ position: "relative", display: "inline-flex" }}>
+      <CircularProgress
+        variant="determinate"
+        value={progress}
+        size={size}
+        thickness={3.6}
+        sx={{
+          color: "#ea580c",
+          "& .MuiCircularProgress-circle": {
+            strokeLinecap: "round",
+            transition: "stroke-dashoffset 0.6s cubic-bezier(0.4,0,0.2,1)",
+          },
+        }}
+      />
+      {/* Track ring */}
+      <CircularProgress
+        variant="determinate"
+        value={100}
+        size={size}
+        thickness={3.6}
+        sx={{
+          color: "rgba(234,88,12,0.10)",
+          position: "absolute",
+          left: 0,
+          top: 0,
+        }}
+      />
+      <Box sx={{
+        top: 0, left: 0, bottom: 0, right: 0,
+        position: "absolute",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Typography sx={{
+          fontSize: 13, fontWeight: 700, fontFamily: MONO,
+          color: "#ea580c", lineHeight: 1,
+        }}>
+          {`${Math.round(progress)}%`}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 // ── App ────────────────────────────────────────────────────────────────────────────
 export default function App() {
   const [users, setUsers] = useState(null);
@@ -2641,12 +2694,8 @@ export default function App() {
     <ThemeProvider theme={muiTheme}>
       <CssBaseline />
       <Box sx={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default", flexDirection: "column", gap: 2 }}>
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}>
-          <Box sx={{ width: 44, height: 44, borderRadius: 2.5, background: "linear-gradient(135deg,#fb923c,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(234,88,12,.38)" }}>
-            <TaskAltRounded sx={{ fontSize: 24, color: "#fff" }} />
-          </Box>
-        </motion.div>
-        <Typography variant="body2" sx={{ fontFamily: MONO, color: "text.disabled" }}>Loading TestPro…</Typography>
+        <LoadingSpinner />
+        <Typography variant="body2" sx={{ fontFamily: MONO, color: "text.disabled", mt: 1 }}>Loading TestPro…</Typography>
       </Box>
     </ThemeProvider>
   );
