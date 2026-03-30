@@ -1,523 +1,34 @@
 import { supabase } from "./supabase";
 import React, {
-  useState, useEffect, useRef, useCallback, useMemo, useContext, createContext,
+  useState, useEffect, useRef, useCallback, useMemo, useContext,
 } from "react";
-import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, BarChart3, Users, History, Check, X, LogOut,
-  Pencil, Trash2, Plus, Search, ChevronRight, ChevronDown, ChevronLeft,
-  RefreshCw, Download, Lock, Layers, FileText, ArrowLeft,
-  Menu, Eye, EyeOff, CheckCircle, XCircle, User, ShieldCheck,
-  CheckSquare, Loader2, AlertTriangle, Bell, Activity,
-  TrendingUp, MoreHorizontal, Terminal, Zap, Filter,
-} from "lucide-react";
-
-// ── Utilities ─────────────────────────────────────────────────────────────────────
-function cn(...classes) {
-  return classes.flat(Infinity).filter(v => v && typeof v === "string").join(" ");
-}
-
-// ── Button ────────────────────────────────────────────────────────────────────────
-const Button = React.forwardRef(function Button(
-  { children, className, variant = "default", size = "default", onClick, disabled, asChild, type = "button", ...props },
-  ref
-) {
-  const base =
-    "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50 cursor-pointer";
-  const variants = {
-    default: "bg-slate-600 text-white hover:bg-slate-700",
-    outline: "border border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800",
-    ghost: "hover:bg-slate-800 text-slate-200",
-    destructive: "bg-rose-600 text-white hover:bg-rose-700",
-    secondary: "bg-slate-700 text-slate-200 hover:bg-slate-600",
-    link: "text-sky-400 underline-offset-4 hover:underline p-0 h-auto",
-  };
-  const sizes = {
-    default: "h-9 px-4 py-2",
-    sm: "h-8 rounded-md px-3 text-xs",
-    lg: "h-10 rounded-md px-8",
-    icon: "h-9 w-9",
-  };
-  const cls = cn(base, variants[variant] ?? variants.default, sizes[size] ?? sizes.default, className);
-  if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children, { className: cls, onClick, disabled, ref, ...props });
-  }
-  return (
-    <button ref={ref} type={type} className={cls} onClick={onClick} disabled={disabled} {...props}>
-      {children}
-    </button>
-  );
-});
-
-// ── Input ─────────────────────────────────────────────────────────────────────────
-const Input = React.forwardRef(function Input({ className, type = "text", ...props }, ref) {
-  return (
-    <input
-      ref={ref}
-      type={type}
-      className={cn(
-        "flex h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-sm text-slate-100 shadow-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
-      {...props}
-    />
-  );
-});
-
-// ── Label ─────────────────────────────────────────────────────────────────────────
-function Label({ children, className, ...props }) {
-  return (
-    <label className={cn("text-sm font-medium leading-none", className)} {...props}>
-      {children}
-    </label>
-  );
-}
-
-// ── Badge ─────────────────────────────────────────────────────────────────────────
-function Badge({ children, className, ...props }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </span>
-  );
-}
-
-// ── Switch ────────────────────────────────────────────────────────────────────────
-function Switch({ checked, onCheckedChange, disabled, className }) {
-  return (
-    <button
-      role="switch"
-      type="button"
-      aria-checked={checked}
-      onClick={() => !disabled && onCheckedChange?.(!checked)}
-      disabled={disabled}
-      className={cn(
-        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "bg-sky-500" : "bg-slate-700",
-        className
-      )}
-    >
-      <span
-        className={cn(
-          "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200",
-          checked ? "translate-x-4" : "translate-x-0"
-        )}
-      />
-    </button>
-  );
-}
-
-// ── Progress ──────────────────────────────────────────────────────────────────────
-function Progress({ value = 0, className }) {
-  return (
-    <div className={cn("relative h-2 w-full overflow-hidden rounded-full bg-slate-800", className)}>
-      <div
-        className="h-full bg-sky-500 transition-all duration-300"
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
-    </div>
-  );
-}
-
-// ── Separator ─────────────────────────────────────────────────────────────────────
-function Separator({ className, orientation = "horizontal" }) {
-  return (
-    <div
-      className={cn(
-        "shrink-0 bg-slate-800",
-        orientation === "horizontal" ? "h-px w-full" : "h-full w-px",
-        className
-      )}
-    />
-  );
-}
-
-// ── Alert ─────────────────────────────────────────────────────────────────────────
-function Alert({ children, className }) {
-  return (
-    <div role="alert" className={cn("relative w-full rounded-lg border border-slate-700 p-4", className)}>
-      {children}
-    </div>
-  );
-}
-function AlertDescription({ children, className }) {
-  return <div className={cn("text-sm", className)}>{children}</div>;
-}
-
-// ── Avatar ────────────────────────────────────────────────────────────────────────
-function Avatar({ children, className, style }) {
-  return (
-    <div className={cn("relative flex shrink-0 overflow-hidden rounded-full", className)} style={style}>
-      {children}
-    </div>
-  );
-}
-function AvatarFallback({ children, className, style }) {
-  return (
-    <div
-      className={cn("flex h-full w-full items-center justify-center rounded-full bg-slate-800", className)}
-      style={style}
-    >
-      {children}
-    </div>
-  );
-}
-
-// ── Dialog ────────────────────────────────────────────────────────────────────────
-function Dialog({ open, onOpenChange, children }) {
-  if (!open) return null;
-  return createPortal(
-    <div className="fixed inset-0 z-50">
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={() => onOpenChange?.(false)}
-      />
-      <div className="relative h-full flex items-center justify-center p-4">
-        {children}
-      </div>
-    </div>,
-    document.body
-  );
-}
-function DialogContent({ children, className }) {
-  return (
-    <div
-      className={cn(
-        "relative z-10 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-y-auto",
-        className
-      )}
-      onClick={e => e.stopPropagation()}
-    >
-      {children}
-    </div>
-  );
-}
-function DialogHeader({ children, className }) {
-  return <div className={cn("flex flex-col gap-1.5 p-6 pb-3", className)}>{children}</div>;
-}
-function DialogTitle({ children, className }) {
-  return (
-    <h2 className={cn("text-lg font-semibold leading-none tracking-tight", className)}>
-      {children}
-    </h2>
-  );
-}
-function DialogDescription({ children, className }) {
-  return <p className={cn("text-sm text-slate-400 mt-1", className)}>{children}</p>;
-}
-function DialogFooter({ children, className }) {
-  return (
-    <div className={cn("flex flex-row justify-end gap-2 p-6 pt-4", className)}>
-      {children}
-    </div>
-  );
-}
-
-// ── DropdownMenu ──────────────────────────────────────────────────────────────────
-const DropdownMenuCtx = createContext(null);
-function DropdownMenu({ children }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <DropdownMenuCtx.Provider value={{ open, setOpen }}>
-      <div className="relative inline-block">{children}</div>
-    </DropdownMenuCtx.Provider>
-  );
-}
-function DropdownMenuTrigger({ children, asChild }) {
-  const { setOpen } = useContext(DropdownMenuCtx);
-  const toggle = e => { e.stopPropagation(); setOpen(v => !v); };
-  if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children, { onClick: toggle });
-  }
-  return <div onClick={toggle}>{children}</div>;
-}
-function DropdownMenuContent({ children, align = "start", className }) {
-  const { open, setOpen } = useContext(DropdownMenuCtx);
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    const t = setTimeout(() => document.addEventListener("click", close), 0);
-    return () => { clearTimeout(t); document.removeEventListener("click", close); };
-  }, [open, setOpen]);
-  if (!open) return null;
-  return (
-    <div
-      className={cn(
-        "absolute z-50 mt-1 min-w-[8rem] overflow-hidden rounded-md border shadow-lg",
-        align === "end" ? "right-0" : "left-0",
-        className
-      )}
-      onClick={e => e.stopPropagation()}
-    >
-      {children}
-    </div>
-  );
-}
-function DropdownMenuItem({ children, onClick, className }) {
-  const { setOpen } = useContext(DropdownMenuCtx);
-  return (
-    <div
-      className={cn(
-        "flex cursor-pointer select-none items-center px-3 py-2 text-sm outline-none transition-colors",
-        className
-      )}
-      onClick={e => { onClick?.(e); setOpen(false); }}
-    >
-      {children}
-    </div>
-  );
-}
-function DropdownMenuSeparator({ className }) {
-  return <div className={cn("h-px my-1 bg-slate-700", className)} />;
-}
-
-// ── Select ────────────────────────────────────────────────────────────────────────
-const SelectCtx = createContext(null);
-function Select({ children, value, onValueChange }) {
-  const [open, setOpen] = useState(false);
-  const [labels, setLabels] = useState({});
-  return (
-    <SelectCtx.Provider value={{ value, onValueChange, open, setOpen, labels, setLabels }}>
-      <div className="relative">{children}</div>
-    </SelectCtx.Provider>
-  );
-}
-function SelectTrigger({ children, className }) {
-  const { open, setOpen } = useContext(SelectCtx);
-  return (
-    <button
-      type="button"
-      onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
-      className={cn(
-        "flex w-full items-center justify-between px-3 py-2 text-sm rounded-md border transition-colors focus:outline-none",
-        className
-      )}
-    >
-      {children}
-      <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-2" />
-    </button>
-  );
-}
-function SelectValue({ placeholder }) {
-  const { value, labels } = useContext(SelectCtx);
-  return <span>{labels[value] ?? value ?? placeholder ?? ""}</span>;
-}
-function SelectContent({ children, className }) {
-  const { open, setOpen } = useContext(SelectCtx);
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    const t = setTimeout(() => document.addEventListener("click", close), 0);
-    return () => { clearTimeout(t); document.removeEventListener("click", close); };
-  }, [open, setOpen]);
-  if (!open) return null;
-  return (
-    <div
-      className={cn("absolute z-50 mt-1 w-full overflow-hidden rounded-md border shadow-lg", className)}
-      onClick={e => e.stopPropagation()}
-    >
-      {children}
-    </div>
-  );
-}
-function SelectItem({ children, value, className }) {
-  const { onValueChange, setOpen, value: current, setLabels } = useContext(SelectCtx);
-  useEffect(() => {
-    if (typeof children === "string") {
-      setLabels(prev => ({ ...prev, [value]: children }));
-    }
-  }, [value, children]); // eslint-disable-line
-  return (
-    <div
-      className={cn(
-        "relative flex cursor-pointer select-none items-center px-3 py-2 text-sm outline-none transition-colors",
-        current === value ? "font-semibold" : "",
-        className
-      )}
-      onClick={() => { onValueChange(value); setOpen(false); }}
-    >
-      {children}
-    </div>
-  );
-}
-
-// ── Tooltip ───────────────────────────────────────────────────────────────────────
-const TooltipProvider = ({ children }) => children;
-const TooltipCtx = createContext({ open: false, setOpen: () => {} });
-function Tooltip({ children }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <TooltipCtx.Provider value={{ open, setOpen }}>
-      <span style={{ position: "relative", display: "inline-flex" }}>
-        {children}
-      </span>
-    </TooltipCtx.Provider>
-  );
-}
-function TooltipTrigger({ children, asChild }) {
-  const { setOpen } = useContext(TooltipCtx);
-  if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children, {
-      onMouseEnter: (e) => { setOpen(true); children.props.onMouseEnter?.(e); },
-      onMouseLeave: (e) => { setOpen(false); children.props.onMouseLeave?.(e); },
-    });
-  }
-  return (
-    <span onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      {children}
-    </span>
-  );
-}
-function TooltipContent({ children, side = "top", className }) {
-  const { open } = useContext(TooltipCtx);
-  if (!open) return null;
-  const pos = {
-    top: "bottom-full left-1/2 -translate-x-1/2 mb-1",
-    bottom: "top-full left-1/2 -translate-x-1/2 mt-1",
-    right: "left-full top-1/2 -translate-y-1/2 ml-1",
-    left: "right-full top-1/2 -translate-y-1/2 mr-1",
-  };
-  return (
-    <div
-      className={cn(
-        "absolute z-50 px-2 py-1 text-xs rounded-md shadow-md whitespace-nowrap pointer-events-none",
-        pos[side] ?? pos.top,
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-// ── Sheet ─────────────────────────────────────────────────────────────────────────
-function Sheet({ open, onOpenChange, children }) {
-  if (!open) return null;
-  return createPortal(
-    <div className="fixed inset-0 z-50">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={() => onOpenChange?.(false)}
-      />
-      {children}
-    </div>,
-    document.body
-  );
-}
-function SheetContent({ children, side = "left", className }) {
-  return (
-    <div
-      className={cn(
-        "absolute top-0 bottom-0 z-50 overflow-hidden",
-        side === "left" ? "left-0" : "right-0",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-// ── Collapsible ───────────────────────────────────────────────────────────────────
-const CollapsibleCtx = createContext({ open: false, setOpen: () => {} });
-function Collapsible({ children, open, onOpenChange }) {
-  return (
-    <CollapsibleCtx.Provider value={{ open: !!open, setOpen: onOpenChange ?? (() => {}) }}>
-      {children}
-    </CollapsibleCtx.Provider>
-  );
-}
-function CollapsibleTrigger({ children, asChild }) {
-  const { open, setOpen } = useContext(CollapsibleCtx);
-  const toggle = () => setOpen(!open);
-  if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children, { onClick: toggle });
-  }
-  return <div onClick={toggle}>{children}</div>;
-}
-function CollapsibleContent({ children }) {
-  const { open } = useContext(CollapsibleCtx);
-  if (!open) return null;
-  return <>{children}</>;
-}
-
-// ── Table ─────────────────────────────────────────────────────────────────────────
-function Table({ children, className }) {
-  return (
-    <div className="w-full overflow-auto">
-      <table className={cn("w-full caption-bottom text-sm", className)}>{children}</table>
-    </div>
-  );
-}
-function TableHeader({ children, className }) {
-  return <thead className={cn("[&_tr]:border-b", className)}>{children}</thead>;
-}
-function TableBody({ children, className }) {
-  return <tbody className={cn("[&_tr:last-child]:border-0", className)}>{children}</tbody>;
-}
-function TableRow({ children, className }) {
-  return (
-    <tr
-      className={cn(
-        "border-b transition-colors hover:bg-slate-800/30",
-        className
-      )}
-    >
-      {children}
-    </tr>
-  );
-}
-function TableHead({ children, className }) {
-  return (
-    <th
-      className={cn(
-        "h-10 px-2 text-left align-middle font-medium text-slate-400",
-        className
-      )}
-    >
-      {children}
-    </th>
-  );
-}
-function TableCell({ children, className, colSpan, style }) {
-  return (
-    <td className={cn("p-2 align-middle", className)} colSpan={colSpan} style={style}>
-      {children}
-    </td>
-  );
-}
-
-// ── ScrollArea ────────────────────────────────────────────────────────────────────
-function ScrollArea({ children, className }) {
-  return (
-    <div className={cn("relative overflow-auto", className)}>
-      {children}
-    </div>
-  );
-}
-
-// ── Textarea ──────────────────────────────────────────────────────────────────────
-const Textarea = React.forwardRef(function Textarea({ className, ...props }, ref) {
-  return (
-    <textarea
-      ref={ref}
-      className={cn(
-        "flex min-h-[60px] w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
-      {...props}
-    />
-  );
-});
+  ThemeProvider, createTheme, CssBaseline, alpha,
+  Box, Stack, Paper, Typography, Button, IconButton,
+  TextField, InputAdornment, Drawer, AppBar, Toolbar,
+  List, ListItemButton, ListItemIcon, ListItemText,
+  Chip, LinearProgress, Switch, Divider, Avatar,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Snackbar, Alert, Select, MenuItem, FormControl, InputLabel,
+  Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
+  Tooltip, Menu, CircularProgress, BottomNavigation,
+  BottomNavigationAction, Collapse,
+} from "@mui/material";
+import {
+  DashboardRounded, AssessmentRounded, PeopleRounded, HistoryRounded,
+  CheckRounded, CloseRounded, UploadFileRounded, LogoutRounded,
+  EditRounded, DeleteRounded, AddRounded, SearchRounded,
+  ChevronRightRounded, KeyboardArrowDownRounded, ChevronLeftRounded,
+  RefreshRounded, FileDownloadRounded, NotificationsRounded,
+  LockRounded, LayersRounded, DescriptionRounded, ArrowBackRounded,
+  MenuRounded, VisibilityRounded, VisibilityOffRounded,
+  CheckCircleRounded, CancelRounded, GridViewRounded,
+  PersonRounded, AdminPanelSettingsRounded, TaskAltRounded,
+} from "@mui/icons-material";
 
 // ── Storage ─────────────────────────────────────────────────────────────────────
+
 const store = {
   async loadAll() {
     try {
@@ -764,10 +275,142 @@ function buildModules() {
   return out;
 }
 
-// ── Design System ─────────────────────────────────────────────────────────────────
-const MONO = "'IBM Plex Mono', 'JetBrains Mono', monospace";
+// ── MUI Theme ────────────────────────────────────────────────────────────────────
+const muiTheme = createTheme({
+  palette: {
+    primary:    { main: "#ea580c", light: "#fb923c", dark: "#c2410c", contrastText: "#fff" },
+    success:    { main: "#16a34a", light: "#dcfce7", dark: "#15803d" },
+    error:      { main: "#dc2626", light: "#fee2e2", dark: "#b91c1c" },
+    warning:    { main: "#d97706", light: "#fef3c7", dark: "#b45309" },
+    background: { default: "#fdf5ee", paper: "#ffffff" },
+    text:       { primary: "#1c0f07", secondary: "#57534e", disabled: "#a8a29e" },
+    divider:    "#f5dece",
+  },
+  typography: {
+    fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif",
+    h1: { fontWeight: 800 }, h2: { fontWeight: 700 }, h3: { fontWeight: 700 },
+    h4: { fontWeight: 700 }, h5: { fontWeight: 600 }, h6: { fontWeight: 600 },
+    button: { fontWeight: 600, textTransform: "none" },
+  },
+  shape: { borderRadius: 12 },
+  shadows: [
+    "none",
+    "0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+    "0 2px 10px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)",
+    "0 4px 20px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.05)",
+    "0 8px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06)",
+    "0 16px 40px rgba(0,0,0,0.14), 0 6px 14px rgba(0,0,0,0.08)",
+    "0 24px 56px rgba(0,0,0,0.16), 0 10px 20px rgba(0,0,0,0.09)",
+    ...Array(18).fill("none"),
+  ],
+  transitions: {
+    duration: { shortest: 120, shorter: 160, short: 220, standard: 280, complex: 400 },
+    easing: { easeInOut: "cubic-bezier(0.4, 0, 0.2, 1)", sharp: "cubic-bezier(0.4, 0, 0.6, 1)" },
+  },
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: `
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+        * { box-sizing: border-box; }
+        body { -webkit-font-smoothing: antialiased; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(234,88,12,0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(234,88,12,0.38); }
+        button { -webkit-tap-highlight-color: transparent; }
+        ::selection { background: rgba(234,88,12,0.15); }
+      `,
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10, fontWeight: 600, letterSpacing: 0,
+          transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
+          "&:active": { transform: "scale(0.97)" },
+        },
+        contained: {
+          boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+          "&:hover": { boxShadow: "0 4px 16px rgba(0,0,0,0.18)", transform: "translateY(-1px)" },
+        },
+        sizeSmall: { fontSize: 12, padding: "4px 12px" },
+        sizeMedium: { fontSize: 13, padding: "6px 16px" },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          transition: "all 0.16s cubic-bezier(0.4,0,0.2,1)",
+          "&:active": { transform: "scale(0.88)" },
+        },
+      },
+    },
+    MuiTextField: {
+      defaultProps: { size: "small" },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          transition: "box-shadow 0.18s, border-color 0.18s",
+          "&.Mui-focused": { boxShadow: "0 0 0 3px rgba(234,88,12,0.12)" },
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
+          transition: "all 0.15s cubic-bezier(0.4,0,0.2,1)",
+        },
+      },
+    },
+    MuiPaper: { defaultProps: { elevation: 0 } },
+    MuiLinearProgress: {
+      styleOverrides: {
+        root: { borderRadius: 99, height: 5, overflow: "hidden" },
+        bar: { borderRadius: 99 },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: { fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.8px", color: "#a8a29e", fontFamily: "'JetBrains Mono', monospace" },
+        root: { borderColor: "#f5dece" },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: { transition: "all 0.16s cubic-bezier(0.4,0,0.2,1)" },
+      },
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: { borderRadius: 12, fontWeight: 500 },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: 16 },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: { borderRadius: 8, fontSize: 12, fontWeight: 500 },
+      },
+    },
+  },
+});
 
-// ── Mobile Detection ───────────────────────────────────────────────────────────────
+// ── Design tokens (kept for complex components) ──────────────────────────────────
+const C = {
+  bg: "#fdf5ee", s1: "#ffffff", s2: "#fef9f5", s3: "#fdf0e6",
+  b1: "#f5dece", b2: "#ecc9a8", ac: "#ea580c",
+  gr: "#16a34a", re: "#dc2626", am: "#d97706",
+  t1: "#1c0f07", t2: "#57534e", t3: "#a8a29e",
+  grd: "rgba(22,163,74,0.10)", red: "rgba(220,38,38,0.10)",
+  amd: "rgba(217,119,6,0.10)", acd: "rgba(234,88,12,0.10)",
+};
+const MONO = "'JetBrains Mono', 'Fira Code', monospace";
+
+// ── Mobile detection ──────────────────────────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
   const [mobile, setMobile] = useState(() => window.innerWidth < breakpoint);
   useEffect(() => {
@@ -777,65 +420,66 @@ function useIsMobile(breakpoint = 768) {
   }, [breakpoint]);
   return mobile;
 }
-const MobileMenuCtx = createContext(null);
+const MobileMenuCtx = React.createContext(null);
 
-// ── Motion Variants ───────────────────────────────────────────────────────────────
+// ── Framer Motion Variants ────────────────────────────────────────────────────────
 const pageVariants = {
-  initial: { opacity: 0, y: 12, scale: 0.99 },
-  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] } },
-  exit:    { opacity: 0, y: -8, scale: 0.99, transition: { duration: 0.16, ease: "easeIn" } },
+  initial: { opacity: 0, y: 14, scale: 0.99 },
+  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } },
+  exit:    { opacity: 0, y: -8, scale: 0.99, transition: { duration: 0.18, ease: "easeIn" } },
 };
 const cardVariants = {
-  initial: { opacity: 0, y: 18 },
+  initial: { opacity: 0, y: 20 },
   animate: (i) => ({
     opacity: 1, y: 0,
-    transition: { delay: i * 0.035, type: "spring", stiffness: 320, damping: 28 },
+    transition: { delay: i * 0.04, type: "spring", stiffness: 320, damping: 28 },
   }),
 };
+const listStagger = {
+  animate: { transition: { staggerChildren: 0.04 } },
+};
 const listItem = {
-  initial: { opacity: 0, x: -10 },
+  initial: { opacity: 0, x: -12 },
   animate: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 340, damping: 30 } },
 };
 
-// ── Global Styles Injection ────────────────────────────────────────────────────────
-function useGlobalStyles() {
-  useEffect(() => {
-    const style = document.createElement("style");
-    style.innerHTML = `
-      @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-      :root {
-        --tp-bg: #06090f;
-        --tp-surface: #0b1120;
-        --tp-card: #0f1729;
-        --tp-elevated: #131f38;
-        --tp-border: #1a2d4a;
-        --tp-border-strong: #243a5e;
-        --tp-accent: #38bdf8;
-        --tp-accent-dim: rgba(56,189,248,0.12);
-        --tp-pass: #34d399;
-        --tp-fail: #fb7185;
-        --tp-warn: #fbbf24;
-        --tp-text: #e2e8f0;
-        --tp-text-2: #94a3b8;
-        --tp-text-3: #4a5568;
-      }
-      html, body { background: var(--tp-bg); color: var(--tp-text); }
-      * { box-sizing: border-box; }
-      body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-      ::-webkit-scrollbar { width: 4px; height: 4px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.18); border-radius: 99px; }
-      ::-webkit-scrollbar-thumb:hover { background: rgba(56,189,248,0.32); }
-      ::selection { background: rgba(56,189,248,0.20); }
-      button { -webkit-tap-highlight-color: transparent; }
-    `;
-    document.head.appendChild(style);
-    document.documentElement.classList.add("dark");
-    return () => document.head.removeChild(style);
-  }, []);
+// ── MUI Icon Map ─────────────────────────────────────────────────────────────────
+const ICO_MAP = {
+  check:  CheckRounded,
+  x:      CloseRounded,
+  upload: UploadFileRounded,
+  logout: LogoutRounded,
+  grid:   GridViewRounded,
+  edit:   EditRounded,
+  trash:  DeleteRounded,
+  plus:   AddRounded,
+  search: SearchRounded,
+  dash:   DashboardRounded,
+  report: AssessmentRounded,
+  users:  PeopleRounded,
+  log:    HistoryRounded,
+  chevR:  ChevronRightRounded,
+  chevD:  KeyboardArrowDownRounded,
+  chevL:  ChevronLeftRounded,
+  reset:  RefreshRounded,
+  down:   FileDownloadRounded,
+  bell:   NotificationsRounded,
+  lock:   LockRounded,
+  layers: LayersRounded,
+  file:   DescriptionRounded,
+  back:   ArrowBackRounded,
+  audit:  HistoryRounded,
+  person: PersonRounded,
+  admin:  AdminPanelSettingsRounded,
+  task:   TaskAltRounded,
+};
+function Ico({ n, s = 15, color = "currentColor" }) {
+  const MuiIcon = ICO_MAP[n];
+  if (MuiIcon) return <MuiIcon sx={{ fontSize: s, color, flexShrink: 0, display: "block" }} />;
+  return <span style={{ width: s, height: s, flexShrink: 0, display: "inline-block" }} />;
 }
 
-// ── Toast System ──────────────────────────────────────────────────────────────────
+// ── Toast (MUI Snackbar) ──────────────────────────────────────────────────────────
 function useToast() {
   const [queue, setQueue] = useState([]);
   const push = useCallback((msg, type = "info") => {
@@ -843,200 +487,189 @@ function useToast() {
     setQueue(q => [...q, { id, msg, type }]);
     setTimeout(() => setQueue(q => q.filter(x => x.id !== id)), 3500);
   }, []);
-
-  const Host = useCallback(() => {
+  const Host = () => {
     const isMobile = useIsMobile();
-    const iconMap = {
-      success: <CheckCircle className="w-4 h-4 text-emerald-400" />,
-      error: <XCircle className="w-4 h-4 text-rose-400" />,
-      info: <Bell className="w-4 h-4 text-sky-400" />,
-      warning: <AlertTriangle className="w-4 h-4 text-amber-400" />,
-    };
-    const colorMap = {
-      success: "border-emerald-500/30 bg-emerald-950/80",
-      error: "border-rose-500/30 bg-rose-950/80",
-      info: "border-sky-500/30 bg-sky-950/80",
-      warning: "border-amber-500/30 bg-amber-950/80",
-    };
-    const textMap = {
-      success: "text-emerald-100",
-      error: "text-rose-100",
-      info: "text-sky-100",
-      warning: "text-amber-100",
-    };
     return (
-      <div className={cn(
-        "fixed z-[9999] flex flex-col gap-2 pointer-events-none",
-        isMobile ? "bottom-[76px] left-3 right-3" : "bottom-6 right-6"
-      )}>
+      <Box sx={{ position: "fixed", bottom: isMobile ? 72 : 24, right: isMobile ? 12 : 24,
+        left: isMobile ? 12 : "auto", zIndex: 9999, display: "flex", flexDirection: "column", gap: 1, pointerEvents: "none" }}>
         <AnimatePresence>
           {queue.map(t => (
             <motion.div key={t.id}
-              initial={{ opacity: 0, y: 20, scale: 0.9, x: isMobile ? 0 : 16 }}
+              initial={{ opacity: 0, y: 24, scale: 0.88, x: isMobile ? 0 : 20 }}
               animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
-              exit={{ opacity: 0, y: 6, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 32 }}
+              exit={{ opacity: 0, y: 8, scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
             >
-              <div className={cn(
-                "flex items-center gap-2.5 px-4 py-3 rounded-xl border backdrop-blur-xl shadow-2xl",
-                !isMobile && "min-w-[280px]",
-                colorMap[t.type] || colorMap.info
-              )}>
-                {iconMap[t.type] || iconMap.info}
-                <span className={cn("text-sm font-semibold", textMap[t.type] || textMap.info)}>{t.msg}</span>
-              </div>
+              <Alert severity={t.type === "info" ? "info" : t.type === "success" ? "success" : "error"}
+                sx={{
+                  borderRadius: 3, boxShadow: "0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08)",
+                  fontWeight: 600, fontSize: 13, minWidth: isMobile ? "auto" : 280,
+                  backdropFilter: "blur(16px)", border: "1px solid",
+                  borderColor: t.type === "success" ? "rgba(22,163,74,0.25)" : t.type === "error" ? "rgba(220,38,38,0.25)" : "rgba(234,88,12,0.25)",
+                  bgcolor: t.type === "success" ? "rgba(240,253,244,0.95)" : t.type === "error" ? "rgba(254,242,242,0.95)" : "rgba(255,247,237,0.95)",
+                }}
+                iconMapping={{
+                  success: <CheckCircleRounded sx={{ fontSize: 18 }} />,
+                  error: <CancelRounded sx={{ fontSize: 18 }} />,
+                  info: <NotificationsRounded sx={{ fontSize: 18 }} />,
+                }}
+              >
+                {t.msg}
+              </Alert>
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      </Box>
     );
-  }, [queue]);
-
+  };
   return { push, Host };
 }
 
 // ── Shared: SearchBox ─────────────────────────────────────────────────────────────
-function SearchBox({ value, onChange, placeholder = "Search…", className }) {
+function SearchBox({ value, onChange, placeholder = "Search…", width = 200, fullWidth = false }) {
   return (
-    <div className={cn("relative", className)}>
-      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
-      <Input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="pl-8 h-8 text-xs bg-slate-900 border-slate-700 text-slate-200 placeholder:text-slate-600 focus:border-sky-500/60 focus:ring-sky-500/20 w-full"
-      />
-    </div>
+    <TextField
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      size="small"
+      fullWidth={fullWidth}
+      sx={{ width: fullWidth ? undefined : width }}
+      InputProps={{
+        startAdornment: (
+          <InputAdornment position="start">
+            <Ico n="search" s={14} color={C.t3} />
+          </InputAdornment>
+        ),
+        sx: { borderRadius: 2, bgcolor: "background.paper", fontSize: 13 },
+      }}
+    />
   );
 }
 
-// ── Shared: Topbar ─────────────────────────────────────────────────────────────────
+// ── Shared: Topbar ────────────────────────────────────────────────────────────────
 function Topbar({ title, sub, children }) {
   const isMobile = useIsMobile();
   const onMenuClick = useContext(MobileMenuCtx);
   return (
-    <div className="flex items-center gap-2 px-4 border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl flex-shrink-0 min-h-[56px]">
-      {isMobile && onMenuClick && (
-        <button onClick={onMenuClick} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors mr-0.5">
-          <Menu className="w-5 h-5" />
-        </button>
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="font-bold text-slate-100 text-sm truncate" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{title}</div>
-        {sub && <div className="text-[10px] text-slate-500 truncate" style={{ fontFamily: MONO }}>{sub}</div>}
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {children}
-      </div>
-    </div>
+    <AppBar position="static" elevation={0} sx={{
+      bgcolor: "rgba(255,255,255,0.90)", backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+      borderBottom: `1px solid rgba(245,222,206,0.8)`,
+      color: "text.primary", flexShrink: 0,
+      boxShadow: "0 1px 0 rgba(245,222,206,0.8), 0 4px 20px rgba(234,88,12,0.04)",
+    }}>
+      <Toolbar sx={{ minHeight: 58, gap: 1, px: isMobile ? 1.5 : 2.5 }}>
+        {isMobile && onMenuClick && (
+          <IconButton onClick={onMenuClick} size="small" sx={{ mr: 0.5, color: "text.secondary" }}>
+            <MenuRounded sx={{ fontSize: 22 }} />
+          </IconButton>
+        )}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body1" fontWeight={700} sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: isMobile ? 15 : 16 }}>
+            {title}
+          </Typography>
+          {sub && (
+            <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {sub}
+            </Typography>
+          )}
+        </Box>
+        <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
+          {children}
+        </Stack>
+      </Toolbar>
+    </AppBar>
   );
 }
 
-// ── Shared: Progress Bar ───────────────────────────────────────────────────────────
+// ── Shared: Progress Bar ──────────────────────────────────────────────────────────
 function PBar({ pct, fail }) {
   return (
-    <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
-      <motion.div
-        initial={{ width: 0 }}
-        animate={{ width: `${pct}%` }}
-        transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
-        className={cn("h-full rounded-full", fail ? "bg-gradient-to-r from-amber-500 to-rose-500" : "bg-gradient-to-r from-sky-500 to-emerald-400")}
-      />
-    </div>
+    <LinearProgress
+      variant="determinate" value={pct}
+      sx={{ height: 5, borderRadius: 99, bgcolor: C.s3,
+        "& .MuiLinearProgress-bar": {
+          background: fail
+            ? "linear-gradient(90deg, #f59e0b, #dc2626)"
+            : "linear-gradient(90deg, #22c55e, #16a34a)",
+          borderRadius: 99, transition: "transform 0.6s cubic-bezier(0.4,0,0.2,1)",
+        }
+      }}
+    />
   );
 }
 
 // ── Shared: ExportMenu ────────────────────────────────────────────────────────────
 function ExportMenu({ onCSV, onPDF }) {
+  const [anchor, setAnchor] = useState(null);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="outline" className="h-8 text-xs border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100 gap-1.5">
-          <Download className="w-3.5 h-3.5" /> Export
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-slate-900 border-slate-700 text-slate-200">
-        <DropdownMenuItem onClick={onCSV} className="text-xs gap-2 hover:bg-slate-800 cursor-pointer">
-          <Download className="w-3.5 h-3.5 text-slate-400" /> Export CSV
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onPDF} className="text-xs gap-2 hover:bg-slate-800 cursor-pointer">
-          <FileText className="w-3.5 h-3.5 text-slate-400" /> Export PDF
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <Button size="small" variant="outlined" startIcon={<FileDownloadRounded sx={{ fontSize: 15 }} />}
+        onClick={e => setAnchor(e.currentTarget)}
+        sx={{ borderColor: C.b2, color: "text.secondary", bgcolor: "background.paper",
+          "&:hover": { borderColor: C.ac, color: "primary.main", bgcolor: alpha("#ea580c", 0.04) } }}
+      >
+        Export
+      </Button>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}
+        PaperProps={{ sx: { borderRadius: 2.5, boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: `1px solid ${C.b1}`, minWidth: 160 } }}
+        transformOrigin={{ horizontal: "right", vertical: "top" }}
+        anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+      >
+        <MenuItem onClick={() => { onCSV(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13, borderRadius: 1.5, mx: 0.5, my: 0.25 }}>
+          <FileDownloadRounded sx={{ fontSize: 16, color: C.t3 }} /> Export CSV
+        </MenuItem>
+        <MenuItem onClick={() => { onPDF(); setAnchor(null); }} sx={{ gap: 1.5, fontSize: 13, borderRadius: 1.5, mx: 0.5, my: 0.25 }}>
+          <AssessmentRounded sx={{ fontSize: 16, color: C.t3 }} /> Export PDF
+        </MenuItem>
+      </Menu>
+    </>
   );
 }
 
-// ── Shared: ConfirmDialog ──────────────────────────────────────────────────────────
-function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmLabel = "Delete", destructive = true }) {
+// ── Shared: Confirm Dialog ────────────────────────────────────────────────────────
+function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmLabel = "Delete", confirmColor = "error" }) {
   return (
-    <Dialog open={open} onOpenChange={v => !v && onCancel()}>
-      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-slate-100 font-bold">{title}</DialogTitle>
-          <DialogDescription className="text-slate-400 text-sm">{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onCancel} className="border-slate-700 text-slate-300 hover:bg-slate-800">Cancel</Button>
-          <Button
-            onClick={onConfirm}
-            className={destructive
-              ? "bg-rose-600 hover:bg-rose-700 text-white border-0"
-              : "bg-sky-600 hover:bg-sky-700 text-white border-0"
-            }
-          >
-            {confirmLabel}
-          </Button>
-        </DialogFooter>
+    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth
+      PaperProps={{ component: motion.div, initial: { scale: 0.92, opacity: 0 }, animate: { scale: 1, opacity: 1 }, transition: { duration: 0.18 }, sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>{title}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary">{description}</Typography>
       </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+        <Button onClick={onCancel} variant="outlined" sx={{ borderColor: C.b2, color: "text.secondary" }}>Cancel</Button>
+        <Button onClick={onConfirm} variant="contained" color={confirmColor}>{confirmLabel}</Button>
+      </DialogActions>
     </Dialog>
   );
 }
 
 // ── Shared: FormDialog ────────────────────────────────────────────────────────────
-function FormDialog({ open, onClose, title, subtitle, children, actions }) {
+function FormDialog({ open, onClose, title, subtitle, children, actions, width = 460 }) {
   const isMobile = useIsMobile();
   return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className={cn(
-        "bg-slate-900 border-slate-700 text-slate-100",
-        isMobile ? "max-w-full h-full rounded-none" : "max-w-md"
-      )}>
-        <DialogHeader>
-          <DialogTitle className="text-slate-100 font-bold">{title}</DialogTitle>
-          {subtitle && <DialogDescription className="text-slate-400 text-sm">{subtitle}</DialogDescription>}
-        </DialogHeader>
-        <div className="space-y-0">{children}</div>
-        <DialogFooter className="gap-2">{actions}</DialogFooter>
-      </DialogContent>
+    <Dialog open={open} onClose={onClose} maxWidth={false} fullScreen={isMobile}
+      PaperProps={{ component: motion.div, initial: { scale: 0.92, opacity: 0, y: 10 }, animate: { scale: 1, opacity: 1, y: 0 }, transition: { duration: 0.2 },
+        sx: { borderRadius: isMobile ? 0 : 3, width: isMobile ? "100%" : width } }}>
+      <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
+        {title}
+        {subtitle && <Typography variant="caption" display="block" color="text.secondary" sx={{ fontWeight: 400, mt: 0.5 }}>{subtitle}</Typography>}
+      </DialogTitle>
+      <DialogContent sx={{ pt: "8px !important" }}>{children}</DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>{actions}</DialogActions>
     </Dialog>
   );
 }
 
-// ── Shared: FormField ─────────────────────────────────────────────────────────────
-function FormField({ label, value, onChange, type = "text", autoFocus = false }) {
-  return (
-    <div className="mb-4">
-      <Label className="text-slate-300 text-xs font-medium mb-1.5 block">{label}</Label>
-      <Input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        autoFocus={autoFocus}
-        className="bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-600 focus:border-sky-500/60 focus:ring-sky-500/20 h-9"
-      />
-    </div>
-  );
-}
-
-// ── Login Page ─────────────────────────────────────────────────────────────────────
+// ── Login Page ────────────────────────────────────────────────────────────────────
 function LoginPage({ users, onLogin }) {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [err, setErr] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const pwRef = useRef();
+  const isMobile = useIsMobile();
 
   const go = () => {
     if (!u.trim() || !p) { setErr("Please enter your username and password."); return; }
@@ -1049,170 +682,131 @@ function LoginPage({ users, onLogin }) {
   };
 
   return (
-    <div className="min-h-dvh flex items-center justify-center relative overflow-hidden" style={{ background: "var(--tp-bg)" }}>
-      {/* Animated grid background */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: `
-          linear-gradient(rgba(56,189,248,0.04) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(56,189,248,0.04) 1px, transparent 1px)
-        `,
-        backgroundSize: "40px 40px",
-      }} />
+    <Box sx={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center",
+      position: "relative", overflow: "hidden",
+      background: "linear-gradient(135deg,#fde8d0 0%,#fddbb4 30%,#fef3e2 60%,#ffe0cc 80%,#fdf0dc 100%)",
+      backgroundSize: "400% 400%",
+      animation: "tpGradShift 12s ease infinite",
+    }}>
+      <style>{`
+        @keyframes tpGradShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+      `}</style>
 
-      {/* Glow orbs */}
+      {/* Animated orbs */}
       {[
-        { top: "-20%", left: "-10%", size: 500, color: "rgba(56,189,248,0.06)", blur: 80, duration: 14 },
-        { bottom: "-15%", right: "-8%", size: 420, color: "rgba(99,102,241,0.07)", blur: 70, duration: 18 },
-        { top: "30%", right: "5%", size: 250, color: "rgba(52,211,153,0.05)", blur: 60, duration: 11 },
+        { top: "-15%", left: "-10%", size: 420, colors: "rgba(251,146,60,0.58),rgba(249,115,22,0.24)", duration: 14 },
+        { bottom: "-12%", right: "-8%", size: 380, colors: "rgba(253,186,116,0.52),rgba(251,146,60,0.20)", duration: 17 },
+        { top: "18%", right: "6%", size: 220, colors: "rgba(234,88,12,0.32),rgba(253,186,116,0.14)", duration: 11 },
+        { bottom: "14%", left: "10%", size: 160, colors: "rgba(254,215,170,0.50),transparent", duration: 19 },
       ].map((orb, i) => (
         <motion.div key={i}
-          className="absolute rounded-full pointer-events-none"
-          style={{ width: orb.size, height: orb.size, background: `radial-gradient(circle, ${orb.color}, transparent)`, filter: `blur(${orb.blur}px)`, ...orb }}
-          animate={{ x: [0, 25 + i * 8, -12, 0], y: [0, -18 - i * 6, 12, 0], scale: [1, 1.06, 0.96, 1] }}
+          style={{ position: "absolute", borderRadius: "50%", width: orb.size, height: orb.size,
+            background: `radial-gradient(circle,${orb.colors})`,
+            filter: `blur(${40 + i * 6}px)`, pointerEvents: "none", zIndex: 0,
+            ...orb }}
+          animate={{ x: [0, 30 + i * 10, -15, 0], y: [0, -20 - i * 8, 15, 0], scale: [1, 1.08, 0.95, 1] }}
           transition={{ duration: orb.duration, repeat: Infinity, ease: "easeInOut" }}
         />
       ))}
 
-      {/* Scan line effect */}
-      <motion.div
-        className="absolute inset-x-0 h-[1px] pointer-events-none z-[1]"
-        style={{ background: "linear-gradient(90deg, transparent, rgba(56,189,248,0.3), transparent)" }}
-        animate={{ top: ["-2%", "102%"] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "linear", repeatDelay: 3 }}
-      />
-
       {/* Login Card */}
       <motion.div
-        initial={{ opacity: 0, y: 28, scale: 0.95 }}
+        initial={{ opacity: 0, y: 32, scale: 0.94 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-[400px] mx-4"
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 420, padding: isMobile ? "0 16px" : 0 }}
       >
-        {/* Glowing border */}
-        <div className="absolute -inset-px rounded-2xl pointer-events-none" style={{
-          background: "linear-gradient(135deg, rgba(56,189,248,0.3), rgba(99,102,241,0.2), rgba(52,211,153,0.15))",
-          filter: "blur(0.5px)",
-        }} />
+        {/* Glowing border ring */}
+        <motion.div
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          style={{ position: "absolute", inset: -2, borderRadius: 20,
+            background: "linear-gradient(135deg,#f97316,#ea580c,#dc2626,#f97316)",
+            backgroundSize: "300% 300%", filter: "blur(1px)", zIndex: -1,
+            animation: "tpGradShift 5s ease infinite",
+          }}
+        />
 
-        <div className="relative rounded-2xl border border-slate-800 overflow-hidden"
-          style={{ background: "rgba(11,17,32,0.92)", backdropFilter: "blur(32px)" }}>
-
-          {/* Card header strip */}
-          <div className="h-px w-full bg-gradient-to-r from-transparent via-sky-500/60 to-transparent" />
-
-          {/* Shimmer */}
+        <Paper elevation={0} sx={{
+          borderRadius: "18px", overflow: "hidden", position: "relative",
+          bgcolor: "rgba(255,255,255,0.88)", backdropFilter: "blur(28px)",
+          WebkitBackdropFilter: "blur(28px)", border: "1px solid rgba(255,255,255,0.6)",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.10)",
+        }}>
+          {/* Shimmer sweep */}
           <motion.div
-            className="absolute inset-0 pointer-events-none z-0"
-            style={{ background: "linear-gradient(105deg, transparent 40%, rgba(56,189,248,0.04) 50%, transparent 60%)" }}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+              background: "linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.45) 50%,transparent 60%)",
+              pointerEvents: "none" }}
             animate={{ x: ["-120%", "220%"] }}
-            transition={{ duration: 3, repeat: Infinity, repeatDelay: 4, ease: "easeInOut" }}
+            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
           />
 
-          <div className="relative z-10 p-8">
+          <Box sx={{ p: isMobile ? 3 : 4, position: "relative", zIndex: 2 }}>
             {/* Logo */}
-            <div className="mb-6">
-              <motion.div
-                animate={{ boxShadow: ["0 0 20px rgba(56,189,248,0.2)", "0 0 40px rgba(56,189,248,0.4)", "0 0 20px rgba(56,189,248,0.2)"] }}
-                transition={{ duration: 2.5, repeat: Infinity }}
-                className="inline-flex"
-              >
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: "linear-gradient(135deg, #0ea5e9, #6366f1)" }}>
-                  <CheckSquare className="w-6 h-6 text-white" />
-                </div>
-              </motion.div>
+            <motion.div
+              animate={{ boxShadow: ["0 4px 14px rgba(234,88,12,.30)", "0 4px 28px rgba(234,88,12,.60)", "0 4px 14px rgba(234,88,12,.30)"] }}
+              transition={{ duration: 2.5, repeat: Infinity }}
+              style={{ display: "inline-flex", borderRadius: 16, marginBottom: 20 }}
+            >
+              <Box sx={{ width: 56, height: 56, borderRadius: 3.5, background: "linear-gradient(135deg,#fb923c,#ea580c)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(234,88,12,.30)" }}>
+                <TaskAltRounded sx={{ fontSize: 30, color: "#fff" }} />
+              </Box>
+            </motion.div>
 
-              {/* System label */}
-              <div className="mt-4 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[10px] font-mono text-emerald-400 tracking-[0.2em] uppercase">System Online</span>
-              </div>
-              <h1 className="mt-1 text-2xl font-extrabold text-slate-100" style={{ fontFamily: "'Syne', sans-serif" }}>
-                Mission Control
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5" style={{ fontFamily: MONO }}>
-                TestPro // QA Management Platform
-              </p>
-            </div>
+            <Typography variant="h5" fontWeight={800} gutterBottom>
+              Sign in to <Box component="span" sx={{ color: "primary.main" }}>TestPro</Box>
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5 }}>
+              Quality management platform
+            </Typography>
 
-            {/* Error */}
             <AnimatePresence>
               {err && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                  <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-rose-500/30 bg-rose-950/40">
-                    <XCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                    <p className="text-xs text-rose-300">{err}</p>
-                  </div>
+                  <Alert severity="error" sx={{ mb: 2, borderRadius: 2, fontSize: 13 }}>{err}</Alert>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Fields */}
-            <div className="space-y-3">
-              <div>
-                <Label className="text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-1.5 block">Username</Label>
-                <Input
-                  value={u}
-                  onChange={e => { setU(e.target.value); setErr(""); }}
-                  onKeyDown={e => e.key === "Enter" && pwRef.current?.focus()}
-                  autoComplete="username"
-                  placeholder="Enter username"
-                  className="bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-1 focus:ring-sky-500/30 h-10 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <Label className="text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-1.5 block">Password</Label>
-                <div className="relative">
-                  <Input
-                    ref={pwRef}
-                    type={showPw ? "text" : "password"}
-                    value={p}
-                    onChange={e => { setP(e.target.value); setErr(""); }}
-                    onKeyDown={e => e.key === "Enter" && go()}
-                    autoComplete="current-password"
-                    placeholder="Enter password"
-                    className="bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-1 focus:ring-sky-500/30 h-10 font-mono text-sm pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <motion.div whileTap={{ scale: 0.98 }} className="pt-1">
-                <button
-                  onClick={go}
-                  disabled={loading}
-                  className="w-full h-11 rounded-lg font-bold text-sm text-white relative overflow-hidden disabled:opacity-60 transition-all hover:opacity-90 active:scale-[0.98]"
-                  style={{ background: "linear-gradient(135deg, #0ea5e9, #6366f1)" }}
-                >
-                  <div className="relative z-10 flex items-center justify-center gap-2">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                    {loading ? "Authenticating…" : "Sign In"}
-                  </div>
-                  <motion.div
-                    className="absolute inset-0"
-                    style={{ background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%)" }}
-                    animate={{ x: ["-120%", "220%"] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" }}
-                  />
-                </button>
+            <Stack gap={2}>
+              <TextField
+                label="Username" value={u}
+                onChange={e => { setU(e.target.value); setErr(""); }}
+                onKeyDown={e => e.key === "Enter" && document.getElementById("tp-pw-input")?.focus()}
+                fullWidth size="medium" autoComplete="username"
+                sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }}
+              />
+              <TextField
+                id="tp-pw-input"
+                label="Password" type={showPw ? "text" : "password"} value={p}
+                onChange={e => { setP(e.target.value); setErr(""); }}
+                onKeyDown={e => e.key === "Enter" && go()}
+                fullWidth size="medium" autoComplete="current-password"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setShowPw(v => !v)} edge="end">
+                        {showPw ? <VisibilityOffRounded sx={{ fontSize: 18 }} /> : <VisibilityRounded sx={{ fontSize: 18 }} />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }}
+              />
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button fullWidth size="large" variant="contained" onClick={go} disabled={loading}
+                  sx={{ mt: 0.5, py: 1.5, borderRadius: 2.5, fontSize: 15, fontWeight: 700, boxShadow: "0 4px 16px rgba(234,88,12,.35)" }}>
+                  {loading ? <CircularProgress size={20} sx={{ color: "white" }} /> : "Sign In"}
+                </Button>
               </motion.div>
-            </div>
-
-            {/* Footer */}
-            <div className="mt-5 pt-4 border-t border-slate-800 flex items-center justify-between">
-              <span className="text-[10px] font-mono text-slate-600">TestPro v2.0</span>
-              <span className="text-[10px] font-mono text-slate-600">Secure Access Only</span>
-            </div>
-          </div>
-        </div>
+            </Stack>
+          </Box>
+        </Paper>
       </motion.div>
-    </div>
+    </Box>
   );
 }
 
@@ -1234,181 +828,198 @@ function Sidebar({ session, view, setView, modules, selMod, setSelMod, collapsed
   }, [modules]);
 
   const navItems = [
-    { id: "dash", icon: <LayoutDashboard className="w-4 h-4" />, label: "Dashboard" },
-    { id: "report", icon: <BarChart3 className="w-4 h-4" />, label: "Test Report" },
-    ...(session.role === "admin" ? [
-      { id: "users", icon: <Users className="w-4 h-4" />, label: "Users" },
-      { id: "audit", icon: <History className="w-4 h-4" />, label: "Audit Log" },
-    ] : []),
+    { id: "dash", icon: "dash", label: "Dashboard" },
+    { id: "report", icon: "report", label: "Test Report" },
+    ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }, { id: "audit", icon: "log", label: "Audit Log" }] : []),
   ];
 
+  const navRow = (item) => {
+    const active = view === item.id;
+    return (
+      <motion.div key={item.id} whileHover={{ x: active ? 0 : 3 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
+        <ListItemButton
+          onClick={() => { setView(item.id); if (onMobileClose) onMobileClose(); }}
+          sx={{
+            borderRadius: 2.5, mx: 0.75, mb: 0.4, py: 0.85,
+            bgcolor: active ? "primary.main" : "transparent",
+            color: active ? "#fff" : "text.secondary",
+            boxShadow: active ? "0 4px 14px rgba(234,88,12,0.35)" : "none",
+            "&:hover": { bgcolor: active ? "primary.dark" : alpha("#000", 0.04) },
+            transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 0 : 36, color: "inherit" }}>
+            <Ico n={item.icon} s={18} />
+          </ListItemIcon>
+          {(!collapsed || isMobile) && (
+            <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 700 : 500 }} />
+          )}
+        </ListItemButton>
+      </motion.div>
+    );
+  };
+
+  const drawerWidth = isMobile ? 280 : collapsed ? 60 : 256;
+
   const content = (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: "var(--tp-surface)" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-3 py-3.5 border-b border-slate-800 flex-shrink-0 min-h-[56px]">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: "linear-gradient(135deg, #0ea5e9, #6366f1)", boxShadow: "0 0 14px rgba(14,165,233,0.35)" }}>
-          <CheckSquare className="w-4 h-4 text-white" />
-        </div>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 1.5, py: 1.5, borderBottom: `1px solid ${C.b1}`, minHeight: 58, flexShrink: 0,
+        background: "linear-gradient(135deg, rgba(255,247,237,0.8) 0%, rgba(255,255,255,0.9) 100%)" }}>
+        <Box sx={{ width: 32, height: 32, borderRadius: 2, background: "linear-gradient(135deg,#fb923c,#ea580c)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          boxShadow: "0 3px 10px rgba(234,88,12,0.38)" }}>
+          <TaskAltRounded sx={{ fontSize: 18, color: "#fff" }} />
+        </Box>
         {(!collapsed || isMobile) && (
-          <span className="font-extrabold text-slate-100 flex-1 text-sm tracking-tight" style={{ fontFamily: "'Syne', sans-serif" }}>
-            Test<span className="text-sky-400">Pro</span>
-          </span>
+          <Typography fontWeight={800} sx={{ fontFamily: MONO, fontSize: 15, flex: 1, letterSpacing: "-0.5px" }}>
+            Test<Box component="span" sx={{ color: "primary.main" }}>Pro</Box>
+          </Typography>
         )}
         {!isMobile && (
-          <button onClick={() => setCollapsed(c => !c)}
-            className="p-1 rounded text-slate-600 hover:text-slate-300 hover:bg-slate-800 transition-colors ml-auto">
-            {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-          </button>
+          <IconButton size="small" onClick={() => setCollapsed(c => !c)} sx={{ ml: "auto", color: "text.disabled", "&:hover": { color: "primary.main", bgcolor: alpha("#ea580c", 0.08) } }}>
+            <Ico n={collapsed ? "chevR" : "chevL"} s={16} />
+          </IconButton>
         )}
-      </div>
+      </Box>
 
       {/* Nav */}
-      <div className="pt-2 px-2 flex-shrink-0">
+      <Box sx={{ pt: 0.75, flexShrink: 0 }}>
         {(!collapsed || isMobile) && (
-          <div className="text-[9px] font-mono text-slate-600 uppercase tracking-[0.18em] px-2 mb-1">Navigation</div>
+          <Typography variant="caption" sx={{ px: 2, fontFamily: MONO, color: "text.disabled", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", display: "block", mb: 0.5 }}>
+            Navigation
+          </Typography>
         )}
-        {navItems.map(item => {
-          const active = view === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => { setView(item.id); if (onMobileClose) onMobileClose(); }}
-              className={cn(
-                "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg mb-0.5 text-sm font-medium transition-all",
-                active
-                  ? "bg-sky-500/15 text-sky-300 border border-sky-500/25"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent"
-              )}
-            >
-              <span className={active ? "text-sky-400" : "text-slate-500"}>{item.icon}</span>
-              {(!collapsed || isMobile) && <span className="text-[13px]">{item.label}</span>}
-            </button>
-          );
-        })}
-      </div>
+        <List dense disablePadding>{navItems.map(navRow)}</List>
+      </Box>
 
       {(!collapsed || isMobile) && (
         <>
-          <div className="h-px bg-slate-800 mx-3 my-2 flex-shrink-0" />
-          {/* Modules */}
-          <div className="px-4 mb-1.5 flex-shrink-0">
-            <div className="text-[9px] font-mono text-slate-600 uppercase tracking-[0.18em] mb-2">
-              Modules ({modList.length})
-            </div>
-            <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" className="w-full" />
-          </div>
+          <Divider sx={{ my: 1, borderColor: C.b1 }} />
+          {/* Module list */}
+          <Typography variant="caption" sx={{ px: 2, fontFamily: MONO, color: "text.disabled", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", display: "block", mb: 1 }}>
+            Modules ({modList.length})
+          </Typography>
+          <Box sx={{ px: 1, mb: 1, flexShrink: 0 }}>
+            <TextField value={search} onChange={e => setSearch(e.target.value)} placeholder="Search modules…"
+              size="small" fullWidth
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><Ico n="search" s={12} color={C.t3} /></InputAdornment>,
+                sx: { fontSize: 12, borderRadius: 2, bgcolor: C.s2 },
+              }}
+            />
+          </Box>
 
-          <div className="flex-1 overflow-y-auto px-2 pb-2">
-            {modList.map(m => {
-              const st = modStats[m.id] || {};
-              const active = selMod === m.id && view === "mod";
-              const hasFail = st.fail > 0;
-              const hasPass = st.pass > 0;
-              return (
-                <motion.div key={m.id} variants={listItem} initial="initial" animate="animate">
-                  <button
-                    onClick={() => {
-                      if (locked && !(selMod === m.id && view === "mod")) return;
-                      setSelMod(m.id); setView("mod");
-                      if (onMobileClose) onMobileClose();
-                    }}
-                    disabled={locked && !(selMod === m.id && view === "mod")}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg mb-0.5 text-left transition-all",
-                      active
-                        ? "bg-sky-500/10 border-l-2 border-sky-400 text-sky-300"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border-l-2 border-transparent",
-                      "disabled:opacity-40 disabled:cursor-not-allowed"
-                    )}
-                  >
-                    <Layers className={cn("w-3 h-3 flex-shrink-0", active ? "text-sky-400" : "text-slate-600")} />
-                    <span className="text-[12px] flex-1 truncate font-medium">{m.name}</span>
-                    {hasFail && (
-                      <Badge className="h-4 text-[9px] px-1 bg-rose-900/60 text-rose-400 border-rose-500/30 font-mono">✗{st.fail}</Badge>
-                    )}
-                    {!hasFail && hasPass && (
-                      <CheckCircle className="w-3 h-3 text-emerald-500" />
-                    )}
-                  </button>
-                </motion.div>
-              );
-            })}
-          </div>
+          <Box sx={{ flex: 1, overflowY: "auto", px: 0.75, pb: 1 }}>
+            <motion.div variants={listStagger} initial="initial" animate="animate">
+              {modList.map(m => {
+                const st = modStats[m.id] || {};
+                const active = selMod === m.id && view === "mod";
+                return (
+                  <motion.div key={m.id} variants={listItem}>
+                    <ListItemButton
+                      onClick={() => {
+                        if (locked && !(selMod === m.id && view === "mod")) return;
+                        setSelMod(m.id); setView("mod");
+                        if (onMobileClose) onMobileClose();
+                      }}
+                      disabled={locked && !(selMod === m.id && view === "mod")}
+                      sx={{
+                        borderRadius: 2, mb: 0.25, py: 0.7,
+                        bgcolor: active ? alpha("#ea580c", 0.10) : "transparent",
+                        color: active ? "primary.main" : "text.secondary",
+                        borderLeft: active ? "3px solid" : "3px solid transparent",
+                        borderLeftColor: active ? "primary.main" : "transparent",
+                        "&:hover": { bgcolor: active ? alpha("#ea580c", 0.12) : alpha("#000", 0.04) },
+                        "&.Mui-disabled": { opacity: 0.38 },
+                        transition: "all 0.16s cubic-bezier(0.4,0,0.2,1)",
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 26, color: "inherit", opacity: active ? 1 : 0.6 }}>
+                        <LayersRounded sx={{ fontSize: 14 }} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={m.name}
+                        primaryTypographyProps={{ fontSize: 12, fontWeight: active ? 700 : 400, noWrap: true }}
+                      />
+                      {st.fail > 0 && (
+                        <Chip label={`✗${st.fail}`} size="small" sx={{ height: 17, fontSize: 9, fontFamily: MONO, bgcolor: C.red, color: C.re, ml: 0.5, border: `1px solid ${alpha(C.re, 0.25)}` }} />
+                      )}
+                      {!st.fail && st.pass > 0 && (
+                        <CheckCircleRounded sx={{ fontSize: 14, color: C.gr, ml: 0.5 }} />
+                      )}
+                    </ListItemButton>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </Box>
         </>
       )}
 
       {/* Footer */}
-      <div className={cn(
-        "border-t border-slate-800 p-3 flex-shrink-0 flex items-center gap-2.5",
-        "bg-gradient-to-t from-slate-900/50"
-      )}>
-        <Avatar className="w-8 h-8 flex-shrink-0 ring-1 ring-sky-500/30">
-          <AvatarFallback className="text-xs font-bold text-sky-300" style={{ background: "linear-gradient(135deg, #0c1f3a, #0f2a50)" }}>
-            {session.name?.[0]?.toUpperCase()}
-          </AvatarFallback>
+      <Box sx={{ borderTop: `1px solid ${C.b1}`, p: 1.5, flexShrink: 0, display: "flex", alignItems: "center", gap: 1.5,
+        background: "linear-gradient(135deg, rgba(255,247,237,0.5) 0%, rgba(255,255,255,0.8) 100%)" }}>
+        <Avatar sx={{ width: 32, height: 32, background: "linear-gradient(135deg,#ea580c,#c2410c)", color: "#fff", fontSize: 14, fontWeight: 700, boxShadow: "0 2px 8px rgba(234,88,12,0.35)" }}>
+          {session.name?.[0]?.toUpperCase()}
         </Avatar>
         {(!collapsed || isMobile) && (
           <>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-bold text-slate-200 truncate">{session.name}</div>
-              <Badge className={cn(
-                "text-[9px] h-4 px-1.5 font-mono border-0",
-                session.role === "admin"
-                  ? "bg-sky-900/60 text-sky-400"
-                  : "bg-amber-900/40 text-amber-400"
-              )}>
-                {session.role === "admin" ? <ShieldCheck className="w-2.5 h-2.5 mr-1" /> : <User className="w-2.5 h-2.5 mr-1" />}
-                {session.role}
-              </Badge>
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button onClick={onLogout}
-                    className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-900/30 transition-colors">
-                    <LogOut className="w-3.5 h-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="bg-slate-800 border-slate-700 text-slate-200 text-xs">Logout</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="caption" fontWeight={700} sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>{session.name}</Typography>
+              <Chip label={session.role} size="small" sx={{ height: 16, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                bgcolor: session.role === "admin" ? alpha("#ea580c", 0.12) : C.amd,
+                color: session.role === "admin" ? C.ac : C.am,
+                border: `1px solid ${session.role === "admin" ? alpha("#ea580c", 0.25) : "transparent"}` }} />
+            </Box>
+            <Tooltip title="Logout">
+              <IconButton size="small" onClick={onLogout} sx={{ color: "error.main", "&:hover": { bgcolor: alpha("#dc2626", 0.08) } }}>
+                <LogoutRounded sx={{ fontSize: 17 }} />
+              </IconButton>
+            </Tooltip>
           </>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 
   if (isMobile) {
     return (
-      <Sheet open={mobileOpen} onOpenChange={v => !v && onMobileClose?.()}>
-        <SheetContent side="left" className="p-0 w-72 border-slate-800 bg-transparent">
-          {content}
-        </SheetContent>
-      </Sheet>
+      <Drawer anchor="left" open={mobileOpen} onClose={onMobileClose}
+        PaperProps={{ sx: { width: 280, bgcolor: "rgba(255,255,255,0.95)", backdropFilter: "blur(16px)" } }}>
+        {content}
+      </Drawer>
     );
   }
 
   return (
-    <div className={cn("flex-shrink-0 border-r border-slate-800 transition-all duration-300 overflow-hidden", collapsed ? "w-[52px]" : "w-64")}
-      style={{ background: "var(--tp-surface)" }}>
+    <Box sx={{
+      width: drawerWidth, flexShrink: 0, display: "flex", flexDirection: "column",
+      bgcolor: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      borderRight: `1px solid rgba(245,222,206,0.8)`,
+      boxShadow: "2px 0 20px rgba(234,88,12,0.04)",
+      overflow: "hidden",
+      transition: "width 0.25s cubic-bezier(0.4,0,0.2,1)",
+    }}>
       {content}
-    </div>
+    </Box>
   );
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────────
 function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
-  const isMobile = useIsMobile();
   const isAdmin = session.role === "admin";
-  const [search, setSearch] = useState("");
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [confirmDel, setConfirmDel] = useState(null);
 
   const modList = useMemo(() => Object.values(modules), [modules]);
   const modStats = useMemo(() => modList.map(m => {
-    const all = m.tests.flatMap(t => t.steps.filter(s => !s.isDivider));
-    return { ...m, testCount: m.tests.length, pass: all.filter(s => s.status === "pass").length, fail: all.filter(s => s.status === "fail").length, total: all.length };
+    const all = m.tests.flatMap(t => t.steps);
+    const pass = all.filter(s => s.status === "pass").length;
+    const fail = all.filter(s => s.status === "fail").length;
+    return { ...m, pass, fail, total: all.length, testCount: m.tests.length };
   }), [modList]);
 
   const total = modStats.reduce((a, m) => a + m.total, 0);
@@ -1444,138 +1055,142 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
   };
 
   const statCards = [
-    { label: "Total Steps", value: total, icon: <Activity className="w-5 h-5" />, accent: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.15)", sub: `${modList.length} modules` },
-    { label: "Passed", value: totalPass, icon: <CheckCircle className="w-5 h-5" />, accent: "#34d399", bg: "rgba(52,211,153,0.06)", border: "rgba(52,211,153,0.15)", sub: `${total ? Math.round((totalPass / total) * 100) : 0}% rate` },
-    { label: "Failed", value: totalFail, icon: <XCircle className="w-5 h-5" />, accent: "#fb7185", bg: "rgba(251,113,133,0.06)", border: "rgba(251,113,133,0.15)", sub: `${modStats.filter(m => m.fail > 0).length} modules` },
-    { label: "Pending", value: pending, icon: <RefreshCw className="w-5 h-5" />, accent: "#fbbf24", bg: "rgba(251,191,36,0.06)", border: "rgba(251,191,36,0.15)", sub: `${modStats.filter(m => m.pass + m.fail === m.total && m.total > 0).length} complete` },
+    { label: "Total Steps", value: total, color: "primary.main", bgColor: "#fff7ed", borderColor: alpha("#ea580c", 0.2), icon: <LayersRounded sx={{ fontSize: 22, color: "#ea580c" }} />, sub: `${modList.length} modules` },
+    { label: "Passed", value: totalPass, color: "success.main", bgColor: "#f0fdf4", borderColor: alpha("#16a34a", 0.2), icon: <CheckCircleRounded sx={{ fontSize: 22, color: "#16a34a" }} />, sub: `${total ? Math.round((totalPass / total) * 100) : 0}% rate` },
+    { label: "Failed", value: totalFail, color: "error.main", bgColor: "#fff5f5", borderColor: alpha("#dc2626", 0.2), icon: <CancelRounded sx={{ fontSize: 22, color: "#dc2626" }} />, sub: `${modStats.filter(m => m.fail > 0).length} modules` },
+    { label: "Pending", value: pending, color: "warning.main", bgColor: "#fffbeb", borderColor: alpha("#d97706", 0.2), icon: <RefreshRounded sx={{ fontSize: 22, color: "#d97706" }} />, sub: `${modStats.filter(m => m.pass + m.fail === m.total && m.total > 0).length} complete` },
   ];
-
-  const filters = [["all","All"], ["active","In Progress"], ["pass","All Pass"], ["fail","Has Failures"], ["empty","Not Started"]];
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      className="flex flex-col flex-1 overflow-hidden">
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar title="Dashboard" sub={`Welcome back, ${session.name}`}>
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" className="w-48" />}
-        {isAdmin && (
-          <Button size="sm" onClick={addModule}
-            className="h-8 text-xs bg-sky-600 hover:bg-sky-700 text-white border-0 gap-1.5">
-            <Plus className="w-3.5 h-3.5" /> Add Module
-          </Button>
-        )}
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" />}
+        {isAdmin && <Button variant="contained" size="small" startIcon={<Ico n="plus" s={13} />} onClick={addModule}>Add Module</Button>}
       </Topbar>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        {isMobile && <div className="mb-3"><SearchBox value={search} onChange={setSearch} placeholder="Search modules…" className="w-full" /></div>}
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2.5 }}>
+        {/* Search on mobile */}
+        {isMobile && <Box sx={{ mb: 1.5 }}><SearchBox value={search} onChange={setSearch} placeholder="Search modules…" fullWidth /></Box>}
 
         {/* Stat cards */}
-        <div className={cn("grid gap-3 mb-5", isMobile ? "grid-cols-2" : "grid-cols-4")}>
+        <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? 1 : 1.5, mb: isMobile ? 2 : 2.5 }}>
           {statCards.map((card, i) => (
             <motion.div key={card.label} custom={i} variants={cardVariants} initial="initial" animate="animate">
-              <div className="rounded-xl border overflow-hidden relative p-4"
-                style={{ background: card.bg, borderColor: card.border }}>
-                <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl"
-                  style={{ background: `linear-gradient(90deg, transparent, ${card.accent}, transparent)` }} />
-                <div className="flex items-start justify-between mb-2">
-                  <div className="text-[9px] font-mono uppercase tracking-[0.15em]" style={{ color: card.accent }}>{card.label}</div>
-                  {!isMobile && <span style={{ color: card.accent, opacity: 0.7 }}>{card.icon}</span>}
-                </div>
-                <div className="text-3xl font-extrabold" style={{ color: card.accent, fontFamily: "'Syne', sans-serif" }}>
-                  {card.value.toLocaleString()}
-                </div>
-                <div className="text-[10px] font-mono text-slate-600 mt-0.5">{card.sub}</div>
-              </div>
+              <motion.div whileHover={{ y: -4, boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+                <Paper elevation={0} sx={{
+                  p: isMobile ? 1.5 : 2, borderRadius: 3, overflow: "hidden",
+                  border: `1px solid ${card.borderColor}`,
+                  bgcolor: card.bgColor,
+                  cursor: "default",
+                  position: "relative",
+                }}>
+                  <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, bgcolor: card.color, opacity: 0.7, borderRadius: "3px 3px 0 0" }} />
+                  <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={0.5}>
+                    <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", display: "block" }}>
+                      {card.label}
+                    </Typography>
+                    {!isMobile && card.icon}
+                  </Stack>
+                  <Typography variant="h4" fontWeight={800} sx={{ color: card.color, lineHeight: 1.1, mb: 0.5 }}>{card.value.toLocaleString()}</Typography>
+                  <Typography variant="caption" sx={{ color: "text.disabled", fontFamily: MONO }}>{card.sub}</Typography>
+                </Paper>
+              </motion.div>
             </motion.div>
           ))}
-        </div>
+        </Box>
 
         {/* Filter bar */}
-        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <div className="text-sm font-bold text-slate-200">
-            Modules <span className="font-mono font-normal text-slate-600 text-xs">({filtered.length})</span>
-          </div>
-          <div className="flex gap-1 flex-wrap">
-            {filters.map(([k, l]) => (
-              <button key={k} onClick={() => setFilter(k)}
-                className={cn(
-                  "text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all",
-                  filter === k
-                    ? "bg-sky-500/20 border-sky-500/40 text-sky-300 font-bold"
-                    : "border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-700"
-                )}>
-                {l}
-              </button>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
+          <Typography variant="body2" fontWeight={700} sx={{ color: "text.primary" }}>
+            Modules{" "}
+            <Box component="span" sx={{ color: "text.disabled", fontFamily: MONO, fontWeight: 400, fontSize: 12 }}>({filtered.length})</Box>
+          </Typography>
+          <Stack direction="row" gap={0.5} flexWrap="wrap">
+            {[["all","All"],["active","In Progress"],["pass","All Pass"],["fail","Has Failures"],["empty","Not Started"]].map(([k,l]) => (
+              <Chip key={k} label={l} size="small" clickable
+                onClick={() => setFilter(k)}
+                sx={{
+                  fontFamily: MONO, fontSize: 10, height: 26,
+                  bgcolor: filter === k ? "primary.main" : "transparent",
+                  color: filter === k ? "#fff" : "text.secondary",
+                  border: `1px solid ${filter === k ? "transparent" : C.b1}`,
+                  fontWeight: filter === k ? 700 : 500,
+                  boxShadow: filter === k ? "0 2px 8px rgba(234,88,12,0.30)" : "none",
+                  "&:hover": { bgcolor: filter === k ? "primary.dark" : alpha("#000", 0.04) },
+                  transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
+                }}
+              />
             ))}
-          </div>
-        </div>
+          </Stack>
+        </Stack>
 
         {/* Module cards */}
-        <div className="space-y-2">
+        <Stack gap={isMobile ? 1 : 1.25}>
           {filtered.map((m, i) => {
             const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
             const passW = m.total ? (m.pass / m.total) * 100 : 0;
             const failW = m.total ? (m.fail / m.total) * 100 : 0;
             const isDone = m.pass === m.total && m.total > 0;
             const hasFail = m.fail > 0;
-            const borderColor = hasFail ? "rgba(251,113,133,0.3)" : isDone ? "rgba(52,211,153,0.3)" : "rgba(30,45,74,1)";
-            const statusColor = hasFail ? "#fb7185" : isDone ? "#34d399" : m.pass > 0 ? "#fbbf24" : "#1e2d4a";
+            const borderColor = hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1;
             return (
               <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-                whileHover={{ y: -2, boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }}
-                transition={{ type: "spring", stiffness: 360, damping: 28 }}>
-                <div
-                  className="rounded-xl border overflow-hidden cursor-pointer transition-colors"
-                  style={{ borderColor, background: "var(--tp-card)" }}
-                  onClick={() => onSelect(m.id)}
-                >
-                  <div className={cn("flex items-center gap-3 px-4 py-3", isMobile ? "flex-wrap" : "")}>
+                whileHover={{ y: -3, boxShadow: "0 12px 32px rgba(0,0,0,0.10)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+                <Paper elevation={0} sx={{
+                  border: `1px solid ${borderColor}`, borderRadius: 3, overflow: "hidden",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  bgcolor: hasFail ? "rgba(255,245,245,0.6)" : isDone ? "rgba(240,253,244,0.6)" : "background.paper",
+                }}>
+                  <Box sx={{ p: isMobile ? "12px 14px" : "14px 18px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer" }}
+                    onClick={() => onSelect(m.id)}>
                     {/* Status dot */}
-                    <div className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ background: statusColor, boxShadow: isDone || hasFail ? `0 0 0 3px ${statusColor}22` : "none" }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-slate-100 text-sm truncate">{m.name}</div>
-                      <div className="text-[10px] font-mono text-slate-500">
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                      bgcolor: hasFail ? C.re : isDone ? C.gr : m.pass > 0 ? C.am : C.b2,
+                      boxShadow: hasFail ? `0 0 0 3px ${alpha(C.re,0.15)}` : isDone ? `0 0 0 3px ${alpha(C.gr,0.15)}` : "none",
+                    }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography fontWeight={700} sx={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</Typography>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>
                         {m.testCount} tests · {m.total} steps
-                        {m.pass > 0 && <span className="text-emerald-500 ml-1.5 font-bold">✓{m.pass}</span>}
-                        {m.fail > 0 && <span className="text-rose-500 ml-1 font-bold">✗{m.fail}</span>}
-                        {m.total - m.pass - m.fail > 0 && <span className="text-slate-600 ml-1">·{m.total - m.pass - m.fail}</span>}
-                      </div>
-                    </div>
-                    <Badge className={cn(
-                      "font-mono text-[10px] font-extrabold h-5 px-2 border",
-                      pct === 100 ? "bg-emerald-900/50 text-emerald-400 border-emerald-500/30"
-                        : hasFail ? "bg-rose-900/50 text-rose-400 border-rose-500/30"
-                        : "bg-sky-900/50 text-sky-400 border-sky-500/30"
-                    )}>
-                      {pct}%
-                    </Badge>
+                        {m.pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 1, fontWeight: 700 }}>✓{m.pass}</Box>}
+                        {m.fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5, fontWeight: 700 }}>✗{m.fail}</Box>}
+                        {m.total - m.pass - m.fail > 0 && <Box component="span" sx={{ color: "text.disabled", ml: 0.5 }}>·{m.total - m.pass - m.fail}</Box>}
+                      </Typography>
+                    </Box>
+                    <Chip label={`${pct}%`} size="small" sx={{
+                      fontFamily: MONO, fontWeight: 800, fontSize: 11, height: 24,
+                      bgcolor: pct === 100 ? alpha(C.gr, 0.12) : hasFail ? alpha(C.re, 0.10) : alpha("#ea580c", 0.10),
+                      color: pct === 100 ? C.gr : hasFail ? C.re : "primary.main",
+                      border: `1px solid ${pct === 100 ? alpha(C.gr, 0.25) : hasFail ? alpha(C.re, 0.25) : alpha("#ea580c", 0.25)}`,
+                    }} />
                     {isAdmin && (
-                      <button onClick={e => { e.stopPropagation(); setConfirmDel(m.id); }}
-                        className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-900/30 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <IconButton size="small" sx={{ color: "error.main", "&:hover": { bgcolor: alpha("#dc2626", 0.08) } }}
+                        onClick={e => { e.stopPropagation(); setConfirmDel(m.id); }}>
+                        <DeleteRounded sx={{ fontSize: 16 }} />
+                      </IconButton>
                     )}
-                    <ChevronRight className="w-4 h-4 text-slate-600" />
-                  </div>
-                  {/* Dual progress bar */}
-                  <div className="h-1 flex bg-slate-800">
+                    <ChevronRightRounded sx={{ fontSize: 18, color: C.t3 }} />
+                  </Box>
+                  {/* Dual-color progress strip */}
+                  <Box sx={{ height: 4, display: "flex", bgcolor: C.s3 }}>
                     <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.7, ease: [0.4,0,0.2,1] }}
-                      style={{ background: "linear-gradient(90deg, #10b981, #34d399)", minWidth: 0 }} />
+                      style={{ background: `linear-gradient(90deg, #22c55e, #16a34a)`, minWidth: 0 }} />
                     <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.7, ease: [0.4,0,0.2,1], delay: 0.1 }}
-                      style={{ background: "linear-gradient(90deg, #f43f5e, #fb7185)", minWidth: 0 }} />
-                  </div>
-                </div>
+                      style={{ background: `linear-gradient(90deg, #f87171, #dc2626)`, minWidth: 0 }} />
+                  </Box>
+                </Paper>
               </motion.div>
             );
           })}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-slate-600">
-              <Layers className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <div className="font-mono text-sm">No modules match.</div>
-            </div>
+            <Box sx={{ textAlign: "center", py: 8, color: "text.disabled" }}>
+              <LayersRounded sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
+              <Typography sx={{ fontFamily: MONO, fontSize: 13 }}>No modules match.</Typography>
+            </Box>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Box>
 
       <ConfirmDialog
         open={Boolean(confirmDel)}
@@ -1591,125 +1206,117 @@ function Dashboard({ modules, session, onSelect, saveMods, addLog, toast }) {
 // ── Divider Row ───────────────────────────────────────────────────────────────────
 function DividerRow({ label }) {
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-800" style={{ background: "rgba(14,165,233,0.04)" }}>
-      <div className="w-1.5 h-1.5 rounded-full bg-sky-400 flex-shrink-0" />
-      <span className="text-[9px] font-mono font-bold text-sky-400 uppercase tracking-[0.18em] whitespace-nowrap">{label}</span>
-      <div className="flex-1 h-px bg-gradient-to-r from-sky-500/20 to-transparent" />
-    </div>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 0.85,
+      background: "linear-gradient(90deg,#fff7ed 0%,#fef9f5 60%,rgba(255,255,255,0) 100%)",
+      borderBottom: `1px solid ${C.b1}` }}>
+      <Box sx={{ width: 4, height: 4, borderRadius: "50%", bgcolor: "primary.main", flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "1.5px", whiteSpace: "nowrap", fontSize: 10 }}>
+        {label}
+      </Typography>
+      <Box sx={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${C.b2} 0%, transparent 100%)` }} />
+    </Box>
   );
 }
 
 // ── Step Row ──────────────────────────────────────────────────────────────────────
 function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef }) {
   const isMobile = useIsMobile();
-  const rowBg = step.status === "fail"
-    ? "rgba(251,113,133,0.05)"
-    : step.status === "pass"
-    ? "rgba(52,211,153,0.05)"
-    : isActive
-    ? "rgba(56,189,248,0.04)"
-    : "transparent";
+  const rowBg = step.status === "fail" ? "#fff5f5" : step.status === "pass" ? "#f0fdf4" : isActive ? "#fff7ed" : "transparent";
 
   const PassBtn = (
-    <button
+    <Button size="small" variant={step.status === "pass" ? "contained" : "outlined"}
       onClick={e => { e.stopPropagation(); onStatusToggle(idx, "pass"); }}
-      className={cn(
-        "flex items-center justify-center gap-1 px-2 py-1 rounded-full text-[10px] font-mono font-bold flex-1 border transition-all",
-        step.status === "pass"
-          ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(52,211,153,0.3)]"
-          : "border-slate-700 text-slate-500 hover:border-emerald-500/50 hover:text-emerald-400 hover:bg-emerald-900/20"
-      )}>
-      <Check className="w-3 h-3" /> PASS
-    </button>
+      sx={{
+        borderRadius: 6, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        minWidth: 0, gap: 0.4,
+        ...(step.status === "pass"
+          ? { bgcolor: "#16a34a", color: "#fff", borderColor: "#16a34a", boxShadow: "0 2px 8px rgba(22,163,74,.30)", "&:hover": { bgcolor: "#15803d" } }
+          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.grd, borderColor: "#86efac", color: C.gr } }),
+      }}>
+      <CheckRounded sx={{ fontSize: 12 }} /> PASS
+    </Button>
   );
-
   const FailBtn = (
-    <button
+    <Button size="small" variant={step.status === "fail" ? "contained" : "outlined"}
       onClick={e => { e.stopPropagation(); onStatusToggle(idx, "fail"); }}
-      className={cn(
-        "flex items-center justify-center gap-1 px-2 py-1 rounded-full text-[10px] font-mono font-bold flex-1 border transition-all",
-        step.status === "fail"
-          ? "bg-rose-500 border-rose-500 text-white shadow-[0_0_12px_rgba(251,113,133,0.3)]"
-          : "border-slate-700 text-slate-500 hover:border-rose-500/50 hover:text-rose-400 hover:bg-rose-900/20"
-      )}>
-      <X className="w-3 h-3" /> FAIL
-    </button>
+      sx={{
+        borderRadius: 6, px: 1.5, py: 0.4, fontSize: 10, fontFamily: MONO, fontWeight: 700, flex: 1,
+        minWidth: 0, gap: 0.4,
+        ...(step.status === "fail"
+          ? { bgcolor: "#dc2626", color: "#fff", borderColor: "#dc2626", boxShadow: "0 2px 8px rgba(220,38,38,.30)", "&:hover": { bgcolor: "#b91c1c" } }
+          : { color: C.t3, borderColor: C.b2, bgcolor: "transparent", "&:hover": { bgcolor: C.red, borderColor: "#fca5a5", color: C.re } }),
+      }}>
+      <CloseRounded sx={{ fontSize: 12 }} /> FAIL
+    </Button>
   );
 
   if (isMobile) {
     return (
-      <div ref={rowRef} onClick={onActivate}
-        className="border-b border-slate-800 p-3 transition-all"
-        style={{ background: rowBg, outline: isActive ? "1px solid rgba(56,189,248,0.4)" : "none", outlineOffset: -1 }}>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-mono text-[10px] font-bold text-slate-500 min-w-[28px]">
-            {isActive && <span className="text-sky-400 mr-0.5">●</span>}
-            {step.serialNo != null ? `#${step.serialNo}` : "—"}
-          </span>
-          <div className="flex-1" />
-          <div className="flex gap-1.5 w-[156px]">{PassBtn}{FailBtn}</div>
-        </div>
+      <motion.div ref={rowRef} onClick={onActivate} layout
+        style={{ borderBottom: `1px solid ${C.b1}`, background: rowBg, padding: "10px 12px",
+          outline: isActive ? `2px solid ${C.ac}` : "none", outlineOffset: -2 }}>
+        <Stack direction="row" alignItems="center" gap={1} mb={1}>
+          <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.t3, minWidth: 28 }}>
+            {isActive && <Box component="span" sx={{ color: "primary.main", mr: 0.3 }}>●</Box>}
+            {step.serialNo != null && step.serialNo !== "" ? `#${step.serialNo}` : "—"}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Stack direction="row" gap={0.75} sx={{ width: 160 }}>{PassBtn}{FailBtn}</Stack>
+        </Stack>
         {step.action
-          ? <p className="text-sm text-slate-300 leading-relaxed mb-1.5 whitespace-pre-wrap break-words">{step.action}</p>
-          : <p className="text-xs font-mono text-slate-600 italic mb-1.5">No action</p>}
+          ? <Typography variant="body2" sx={{ lineHeight: 1.6, mb: 0.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{step.action}</Typography>
+          : <Typography variant="caption" sx={{ color: C.t3, fontStyle: "italic", fontFamily: MONO, display: "block", mb: 0.5 }}>No action</Typography>}
         {step.result && (
-          <div className="pl-2.5 border-l border-slate-700 mb-2">
-            <div className="text-[9px] font-mono text-slate-600 mb-0.5">Expected</div>
-            <div className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{step.result}</div>
-          </div>
+          <Box sx={{ pl: 1, borderLeft: `2px solid ${C.b2}`, mb: 0.75 }}>
+            <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3, display: "block", mb: 0.3 }}>Expected</Typography>
+            <Typography variant="caption" sx={{ color: C.t2, lineHeight: 1.5, display: "block", whiteSpace: "pre-wrap" }}>{step.result}</Typography>
+          </Box>
         )}
-        <Textarea
-          value={step.remarks} placeholder="Add remarks…" rows={2}
+        <TextField
+          value={step.remarks} multiline rows={2} placeholder="Add remarks…" fullWidth size="small"
           onChange={e => onChange(idx, "remarks", e.target.value)}
           onClick={e => e.stopPropagation()}
-          className="text-xs bg-slate-800 border-slate-700 text-slate-300 placeholder:text-slate-600 resize-none focus:border-sky-500/50"
+          InputProps={{ sx: { fontSize: 12, bgcolor: C.s2, borderRadius: 1.5 } }}
         />
-      </div>
+      </motion.div>
     );
   }
 
+  // Desktop grid row
+  const cell = (text, color) => (
+    <Box sx={{ p: "7px 10px", display: "flex", alignItems: "flex-start", borderRight: `1px solid ${C.b1}`, minHeight: 42 }}>
+      {text
+        ? <Typography variant="caption" sx={{ color, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12 }}>{text}</Typography>
+        : <Typography variant="caption" sx={{ color: C.t3, fontStyle: "italic", fontFamily: MONO }}>—</Typography>}
+    </Box>
+  );
+
   return (
-    <div ref={rowRef} onClick={onActivate}
-      className="grid border-b border-slate-800 transition-all cursor-default"
-      style={{
-        gridTemplateColumns: "50px 1fr 1fr 180px 110px",
-        background: rowBg,
-        outline: isActive ? "1px solid rgba(56,189,248,0.35)" : "none",
-        outlineOffset: -1,
-      }}>
-      {/* Serial */}
-      <div className="px-2 py-1.5 flex items-center justify-center border-r border-slate-800">
-        {isActive && <div className="w-1 h-1 rounded-full bg-sky-400 mr-1 flex-shrink-0" />}
-        <span className="font-mono text-[11px] font-semibold text-slate-500">
+    <motion.div ref={rowRef} onClick={onActivate} layout
+      style={{ display: "grid", gridTemplateColumns: "50px 1fr 1fr 180px 110px",
+        borderBottom: `1px solid ${C.b1}`, background: rowBg,
+        outline: isActive ? `2px solid ${C.ac}` : "none", outlineOffset: -2, cursor: "default" }}>
+      <Box sx={{ p: "7px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${C.b1}` }}>
+        {isActive && <Box sx={{ width: 4, height: 4, borderRadius: "50%", bgcolor: "primary.main", mr: 0.5, flexShrink: 0 }} />}
+        <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 600, color: step.serialNo != null ? C.t2 : C.t3, fontSize: 12 }}>
           {step.serialNo != null && step.serialNo !== "" ? step.serialNo : "—"}
-        </span>
-      </div>
-      {/* Action */}
-      <div className="px-2.5 py-1.5 border-r border-slate-800 flex items-start min-h-[40px]">
-        {step.action
-          ? <p className="text-[12px] text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{step.action}</p>
-          : <span className="text-[11px] font-mono text-slate-700 italic">—</span>}
-      </div>
-      {/* Result */}
-      <div className="px-2.5 py-1.5 border-r border-slate-800 flex items-start">
-        {step.result
-          ? <p className="text-[12px] text-slate-400 leading-relaxed whitespace-pre-wrap break-words">{step.result}</p>
-          : <span className="text-[11px] font-mono text-slate-700 italic">—</span>}
-      </div>
-      {/* Remarks */}
-      <div className="p-1 border-r border-slate-800">
-        <Textarea
-          value={step.remarks} placeholder="Remarks…" rows={2}
+        </Typography>
+      </Box>
+      {cell(step.action, C.t1)}
+      {cell(step.result, C.t2)}
+      <Box sx={{ p: "4px 8px", borderRight: `1px solid ${C.b1}` }}>
+        <TextField
+          value={step.remarks} multiline rows={2} placeholder="Remarks…" fullWidth
           onChange={e => onChange(idx, "remarks", e.target.value)}
           onClick={e => e.stopPropagation()}
-          className="text-[12px] bg-transparent border-0 resize-none text-slate-400 placeholder:text-slate-700 focus:ring-0 p-1 min-h-0 h-full shadow-none"
+          variant="standard"
+          InputProps={{ disableUnderline: true, sx: { fontSize: 12, color: C.t2, bgcolor: "transparent" } }}
         />
-      </div>
-      {/* Buttons */}
-      <div className="p-1.5 flex flex-col gap-1">
+      </Box>
+      <Box sx={{ p: "6px 8px", display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center", gap: 0.5 }}>
         {PassBtn}{FailBtn}
-      </div>
-    </div>
+      </Box>
+    </motion.div>
   );
 }
 
@@ -1721,7 +1328,11 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   const [search, setSearch] = useState("");
   const [fStat, setFStat] = useState("all");
   const [addCount, setAddCount] = useState(10);
+  const [renaming, setRenaming] = useState(false);
+  const [renVal, setRenVal] = useState(test.name);
+  const [descVal, setDescVal] = useState(test.description || "");
   const [activeIdx, setActiveIdx] = useState(0);
+  const renRef = useRef();
   const rowRefs = useRef({});
   const tableRef = useRef();
   const localCommitRef = useRef(false);
@@ -1729,7 +1340,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   const latestStepsRef = useRef(test.steps);
 
   useEffect(() => {
-    setSteps(test.steps);
+    setSteps(test.steps); setRenVal(test.name); setDescVal(test.description || "");
     const firstPending = test.steps.findIndex(s => !s.isDivider && s.status === "pending");
     setActiveIdx(firstPending >= 0 ? firstPending : 0);
     localCommitRef.current = false;
@@ -1750,8 +1361,9 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     const t = setTimeout(() => {
       const elRect = el.getBoundingClientRect(); const ctRect = container.getBoundingClientRect();
       const relTop = elRect.top - ctRect.top;
-      if (relTop < 0 || relTop > container.clientHeight * 0.35)
+      if (relTop < 0 || relTop > container.clientHeight * 0.35) {
         container.scrollTo({ top: Math.max(0, container.scrollTop + relTop - 60), behavior: "smooth" });
+      }
     }, 30);
     return () => clearTimeout(t);
   }, [activeIdx]);
@@ -1781,8 +1393,9 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   const setStatusToggle = (i, status) => {
     const ns = [...steps]; const newStatus = ns[i].status === status ? "pending" : status;
     ns[i] = { ...ns[i], status: newStatus }; setSteps(ns); commit(ns);
-    if (newStatus !== "pending")
+    if (newStatus !== "pending") {
       addLog({ ts: Date.now(), user: session.name, action: `${mod.name} › ${test.name} · Step ${ns[i].serialNo} → ${newStatus.toUpperCase()}`, type: newStatus });
+    }
     if (newStatus !== "pending") {
       const updVisible = ns.map((s, idx) => ({ ...s, _i: idx })).filter(s => {
         if (s.isDivider) return false;
@@ -1824,10 +1437,10 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   };
 
   const exportPDF = () => {
-    const sc = s => s === "pass" ? "#10b981" : s === "fail" ? "#ef4444" : "#9ca3af";
+    const sc = s => s === "pass" ? "#16a34a" : s === "fail" ? "#dc2626" : "#9ca3af";
     const sb = s => s === "pass" ? "#f0fdf4" : s === "fail" ? "#fff5f5" : "#ffffff";
     const stepRows = steps.map(s => s.isDivider
-      ? `<tr><td colspan="5" style="padding:6px 12px;background:#f0f9ff;font-size:11px;font-family:monospace;font-weight:700;color:#0ea5e9;text-transform:uppercase;letter-spacing:1px">${s.action}</td></tr>`
+      ? `<tr><td colspan="5" style="padding:6px 12px;background:#fff7ed;font-size:11px;font-family:monospace;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px">${s.action}</td></tr>`
       : `<tr style="background:${sb(s.status)}">
           <td style="padding:5px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;text-align:center">${s.serialNo||"—"}</td>
           <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px">${s.action||""}</td>
@@ -1841,9 +1454,11 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${mod.name} — ${test.name}</title>
       <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;color:#111;padding:28px;font-size:14px}h1{font-size:20px;font-weight:700;margin-bottom:4px}.meta{font-family:monospace;font-size:11px;color:#6b7280;margin-bottom:20px}@page{margin:14mm}@media print{body{padding:0}}</style></head>
       <body><h1>${mod.name} › ${test.name}</h1><div class="meta">✓${pass} ✗${fail} ⟳${steps.length-pass-fail} · Generated ${new Date().toLocaleString()}</div>
-      <table style="width:100%;border-collapse:collapse"><thead><tr>
-        ${["S.No","Action","Expected Result","Remarks","Status"].map(h=>`<th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">${h}</th>`).join("")}
-      </tr></thead><tbody>${stepRows}</tbody></table></body></html>`;
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          ${["S.No","Action","Expected Result","Remarks","Status"].map(h=>`<th style="padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:1px;color:#6b7280">${h}</th>`).join("")}
+        </tr></thead><tbody>${stepRows}</tbody>
+      </table></body></html>`;
     const w = window.open("", "_blank"); w.document.write(html); w.document.close();
     w.focus(); setTimeout(() => w.print(), 500); toast("PDF ready", "info");
   };
@@ -1855,7 +1470,8 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
       try {
         const lines = ev.target.result.split("\n").filter(l => l.trim());
         const start = lines[0]?.toLowerCase().includes("serial") ? 1 : 0;
-        const newSteps = []; let sno = 1;
+        const newSteps = [];
+        let sno = 1;
         for (let i = start; i < lines.length; i++) {
           const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
           if (cols[0]?.startsWith("$$$")) {
@@ -1887,236 +1503,253 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     return true;
   });
 
-  const statFilters = [["all","All"],["pass","Pass"],["fail","Fail"],["pending","Pending"]];
-
   return (
-    <div className="flex flex-col flex-1 overflow-hidden" style={{ background: "var(--tp-bg)" }}>
-      {/* Header Row 1 */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800 flex-shrink-0 min-h-[52px]"
-        style={{ background: "var(--tp-surface)" }}>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={onBack} className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-colors">
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="bg-slate-800 border-slate-700 text-slate-200 text-xs">Back to tests</TooltipContent>
+    <Box sx={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {/* Header */}
+      <Box sx={{ flexShrink: 0, bgcolor: "background.paper", borderBottom: `1px solid ${C.b1}` }}>
+        {/* Row 1: title + nav */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: isMobile ? 1.5 : 2.5, py: 1, minHeight: 52 }}>
+          <Tooltip title="Back to tests">
+            <IconButton size="small" onClick={onBack} sx={{ color: "text.secondary" }}>
+              <Ico n="back" s={16} />
+            </IconButton>
           </Tooltip>
-        </TooltipProvider>
+          {renaming ? (
+            <TextField ref={renRef} value={renVal} onChange={e => setRenVal(e.target.value)} size="small" autoFocus
+              onBlur={() => { setRenaming(false); commit(steps, renVal); }}
+              onKeyDown={e => { if (e.key === "Enter") { setRenaming(false); commit(steps, renVal); } }}
+              InputProps={{ sx: { fontWeight: 700, fontSize: 14, borderRadius: 1.5 } }}
+              sx={{ flex: 1 }}
+            />
+          ) : (
+            <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Typography fontWeight={700} sx={{ fontSize: isMobile ? 14 : 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {test.name}
+              </Typography>
+              {isAdmin && (
+                <IconButton size="small" onClick={() => { setRenaming(true); setTimeout(() => renRef.current?.querySelector?.("input")?.select?.(), 20); }} sx={{ color: "text.disabled", flexShrink: 0 }}>
+                  <Ico n="edit" s={12} />
+                </IconButton>
+              )}
+            </Box>
+          )}
+          {/* Progress pill */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexShrink: 0, bgcolor: C.s2, border: `1px solid ${C.b1}`, borderRadius: 5, px: 1.5, py: 0.5 }}>
+            {!isMobile && (
+              <>
+                <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.gr }}>{pass}✓</Typography>
+                {fail > 0 && <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 700, color: C.re }}>{fail}✗</Typography>}
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>{pending}…</Typography>
+                <Box sx={{ width: 1, height: 12, bgcolor: C.b2 }} />
+              </>
+            )}
+            <Typography variant="caption" sx={{ fontFamily: MONO, fontWeight: 800, color: pct === 100 ? C.gr : fail > 0 ? C.re : "primary.main" }}>
+              {pct}%
+            </Typography>
+          </Box>
+          {/* Module nav */}
+          {!isMobile && modIdx !== undefined && (
+            <Stack direction="row" alignItems="center" gap={0.5} sx={{ flexShrink: 0 }}>
+              <IconButton size="small" onClick={() => !navLocked && onNav?.(-1)} disabled={modIdx === 0 || navLocked} sx={{ opacity: navLocked ? 0.4 : 1 }}>
+                <Ico n="chevL" s={14} />
+              </IconButton>
+              <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3, whiteSpace: "nowrap", mx: 0.25 }}>{modIdx + 1}/{modTotal}</Typography>
+              <IconButton size="small" onClick={() => !navLocked && onNav?.(1)} disabled={modIdx === modTotal - 1 || navLocked} sx={{ opacity: navLocked ? 0.4 : 1 }}>
+                <Ico n="chevR" s={14} />
+              </IconButton>
+            </Stack>
+          )}
+        </Box>
 
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-slate-100 text-sm truncate">{test.name}</div>
-          <div className="text-[10px] font-mono text-slate-600">{mod.name}</div>
-        </div>
+        {/* Row 2: description + progress bar */}
+        <Box sx={{ px: isMobile ? 1.5 : 2.5, py: 0.75, display: "flex", alignItems: "center", gap: 1.5, bgcolor: C.s2, borderBottom: `1px solid ${C.b1}` }}>
+          <TextField
+            value={descVal} onChange={e => { setDescVal(e.target.value); commit(steps, renVal, e.target.value); }}
+            placeholder="Add a description…" variant="standard" fullWidth
+            InputProps={{ disableUnderline: true, sx: { fontSize: 12, color: C.t2 } }}
+          />
+          <Box sx={{ width: isMobile ? 80 : 120, flexShrink: 0 }}>
+            <PBar pct={pct} fail={fail > 0} />
+          </Box>
+        </Box>
 
-        {/* Progress pill */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-800 flex-shrink-0"
-          style={{ background: "var(--tp-card)" }}>
-          {!isMobile && (
+        {/* Row 3: action buttons */}
+        <Box sx={{ px: isMobile ? 1.5 : 2.5, py: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+          <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
+          {isAdmin && (
             <>
-              <span className="font-mono text-[11px] font-bold text-emerald-400">{pass}✓</span>
-              {fail > 0 && <span className="font-mono text-[11px] font-bold text-rose-400">{fail}✗</span>}
-              <span className="font-mono text-[11px] text-slate-600">{pending}…</span>
-              <div className="w-px h-3 bg-slate-700" />
+              <Button size="small" variant="outlined" color="error" startIcon={<Ico n="reset" s={12} />} onClick={resetAll}
+                sx={{ borderColor: "#fca5a5", color: "error.main" }}>
+                Reset
+              </Button>
+              <Button size="small" variant="outlined" component="label" startIcon={<Ico n="upload" s={12} />}
+                sx={{ borderColor: C.b2, color: "text.secondary" }}>
+                Import CSV <input type="file" accept=".csv" hidden onChange={importCSV} />
+              </Button>
             </>
           )}
-          <span className={cn(
-            "font-mono text-[12px] font-extrabold",
-            pct === 100 ? "text-emerald-400" : fail > 0 ? "text-rose-400" : "text-sky-400"
-          )}>{pct}%</span>
-        </div>
+          {!isAdmin && onFinish && (
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} style={{ marginLeft: "auto", display: isMobile ? "block" : undefined, flex: isMobile ? 1 : undefined }}>
+              <Button variant="contained" color="success" size={isMobile ? "medium" : "small"}
+                startIcon={<Ico n="check" s={13} />}
+                onClick={() => { commit(steps); addLog({ ts: Date.now(), user: session.name, action: `Finished ${mod.name} › ${test.name}`, type: "info" }); toast("Test finished — progress saved & lock released", "success"); onFinish(steps); }}
+                sx={{ fontWeight: 700, boxShadow: "0 3px 10px rgba(22,163,74,.28)", ...(isMobile ? { width: "100%", py: 1.2, fontSize: 14 } : {}) }}>
+                Finish Test
+              </Button>
+            </motion.div>
+          )}
+          {isAdmin && <Box sx={{ flex: 1 }} />}
+        </Box>
+      </Box>
 
-        {/* Nav arrows */}
-        {!isMobile && modIdx !== undefined && (
-          <div className="flex items-center gap-1">
-            <button onClick={() => onNav?.(-1)} disabled={modIdx === 0 || navLocked}
-              className="p-1 rounded text-slate-600 hover:text-slate-300 hover:bg-slate-800 disabled:opacity-30 transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="font-mono text-[10px] text-slate-600">{modIdx+1}/{modTotal}</span>
-            <button onClick={() => onNav?.(1)} disabled={modIdx === modTotal - 1 || navLocked}
-              className="p-1 rounded text-slate-600 hover:text-slate-300 hover:bg-slate-800 disabled:opacity-30 transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {onFinish && (
-          <Button size="sm" onClick={onFinish}
-            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 border-0 text-white gap-1">
-            <CheckCircle className="w-3 h-3" /> Finish
-          </Button>
-        )}
-      </div>
-
-      {/* Header Row 2: controls */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800 flex-shrink-0 flex-wrap"
-        style={{ background: "var(--tp-surface)" }}>
-        <SearchBox value={search} onChange={setSearch} placeholder="Search steps…" className="w-44" />
-
-        {/* Status filter */}
-        <div className="flex gap-1">
-          {statFilters.map(([k, l]) => (
-            <button key={k} onClick={() => setFStat(k)}
-              className={cn(
-                "text-[10px] font-mono px-2 py-1 rounded border transition-all",
-                fStat === k
-                  ? k === "pass" ? "bg-emerald-900/50 border-emerald-500/40 text-emerald-300"
-                    : k === "fail" ? "bg-rose-900/50 border-rose-500/40 text-rose-300"
-                    : k === "pending" ? "bg-amber-900/40 border-amber-500/40 text-amber-300"
-                    : "bg-sky-900/40 border-sky-500/40 text-sky-300"
-                  : "border-slate-800 text-slate-600 hover:text-slate-400 hover:border-slate-700"
-              )}>
-              {l}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1" />
-
-        {isAdmin && (
-          <>
-            <label className="cursor-pointer">
-              <input type="file" accept=".csv" onChange={importCSV} className="hidden" />
-              <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-300 border border-slate-800 hover:border-slate-700 px-2.5 py-1 rounded-lg transition-colors cursor-pointer">
-                <Download className="w-3.5 h-3.5" /> Import CSV
-              </div>
-            </label>
-            <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />
-          </>
-        )}
-        {!isAdmin && <ExportMenu onCSV={exportCSV} onPDF={exportPDF} />}
-
-        <button onClick={resetAll}
-          className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-amber-400 border border-slate-800 hover:border-amber-500/40 px-2.5 py-1 rounded-lg transition-colors">
-          <RefreshCw className="w-3 h-3" /> Reset
-        </button>
-      </div>
-
-      {/* Table header (desktop) */}
-      {!isMobile && (
-        <div className="grid flex-shrink-0 border-b border-slate-800"
-          style={{ gridTemplateColumns: "50px 1fr 1fr 180px 110px", background: "var(--tp-elevated)" }}>
-          {["S.No","Action","Expected Result","Remarks","Status"].map(h => (
-            <div key={h} className="px-2.5 py-2 text-[9px] font-mono font-bold text-slate-600 uppercase tracking-[0.15em] border-r border-slate-800 last:border-r-0">
-              {h}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Steps */}
-      <div ref={tableRef} className="flex-1 overflow-y-auto">
-        {visible.map(s => s.isDivider ? (
-          <DividerRow key={s.id} label={s.action} />
-        ) : (
-          <StepRow
-            key={s.id}
-            step={s}
-            idx={s._i}
-            onChange={setField}
-            onStatusToggle={setStatusToggle}
-            isActive={activeIdx === s._i}
-            onActivate={() => setActiveIdx(s._i)}
-            rowRef={el => rowRefs.current[s._i] = el}
-          />
-        ))}
-        {visible.length === 0 && (
-          <div className="text-center py-16 text-slate-600">
-            <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <div className="font-mono text-sm">No steps match.</div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer: add steps */}
-      {isAdmin && (
-        <div className="flex items-center gap-2 px-3 py-2 border-t border-slate-800 flex-shrink-0"
-          style={{ background: "var(--tp-surface)" }}>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-mono text-slate-600">Add</span>
-            <Input
-              type="number" value={addCount} min={1} max={10000}
-              onChange={e => setAddCount(Math.max(1, Math.min(10000, parseInt(e.target.value) || 1)))}
-              className="w-16 h-7 text-xs text-center bg-slate-800 border-slate-700 text-slate-200 font-mono"
+      {/* Filter bar */}
+      <Box sx={{ px: isMobile ? 1.5 : 2, py: 1, bgcolor: "background.paper", borderBottom: `1px solid ${C.b1}`,
+        display: "flex", alignItems: isMobile ? "flex-start" : "center", flexDirection: isMobile ? "column" : "row", gap: 1, flexShrink: 0 }}>
+        <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ flex: 1 }}>
+          {[["all","All",realSteps.length],["pass","Pass",pass],["fail","Fail",fail],["pending","Pending",pending]].map(([k,l,c]) => (
+            <Chip key={k} label={`${l} (${c})`} size="small" clickable onClick={() => setFStat(k)}
+              sx={{ fontFamily: MONO, fontSize: isMobile ? 11 : 10, height: isMobile ? 26 : 22,
+                bgcolor: fStat === k ? C.s3 : "transparent", color: fStat === k ? C.t1 : C.t2,
+                border: `1px solid ${fStat === k ? C.b2 : C.b1}`, fontWeight: fStat === k ? 700 : 400,
+              }}
             />
-            <span className="text-[11px] font-mono text-slate-600">steps</span>
-          </div>
-          <Button size="sm" onClick={addSteps}
-            className="h-7 text-xs bg-sky-600 hover:bg-sky-700 border-0 text-white gap-1.5">
-            <Plus className="w-3 h-3" /> Add Steps
-          </Button>
-          <div className="flex-1" />
-          <span className="text-[10px] font-mono text-slate-700">{steps.length} total</span>
-        </div>
-      )}
-    </div>
+          ))}
+          <SearchBox value={search} onChange={setSearch} placeholder="Search steps…" width={isMobile ? "100%" : 170} fullWidth={isMobile} />
+        </Stack>
+        {isAdmin && (
+          <Stack direction="row" alignItems="center" gap={0.75} sx={{ width: isMobile ? "100%" : "auto" }}>
+            <FormControl size="small" sx={{ width: isMobile ? "auto" : 90 }}>
+              <Select value={addCount} onChange={e => setAddCount(Number(e.target.value))}
+                sx={{ fontSize: 12, fontFamily: MONO, bgcolor: C.s2, borderRadius: 1.5 }}>
+                {[1,5,10,25,50,100,250,500,1000,5000].map(n => <MenuItem key={n} value={n} sx={{ fontSize: 12, fontFamily: MONO }}>+{n}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <Button size="small" variant="outlined" color="success" startIcon={<Ico n="plus" s={11} />}
+              onClick={addSteps} disabled={steps.length >= 100_000}
+              sx={{ flex: isMobile ? 1 : undefined, borderColor: "#86efac", color: C.gr }}>
+              Add Steps
+            </Button>
+          </Stack>
+        )}
+      </Box>
+
+      {/* Step Table */}
+      <Box ref={tableRef} sx={{ flex: 1, overflowY: "auto", overflowX: isMobile ? "hidden" : "auto" }}>
+        <Box sx={{ minWidth: isMobile ? undefined : 680 }}>
+          {!isMobile && (
+            <Box sx={{ display: "grid", gridTemplateColumns: "50px 1fr 1fr 180px 110px",
+              bgcolor: "rgba(246,248,250,0.95)", backdropFilter: "blur(10px)",
+              borderBottom: `1px solid ${C.b2}`, position: "sticky", top: 0, zIndex: 2 }}>
+              {["S.No", "Action", "Expected Result", "Remarks", "Status"].map((h, i) => (
+                <Typography key={i} variant="caption" sx={{ p: "8px 10px", fontFamily: MONO, textTransform: "uppercase", letterSpacing: "1px", color: C.t3, borderRight: i < 4 ? `1px solid ${C.b1}` : "none", display: "block" }}>
+                  {h}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          {visible.length === 0 && (
+            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>
+              {steps.length === 0 ? (isAdmin ? "No steps yet — import a CSV or add steps." : "No steps available.") : "No steps match."}
+            </Box>
+          )}
+          {visible.map(s => s.isDivider ? <DividerRow key={s.id} label={s.action} /> : (
+            <StepRow key={s.id} step={s} idx={s._i} onChange={setField} onStatusToggle={setStatusToggle}
+              isActive={activeIdx === s._i} onActivate={() => setActiveIdx(s._i)}
+              rowRef={el => { rowRefs.current[s._i] = el; }}
+            />
+          ))}
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
-// ── Module View ───────────────────────────────────────────────────────────────────
-function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onLockChange, onNav, modIdx, modTotal }) {
+// ── Module View ────────────────────────────────────────────────────────────────────
+function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, onLockChange, modIdx, modTotal }) {
   const isAdmin = session.role === "admin";
   const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null);
   const [search, setSearch] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renVal, setRenVal] = useState(mod.name);
   const [locks, setLocks] = useState({});
+  const renRef = useRef();
   const activeTestIdRef = useRef(null);
-  const heartbeatRef = useRef(null);
-  const uiLocked = !isAdmin && activeTestIdRef.current !== null;
+  const selTestIdxRef = useRef(null);
+  const modTestsRef = useRef(mod.tests);
+  selTestIdxRef.current = selTestIdx;
+  modTestsRef.current = mod.tests;
+  const [uiLocked, setUiLocked] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    lockStore.getAll().then(l => { if (alive) setLocks(l); });
-    const iv = setInterval(() => lockStore.getAll().then(l => { if (alive) setLocks(l); }), 8000);
-    return () => { alive = false; clearInterval(iv); };
+    const poll = async () => { const l = await lockStore.getAll(); if (alive) setLocks(l); };
+    poll(); const id = setInterval(poll, 5000);
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
+  useEffect(() => {
+    if (isAdmin || selTestIdx === null) return;
+    const test = mod.tests[selTestIdx]; if (!test) return;
+    const beat = setInterval(() => lockStore.heartbeat(test.id, session.id), HEARTBEAT_MS);
+    return () => clearInterval(beat);
+  }, [selTestIdx, isAdmin]); // eslint-disable-line
+
+  useEffect(() => {
+    if (isAdmin) return;
+    const onUnload = () => {
+      const testId = activeTestIdRef.current; if (!testId) return;
+      try {
+        const baseUrl = supabase.supabaseUrl || supabase.storageUrl?.replace("/storage/v1", "") || "";
+        if (baseUrl) {
+          const url = `${baseUrl}/rest/v1/test_locks?test_id=eq.${encodeURIComponent(testId)}&user_id=eq.${encodeURIComponent(session.id)}`;
+          const sent = navigator.sendBeacon(url + "&_method=DELETE", null);
+          if (!sent) lockStore.release(testId, session.id);
+        } else lockStore.release(testId, session.id);
+      } catch { lockStore.release(testId, session.id); }
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [isAdmin, session.id]);
+
+  useEffect(() => {
+    const testId = activeTestIdRef.current;
+    if (!isAdmin && testId) { lockStore.release(testId, session.id); activeTestIdRef.current = null; if (onLockChange) onLockChange(false); setUiLocked(false); }
+    setSelTestIdx(null); setSearch(""); setRenVal(mod.name);
+  }, [mod.id]); // eslint-disable-line
+
   const openTest = async (idx) => {
+    const test = mod.tests[idx]; if (!test) return;
     if (!isAdmin) {
-      const t = mod.tests[idx];
-      const res = await lockStore.acquire(t.id, session.id, session.name);
-      if (!res.ok) { toast(`Test locked by ${res.by}`, "error"); return; }
-      activeTestIdRef.current = t.id;
-      onLockChange?.(true);
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      heartbeatRef.current = setInterval(() => lockStore.heartbeat(t.id, session.id), HEARTBEAT_MS);
+      const result = await lockStore.acquire(test.id, session.id, session.name);
+      if (!result.ok) { toast(`"${test.name}" is in use by ${result.by}`, "error"); return; }
+      activeTestIdRef.current = test.id; setUiLocked(true); if (onLockChange) onLockChange(true);
     }
     setSelTestIdx(idx);
   };
 
-  const finishTest = async () => {
-    if (activeTestIdRef.current) {
-      await lockStore.release(activeTestIdRef.current, session.id);
-      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
-      activeTestIdRef.current = null;
-      onLockChange?.(false);
-    }
-    setSelTestIdx(null);
+  const finishTest = async (newSteps) => {
+    const testId = activeTestIdRef.current;
+    if (testId) { await lockStore.release(testId, session.id); activeTestIdRef.current = null; }
+    setUiLocked(false); if (onLockChange) onLockChange(false); setSelTestIdx(null);
   };
 
-  useEffect(() => () => {
-    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-    if (activeTestIdRef.current && !isAdmin) lockStore.release(activeTestIdRef.current, session.id);
-  }, []); // eslint-disable-line
+  const deleteTest = (idx) => {
+    const t = mod.tests[idx]; if (!t) return;
+    const updated = { ...allModules, [mod.id]: { ...mod, tests: mod.tests.filter((_, i) => i !== idx) } };
+    saveMods(updated, true);
+    addLog({ ts: Date.now(), user: session.name, action: `Deleted ${mod.name} › ${t.name}`, type: "warn" });
+    toast(`"${t.name}" deleted`, "info");
+  };
 
   const addTest = () => {
     const n = prompt("Test name:");
     if (!n?.trim()) return;
-    const nextSno = mod.tests.length ? Math.max(...mod.tests.map(t => t.serialNo || 0)) + 1 : 1;
-    const newTest = { ...makeTest(mod.id, nextSno, 0), name: n.trim() };
-    const updated = { ...allModules, [mod.id]: { ...mod, tests: [...mod.tests, newTest] } };
+    const newT = { ...makeTest(mod.id, mod.tests.length + 1, 0), name: n.trim() };
+    const updated = { ...allModules, [mod.id]: { ...mod, tests: [...mod.tests, newT] } };
     saveMods(updated, true);
+    addLog({ ts: Date.now(), user: session.name, action: `Created test "${n.trim()}" in ${mod.name}`, type: "info" });
     toast(`Test "${n.trim()}" created`, "success");
-  };
-
-  const deleteTest = (idx) => {
-    const t = mod.tests[idx];
-    const updated = { ...allModules, [mod.id]: { ...mod, tests: mod.tests.filter((_, i) => i !== idx) } };
-    saveMods(updated, true);
-    addLog({ ts: Date.now(), user: session.name, action: `Deleted test "${t.name}" from ${mod.name}`, type: "warn" });
-    toast(`Test "${t.name}" deleted`, "info");
   };
 
   const filtered = useMemo(() => {
@@ -2138,164 +1771,148 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onLockC
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      className="flex flex-col flex-1 overflow-hidden">
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar
-        title={mod.name}
+        title={renaming
+          ? <TextField ref={renRef} value={renVal} size="small" autoFocus
+              onChange={e => setRenVal(e.target.value)}
+              onBlur={() => { setRenaming(false); const m2 = { ...allModules, [mod.id]: { ...mod, name: renVal.trim() || mod.name } }; saveMods(m2, true); }}
+              onKeyDown={e => { if (e.key === "Enter") { setRenaming(false); const m2 = { ...allModules, [mod.id]: { ...mod, name: renVal.trim() || mod.name } }; saveMods(m2, true); } }}
+              InputProps={{ sx: { fontWeight: 700, fontSize: 15, borderRadius: 1.5 } }}
+            />
+          : <span onClick={() => isAdmin && setRenaming(true)} style={{ cursor: isAdmin ? "text" : "default" }}>{mod.name}</span>
+        }
         sub={`${mod.tests.length} tests · ${mod.tests.flatMap(t => t.steps).filter(s => s.status === "pass").length} passed`}
       >
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" className="w-44" />}
-        {isAdmin && (
-          <Button size="sm" onClick={addTest}
-            className="h-8 text-xs bg-sky-600 hover:bg-sky-700 border-0 text-white gap-1.5">
-            <Plus className="w-3.5 h-3.5" /> Add Test
-          </Button>
-        )}
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" width={190} />}
+        {isAdmin && <Button size="small" variant="contained" startIcon={<Ico n="plus" s={13} />} onClick={addTest}>Add Test</Button>}
         {!isMobile && modIdx !== undefined && (
-          <div className="flex items-center gap-1">
-            <button onClick={() => onNav?.(-1)} disabled={modIdx === 0 || uiLocked}
-              className="p-1 rounded text-slate-600 hover:text-slate-300 hover:bg-slate-800 disabled:opacity-30 transition-colors">
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <span className="font-mono text-[10px] text-slate-600">{modIdx+1}/{modTotal}</span>
-            <button onClick={() => onNav?.(1)} disabled={modIdx === modTotal - 1 || uiLocked}
-              className="p-1 rounded text-slate-600 hover:text-slate-300 hover:bg-slate-800 disabled:opacity-30 transition-colors">
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          <Stack direction="row" alignItems="center" gap={0.5}>
+            <IconButton size="small" onClick={() => onNav?.(-1)} disabled={modIdx === 0 || uiLocked}><Ico n="chevL" s={14} /></IconButton>
+            <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>{modIdx+1}/{modTotal}</Typography>
+            <IconButton size="small" onClick={() => onNav?.(1)} disabled={modIdx === modTotal - 1 || uiLocked}><Ico n="chevR" s={14} /></IconButton>
+          </Stack>
         )}
       </Topbar>
 
       {isMobile && (
-        <div className="p-3 border-b border-slate-800 flex-shrink-0" style={{ background: "var(--tp-surface)" }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" className="w-full" />
-        </div>
+        <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" fullWidth />
+        </Box>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-2">
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
+        <Stack gap={isMobile ? 1 : 1.25}>
           {filtered.map((t, i) => {
             const realIdx = t._i;
-            const realSteps = t.steps.filter(s => !s.isDivider);
             const pass = t.steps.filter(s => s.status === "pass").length;
             const fail = t.steps.filter(s => s.status === "fail").length;
-            const pending = realSteps.filter(s => s.status === "pending").length;
-            const pct = realSteps.length ? Math.round((pass / realSteps.length) * 100) : 0;
+            const pending = t.steps.filter(s => !s.isDivider && s.status === "pending").length;
+            const pct = t.steps.length ? Math.round((pass / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100) : 0;
             const lock = locks[t.id];
             const lockedByOther = lock && lock.userId !== session.id;
             const isMyLockedTest = !isAdmin && activeTestIdRef.current === t.id;
             const blockedByMyLock = !isAdmin && uiLocked && !isMyLockedTest;
-            const passW = realSteps.length ? (pass / realSteps.length) * 100 : 0;
-            const failW = realSteps.length ? (fail / realSteps.length) * 100 : 0;
+            const cardBlocked = lockedByOther || blockedByMyLock;
+            const passW = t.steps.length ? (pass / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100 : 0;
+            const failW = t.steps.length ? (fail / Math.max(t.steps.filter(s => !s.isDivider).length, 1)) * 100 : 0;
 
-            const borderColor = lockedByOther ? "rgba(251,191,36,0.3)"
-              : isMyLockedTest ? "rgba(52,211,153,0.3)"
-              : fail > 0 ? "rgba(251,113,133,0.25)"
-              : pass > 0 && pass === realSteps.length ? "rgba(52,211,153,0.25)"
-              : "rgba(30,45,74,1)";
+            const borderColor = lockedByOther ? "#fde68a" : isMyLockedTest ? "#86efac" : blockedByMyLock ? C.b1 : fail > 0 ? "#fca5a5" : pass > 0 && pass === t.steps.filter(s => !s.isDivider).length ? "#bbf7d0" : C.b1;
+            const bgColor = lockedByOther ? "#fefce8" : isMyLockedTest ? "#f0fdf4" : blockedByMyLock ? "#f8fafc" : "background.paper";
 
             return (
               <motion.div key={t.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-                whileHover={!(lockedByOther || blockedByMyLock) ? { y: -2, boxShadow: "0 10px 28px rgba(0,0,0,0.35)" } : {}}
-                transition={{ type: "spring", stiffness: 360, damping: 28 }}>
-                <div
-                  className={cn(
-                    "rounded-xl border overflow-hidden transition-all",
-                    lockedByOther || blockedByMyLock ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
-                  )}
-                  style={{ borderColor, background: "var(--tp-card)" }}
-                  onClick={() => !(lockedByOther || blockedByMyLock) && openTest(realIdx)}
-                >
-                  <div className={cn("flex items-center gap-3 px-4 py-3", isMobile && "flex-col items-start")}>
-                    <div className="flex items-center gap-3 w-full">
+                whileHover={!cardBlocked ? { y: -3, boxShadow: "0 10px 28px rgba(0,0,0,0.09)" } : {}} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+                <Paper elevation={0} sx={{ border: `1px solid ${borderColor}`, borderRadius: 3, overflow: "hidden",
+                  bgcolor: bgColor, opacity: lockedByOther ? 0.88 : blockedByMyLock ? 0.5 : 1,
+                  cursor: cardBlocked ? "not-allowed" : "pointer",
+                  transition: "border-color 0.2s, box-shadow 0.2s, opacity 0.2s" }}
+                  onClick={() => !cardBlocked && openTest(realIdx)}>
+                  <Box sx={{ p: isMobile ? "12px 14px" : "14px 18px", display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 1 : 1.5, flexDirection: isMobile ? "column" : "row" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, width: "100%" }}>
                       {/* Serial badge */}
-                      <div className={cn(
-                        "w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-sm font-extrabold border",
-                        lockedByOther ? "border-amber-500/40 text-amber-400 bg-amber-900/20"
-                          : isMyLockedTest ? "border-emerald-500/40 text-emerald-400 bg-emerald-900/20"
-                          : "border-slate-700 text-slate-400 bg-slate-800/50",
-                      )} style={{ fontFamily: MONO }}>
-                        {lockedByOther ? <Lock className="w-4 h-4" /> : isMyLockedTest ? <CheckCircle className="w-4 h-4" /> : t.serialNo}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-slate-100 text-sm truncate">{t.name}</div>
-                        {lockedByOther && (
-                          <Badge className="text-[9px] h-4 px-1.5 font-mono bg-amber-900/40 text-amber-400 border-amber-500/30 mt-0.5">
-                            <Lock className="w-2.5 h-2.5 mr-1" /> In use by {lock.userName}
-                          </Badge>
+                      <Box sx={{ width: 38, height: 38, borderRadius: 2.5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                        background: lockedByOther ? "linear-gradient(135deg,#fef9c3,#fef3c7)" : isMyLockedTest ? "linear-gradient(135deg,#dcfce7,#bbf7d0)" : "linear-gradient(135deg,#fef3e2,#fde8d0)",
+                        border: `1.5px solid ${lockedByOther ? "#fcd34d" : isMyLockedTest ? "#86efac" : C.b2}`,
+                        fontFamily: MONO, fontSize: 14, fontWeight: 800,
+                        color: lockedByOther ? C.am : isMyLockedTest ? C.gr : C.t2,
+                        boxShadow: isMyLockedTest ? "0 2px 8px rgba(22,163,74,0.20)" : "none",
+                      }}>
+                        {lockedByOther ? <LockRounded sx={{ fontSize: 17 }} /> : isMyLockedTest ? <CheckCircleRounded sx={{ fontSize: 17 }} /> : t.serialNo}
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography fontWeight={700} sx={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</Typography>
+                        {(lock && lock.userId !== session.id || isMyLockedTest) && (
+                          <Box mt={0.3}>
+                            {lockedByOther && <Chip icon={<LockRounded sx={{ fontSize: 11, ml: "6px !important" }} />} label={`In use by ${lock.userName}`} size="small" sx={{ fontSize: 10, height: 20, bgcolor: "#fef3c7", color: C.am, fontFamily: MONO, fontWeight: 700, border: `1px solid #fcd34d` }} />}
+                            {isMyLockedTest && <Chip icon={<TaskAltRounded sx={{ fontSize: 11, ml: "6px !important" }} />} label="Your active test" size="small" sx={{ fontSize: 10, height: 20, bgcolor: "#dcfce7", color: C.gr, fontFamily: MONO, fontWeight: 700, border: `1px solid #86efac` }} />}
+                          </Box>
                         )}
-                        {isMyLockedTest && (
-                          <Badge className="text-[9px] h-4 px-1.5 font-mono bg-emerald-900/40 text-emerald-400 border-emerald-500/30 mt-0.5">
-                            <CheckCircle className="w-2.5 h-2.5 mr-1" /> Your active test
-                          </Badge>
-                        )}
-                        {t.description && (
-                          <div className="text-[11px] text-slate-500 truncate">{t.description}</div>
-                        )}
-                        <div className="text-[10px] font-mono text-slate-600">
+                        {t.description && <Typography variant="caption" sx={{ color: C.t2, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</Typography>}
+                        <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>
                           {t.steps.length} steps
-                          {pass > 0 && <span className="text-emerald-500 ml-1.5 font-bold">·{pass}✓</span>}
-                          {fail > 0 && <span className="text-rose-500 ml-1 font-bold">{fail}✗</span>}
-                          {pending > 0 && <span className="text-slate-600 ml-1">{pending} pending</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          {pass > 0 && <Box component="span" sx={{ color: C.gr, ml: 0.75, fontWeight: 700 }}>· {pass}✓</Box>}
+                          {fail > 0 && <Box component="span" sx={{ color: C.re, ml: 0.5, fontWeight: 700 }}>{fail}✗</Box>}
+                          {pending > 0 && <Box component="span" sx={{ color: C.t3, ml: 0.5 }}>{pending} pending</Box>}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" gap={0.75} sx={{ flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                         {isAdmin && !isMobile && (
-                          <button onClick={() => deleteTest(realIdx)}
-                            className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-900/30 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <IconButton size="small" color="error" onClick={() => deleteTest(realIdx)}
+                            sx={{ bgcolor: alpha("#dc2626", 0.06), "&:hover": { bgcolor: alpha("#dc2626", 0.12) } }}>
+                            <DeleteRounded sx={{ fontSize: 15 }} />
+                          </IconButton>
                         )}
                         {lockedByOther ? (
-                          <span className="text-[10px] font-mono text-amber-400 border border-amber-500/30 bg-amber-900/20 px-2 py-1 rounded-full">
-                            <Lock className="w-3 h-3 inline mr-1" />Locked
-                          </span>
+                          <Button size="small" variant="outlined" disabled sx={{ borderColor: "#fcd34d", color: C.am, borderRadius: 2 }}>
+                            <LockRounded sx={{ fontSize: 13 }} />{!isMobile && <Box component="span" sx={{ ml: 0.5 }}>Locked</Box>}
+                          </Button>
                         ) : isMyLockedTest ? (
-                          <Button size="sm" onClick={() => openTest(realIdx)}
-                            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 border-0 text-white gap-1">
-                            <ArrowLeft className="w-3 h-3" /> Return
+                          <Button size="small" variant="contained" color="success" onClick={() => openTest(realIdx)} sx={{ borderRadius: 2 }}
+                            startIcon={<ArrowBackRounded sx={{ fontSize: 14 }} />}>
+                            Return
                           </Button>
                         ) : blockedByMyLock ? (
-                          <span className="p-1 text-slate-700"><Lock className="w-3.5 h-3.5" /></span>
+                          <Button size="small" variant="outlined" disabled sx={{ opacity: 0.4, borderRadius: 2 }}><LockRounded sx={{ fontSize: 13 }} /></Button>
                         ) : (
-                          <Button size="sm" onClick={() => openTest(realIdx)}
-                            className="h-7 text-xs bg-sky-600 hover:bg-sky-700 border-0 text-white gap-1">
-                            {!isMobile && "Open"} <ChevronRight className="w-3 h-3" />
+                          <Button size="small" variant="contained" onClick={() => openTest(realIdx)}
+                            endIcon={<ChevronRightRounded sx={{ fontSize: 15 }} />} sx={{ borderRadius: 2, px: 1.5 }}>
+                            {!isMobile && "Open"}
                           </Button>
                         )}
                         {isAdmin && isMobile && (
-                          <button onClick={() => deleteTest(realIdx)}
-                            className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-900/30 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <IconButton size="small" color="error" onClick={() => deleteTest(realIdx)}
+                            sx={{ bgcolor: alpha("#dc2626", 0.06) }}>
+                            <DeleteRounded sx={{ fontSize: 15 }} />
+                          </IconButton>
                         )}
-                      </div>
+                      </Stack>
                       {!isMobile && (
-                        <div className="w-20 flex-shrink-0">
+                        <Box sx={{ width: 80, flexShrink: 0 }}>
                           <PBar pct={pct} fail={fail > 0} />
-                          <div className="text-[10px] font-mono text-slate-600 text-right mt-0.5">{pct}%</div>
-                        </div>
+                          <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3, display: "block", textAlign: "right", mt: 0.25 }}>{pct}%</Typography>
+                        </Box>
                       )}
-                    </div>
-                  </div>
-                  {/* Dual progress bar */}
-                  <div className="h-1 flex bg-slate-800">
+                    </Box>
+                  </Box>
+                  <Box sx={{ height: 4, display: "flex", bgcolor: C.s3 }}>
                     <motion.div initial={{ width: 0 }} animate={{ width: `${passW}%` }} transition={{ duration: 0.65, ease: [0.4,0,0.2,1] }}
-                      style={{ background: "linear-gradient(90deg, #10b981, #34d399)", minWidth: 0 }} />
+                      style={{ background: "linear-gradient(90deg, #22c55e, #16a34a)", minWidth: 0 }} />
                     <motion.div initial={{ width: 0 }} animate={{ width: `${failW}%` }} transition={{ duration: 0.65, ease: [0.4,0,0.2,1], delay: 0.1 }}
-                      style={{ background: "linear-gradient(90deg, #f43f5e, #fb7185)", minWidth: 0 }} />
-                  </div>
-                </div>
+                      style={{ background: "linear-gradient(90deg, #f87171, #dc2626)", minWidth: 0 }} />
+                  </Box>
+                </Paper>
               </motion.div>
             );
           })}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-slate-600">
-              <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <div className="font-mono text-sm">No tests match.</div>
-            </div>
+            <Box sx={{ textAlign: "center", py: 8, color: "text.disabled" }}>
+              <DescriptionRounded sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
+              <Typography sx={{ fontFamily: MONO, fontSize: 12 }}>No tests match.</Typography>
+            </Box>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Box>
     </motion.div>
   );
 }
@@ -2332,57 +1949,52 @@ function ReportView({ modules, toast }) {
     toast("CSV exported", "success");
   };
 
-  const toggleExp = id => setExp(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const statusColor = s => ({ pass: C.gr, fail: C.re, pending: C.t3 }[s] || C.t3);
+  const statusBg = s => ({ pass: "#f0fdf4", fail: "#fff5f5", pending: "#ffffff" }[s] || "#fff");
 
-  const statusColor = s => s === "pass" ? "text-emerald-400" : s === "fail" ? "text-rose-400" : "text-slate-500";
-  const statusBg = s => s === "pass" ? "bg-emerald-900/30" : s === "fail" ? "bg-rose-900/30" : "";
+  const toggleExp = id => setExp(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      className="flex flex-col flex-1 overflow-hidden">
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar title="Test Report" sub={`${pass} passed · ${fail} failed · ${total - pass - fail} pending`}>
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" className="w-44" />}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono text-slate-500">Failures only</span>
-          <Switch checked={failOnly} onCheckedChange={setFailOnly} className="scale-75" />
-        </div>
-        <Button size="sm" variant="outline" onClick={exportAllCSV}
-          className="h-8 text-xs border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 gap-1.5">
-          <Download className="w-3.5 h-3.5" /> Export All
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" />}
+        <Stack direction="row" alignItems="center" gap={1}>
+          <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>Failures only</Typography>
+          <Switch size="small" checked={failOnly} onChange={e => setFailOnly(e.target.checked)} color="primary" />
+        </Stack>
+        <Button size="small" variant="outlined" startIcon={<FileDownloadRounded sx={{ fontSize: 15 }} />} onClick={exportAllCSV}
+          sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>
+          Export All
         </Button>
       </Topbar>
 
       {isMobile && (
-        <div className="p-3 border-b border-slate-800 flex-shrink-0" style={{ background: "var(--tp-surface)" }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" className="w-full" />
-        </div>
+        <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search modules…" fullWidth />
+        </Box>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
         {/* Summary */}
-        <div className={cn("grid gap-3 mb-5", isMobile ? "grid-cols-2" : "grid-cols-4")}>
+        <Box sx={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)", gap: 1.5, mb: 2.5 }}>
           {[
-            { label: "Total Steps", value: total, color: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.15)" },
-            { label: "Passed", value: pass, color: "#34d399", bg: "rgba(52,211,153,0.06)", border: "rgba(52,211,153,0.15)" },
-            { label: "Failed", value: fail, color: "#fb7185", bg: "rgba(251,113,133,0.06)", border: "rgba(251,113,133,0.15)" },
-            { label: "Pending", value: total - pass - fail, color: "#fbbf24", bg: "rgba(251,191,36,0.06)", border: "rgba(251,191,36,0.15)" },
-          ].map((c, i) => (
-            <motion.div key={c.label} custom={i} variants={cardVariants} initial="initial" animate="animate">
-              <div className="rounded-xl border p-4 relative overflow-hidden"
-                style={{ background: c.bg, borderColor: c.border }}>
-                <div className="absolute top-0 left-0 right-0 h-0.5"
-                  style={{ background: `linear-gradient(90deg, transparent, ${c.color}, transparent)` }} />
-                <div className="text-[9px] font-mono uppercase tracking-[0.15em] mb-2" style={{ color: c.color }}>{c.label}</div>
-                <div className="text-3xl font-extrabold" style={{ color: c.color, fontFamily: "'Syne', sans-serif" }}>
-                  {c.value.toLocaleString()}
-                </div>
-              </div>
+            ["Total Steps", total, "primary.main", alpha("#ea580c",0.10), alpha("#ea580c",0.2)],
+            ["Passed", pass, "success.main", "#f0fdf4", alpha("#16a34a",0.2)],
+            ["Failed", fail, "error.main", "#fff5f5", alpha("#dc2626",0.2)],
+            ["Pending", total-pass-fail, "warning.main", "#fffbeb", alpha("#d97706",0.2)],
+          ].map(([l,v,c,bg,border],i) => (
+            <motion.div key={l} custom={i} variants={cardVariants} initial="initial" animate="animate">
+              <Paper elevation={0} sx={{ p: isMobile ? 1.5 : 2, borderRadius: 3, border: `1px solid ${border}`, bgcolor: bg, position: "relative", overflow: "hidden" }}>
+                <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, bgcolor: c, opacity: 0.7 }} />
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.8px", display: "block", mb: 0.5 }}>{l}</Typography>
+                <Typography variant="h5" fontWeight={800} sx={{ color: c }}>{v.toLocaleString()}</Typography>
+              </Paper>
             </motion.div>
           ))}
-        </div>
+        </Box>
 
-        {/* Module list */}
-        <div className="space-y-2">
+        <Stack gap={1.25}>
           {filtered.map((m, i) => {
             const pct = Math.round((m.pass / Math.max(m.total, 1)) * 100);
             const isExp = exp.has(m.id);
@@ -2390,146 +2002,118 @@ function ReportView({ modules, toast }) {
             const isDone = m.pass === m.total && m.total > 0;
             return (
               <motion.div key={m.id} custom={i} variants={cardVariants} initial="initial" animate="animate">
-                <div className="rounded-xl border overflow-hidden"
-                  style={{
-                    borderColor: hasFail ? "rgba(251,113,133,0.3)" : isDone ? "rgba(52,211,153,0.3)" : "rgba(30,45,74,1)",
-                    background: "var(--tp-card)"
-                  }}>
-                  <button
-                    onClick={() => toggleExp(m.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800/30 transition-colors text-left"
-                  >
-                    <motion.span animate={{ rotate: isExp ? 90 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 25 }}>
-                      <ChevronRight className="w-4 h-4 text-slate-500" />
-                    </motion.span>
-                    <span className="font-bold text-slate-100 flex-1 text-sm">{m.name}</span>
-                    <div className="flex gap-1.5 items-center">
-                      {m.pass > 0 && <Badge className="text-[9px] h-4 px-1.5 font-mono bg-emerald-900/50 text-emerald-400 border-emerald-500/30">{m.pass} passed</Badge>}
-                      {m.fail > 0 && <Badge className="text-[9px] h-4 px-1.5 font-mono bg-rose-900/50 text-rose-400 border-rose-500/30">{m.fail} failed</Badge>}
-                      <Badge className={cn(
-                        "text-[10px] h-4 px-1.5 font-mono font-bold",
-                        pct === 100 ? "bg-emerald-900/50 text-emerald-400 border-emerald-500/30"
-                          : hasFail ? "bg-rose-900/50 text-rose-400 border-rose-500/30"
-                          : "bg-sky-900/50 text-sky-400 border-sky-500/30"
-                      )}>{pct}%</Badge>
-                    </div>
-                    <div className="w-24"><PBar pct={pct} fail={hasFail} /></div>
-                  </button>
-
-                  <AnimatePresence>
-                    {isExp && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-t border-slate-800 overflow-hidden"
-                      >
-                        {m.tests.map(t => {
-                          const tp = t.steps.filter(s => !s.isDivider && s.status === "pass").length;
-                          const tf = t.steps.filter(s => !s.isDivider && s.status === "fail").length;
-                          if (t.steps.length === 0) return null;
-                          return (
-                            <div key={t.id}>
-                              <div className="flex items-center gap-2 px-4 py-2" style={{ background: "var(--tp-elevated)" }}>
-                                <span className="font-semibold text-slate-300 text-xs flex-1">{t.name}</span>
-                                <span className="font-mono text-[10px] text-slate-500">✓{tp} ✗{tf} ⟳{t.steps.filter(s => !s.isDivider).length-tp-tf}</span>
-                              </div>
-                              {!isMobile && (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow className="border-slate-800 hover:bg-transparent">
-                                      {["S.No","Action","Expected Result","Remarks","Status"].map(h => (
-                                        <TableHead key={h} className="text-[9px] font-mono text-slate-600 uppercase tracking-[0.12em] py-1.5 border-b border-slate-800">
-                                          {h}
-                                        </TableHead>
-                                      ))}
+                <Paper elevation={0} sx={{ border: `1px solid ${hasFail ? "#fca5a5" : isDone ? "#86efac" : C.b1}`, borderRadius: 3, overflow: "hidden",
+                  bgcolor: hasFail ? "rgba(255,245,245,0.5)" : isDone ? "rgba(240,253,244,0.5)" : "background.paper" }}>
+                  <Box sx={{ p: "13px 18px", display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer",
+                    "&:hover": { bgcolor: alpha("#000",0.015) }, transition: "background 0.15s" }} onClick={() => toggleExp(m.id)}>
+                    <motion.div animate={{ rotate: isExp ? 90 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 25 }}>
+                      <ChevronRightRounded sx={{ fontSize: 18, color: C.t3 }} />
+                    </motion.div>
+                    <Typography fontWeight={700} sx={{ flex: 1, fontSize: 14 }}>{m.name}</Typography>
+                    <Stack direction="row" gap={0.75} alignItems="center">
+                      {m.pass > 0 && <Chip label={`${m.pass} passed`} size="small" sx={{ height: 22, fontSize: 10, fontFamily: MONO, fontWeight: 700, bgcolor: alpha(C.gr,0.10), color: C.gr, border: `1px solid ${alpha(C.gr,0.25)}` }} />}
+                      {m.fail > 0 && <Chip label={`${m.fail} failed`} size="small" sx={{ height: 22, fontSize: 10, fontFamily: MONO, fontWeight: 700, bgcolor: alpha(C.re,0.10), color: C.re, border: `1px solid ${alpha(C.re,0.25)}` }} />}
+                      <Chip label={`${pct}%`} size="small" sx={{ height: 22, fontSize: 11, fontFamily: MONO, fontWeight: 800,
+                        bgcolor: pct === 100 ? alpha(C.gr,0.10) : hasFail ? alpha(C.re,0.08) : alpha("#ea580c",0.08),
+                        color: pct === 100 ? C.gr : hasFail ? C.re : "primary.main" }} />
+                    </Stack>
+                    <Box sx={{ width: 90 }}><PBar pct={pct} fail={hasFail} /></Box>
+                  </Box>
+                  <Collapse in={isExp} timeout="auto">
+                    <Box sx={{ borderTop: `1px solid ${C.b1}` }}>
+                      {m.tests.map(t => {
+                        const tp = t.steps.filter(s => !s.isDivider && s.status === "pass").length;
+                        const tf = t.steps.filter(s => !s.isDivider && s.status === "fail").length;
+                        if (t.steps.length === 0) return null;
+                        return (
+                          <Box key={t.id}>
+                            <Box sx={{ px: 2, py: 0.75, bgcolor: C.s2, display: "flex", alignItems: "center", gap: 1 }}>
+                              <Typography fontWeight={600} sx={{ fontSize: 12, flex: 1 }}>{t.name}</Typography>
+                              <Typography variant="caption" sx={{ fontFamily: MONO, color: C.t3 }}>✓{tp} ✗{tf} ⟳{t.steps.filter(s => !s.isDivider).length-tp-tf}</Typography>
+                            </Box>
+                            {!isMobile && (
+                              <TableContainer>
+                                <Table size="small" sx={{ tableLayout: "fixed" }}>
+                                  <TableHead>
+                                    <TableRow sx={{ bgcolor: C.s2 }}>
+                                      {["S.No","Action","Expected Result","Remarks","Status"].map(h => <TableCell key={h}>{h}</TableCell>)}
                                     </TableRow>
-                                  </TableHeader>
+                                  </TableHead>
                                   <TableBody>
                                     {t.steps.map(s => s.isDivider ? (
-                                      <TableRow key={s.id} className="border-slate-800">
-                                        <TableCell colSpan={5} className="py-1.5 font-mono text-[10px] text-sky-400 uppercase tracking-wider"
-                                          style={{ background: "rgba(14,165,233,0.04)" }}>
-                                          {s.action}
-                                        </TableCell>
+                                      <TableRow key={s.id} sx={{ bgcolor: "#fff7ed" }}>
+                                        <TableCell colSpan={5} sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "1px" }}>{s.action}</TableCell>
                                       </TableRow>
                                     ) : (
-                                      <TableRow key={s.id} className={cn("border-slate-800", statusBg(s.status))}>
-                                        <TableCell className="font-mono text-[11px] text-slate-500 text-center w-14">{s.serialNo || "—"}</TableCell>
-                                        <TableCell className="text-[12px] text-slate-300">{s.action}</TableCell>
-                                        <TableCell className="text-[12px] text-slate-500">{s.result}</TableCell>
-                                        <TableCell className="text-[12px] text-slate-600">{s.remarks}</TableCell>
-                                        <TableCell className="w-20">
-                                          <Badge className={cn(
-                                            "text-[9px] h-4 px-1.5 font-mono font-bold",
-                                            s.status === "pass" ? "bg-emerald-900/50 text-emerald-400 border-emerald-500/30"
-                                              : s.status === "fail" ? "bg-rose-900/50 text-rose-400 border-rose-500/30"
-                                              : "bg-slate-800 text-slate-500 border-slate-700"
-                                          )}>
-                                            {s.status.toUpperCase()}
-                                          </Badge>
+                                      <TableRow key={s.id} sx={{ bgcolor: statusBg(s.status) }}>
+                                        <TableCell sx={{ fontFamily: MONO, fontSize: 11, width: 55, textAlign: "center" }}>{s.serialNo || "—"}</TableCell>
+                                        <TableCell sx={{ fontSize: 12 }}>{s.action}</TableCell>
+                                        <TableCell sx={{ fontSize: 12, color: C.t2 }}>{s.result}</TableCell>
+                                        <TableCell sx={{ fontSize: 12, color: C.t3 }}>{s.remarks}</TableCell>
+                                        <TableCell sx={{ width: 70 }}>
+                                          <Chip label={s.status.toUpperCase()} size="small"
+                                            sx={{ height: 18, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                                              color: statusColor(s.status), bgcolor: statusBg(s.status),
+                                              border: `1px solid ${statusColor(s.status)}30` }} />
                                         </TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
                                 </Table>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                              </TableContainer>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </Collapse>
+                </Paper>
               </motion.div>
             );
           })}
           {filtered.length === 0 && (
-            <div className="text-center py-12 font-mono text-sm text-slate-600">No modules match.</div>
+            <Box sx={{ textAlign: "center", py: 6, color: "text.disabled", fontFamily: MONO, fontSize: 13 }}>No modules match.</Box>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Box>
     </motion.div>
   );
 }
 
 // ── Audit View ─────────────────────────────────────────────────────────────────────
 function AuditView({ log }) {
+  const isMobile = useIsMobile();
   const fmt = ts => new Date(ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-  const dotColor = { pass: "#34d399", fail: "#fb7185", warn: "#fbbf24", info: "#38bdf8" };
-  const dotGlow = { pass: "rgba(52,211,153,0.2)", fail: "rgba(251,113,133,0.2)", warn: "rgba(251,191,36,0.2)", info: "rgba(56,189,248,0.2)" };
+  const dotColor = { pass: C.gr, fail: C.re, warn: C.am, info: "primary.main" };
+  const alertSeverity = { pass: "success", fail: "error", warn: "warning", info: "info" };
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      className="flex flex-col flex-1 overflow-hidden">
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar title="Audit Log" sub={`${log.length} events recorded`} />
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="rounded-xl border border-slate-800 overflow-hidden" style={{ background: "var(--tp-card)" }}>
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
+        <Paper elevation={0} sx={{ border: `1px solid ${C.b1}`, borderRadius: 3, overflow: "hidden" }}>
           {log.length === 0 && (
-            <div className="p-12 text-center font-mono text-sm text-slate-600">No events yet.</div>
+            <Box sx={{ p: 5, textAlign: "center", color: "text.disabled", fontFamily: MONO, fontSize: 12 }}>No events yet.</Box>
           )}
           {log.map((e, i) => (
-            <motion.div key={i}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: Math.min(i * 0.015, 0.3), type: "spring", stiffness: 320, damping: 28 }}
-              className="flex items-start gap-3 px-4 py-3 border-b border-slate-800 hover:bg-slate-800/30 transition-colors last:border-b-0"
-            >
-              <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5"
-                style={{
-                  background: dotColor[e.type] || dotColor.info,
-                  boxShadow: `0 0 0 3px ${dotGlow[e.type] || dotGlow.info}`,
+            <motion.div key={i} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i * 0.018, 0.35), type: "spring", stiffness: 320, damping: 28 }}>
+              <Box sx={{ px: 2.5, py: 1.25, borderBottom: `1px solid ${C.b1}`, display: "flex", alignItems: "flex-start", gap: 1.5,
+                "&:hover": { bgcolor: alpha("#ea580c", 0.025) }, transition: "background 0.15s" }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, mt: 0.6,
+                  bgcolor: e.type === "pass" ? C.gr : e.type === "fail" ? C.re : e.type === "warn" ? C.am : "#ea580c",
+                  boxShadow: `0 0 0 2px ${e.type === "pass" ? alpha(C.gr,0.2) : e.type === "fail" ? alpha(C.re,0.2) : e.type === "warn" ? alpha(C.am,0.2) : alpha("#ea580c",0.2)}`,
                 }} />
-              <div className="flex-1 min-w-0">
-                <div className="text-[12px] font-medium text-slate-300">{e.action}</div>
-                <div className="text-[10px] font-mono text-slate-600">{e.user}</div>
-              </div>
-              <div className="text-[10px] font-mono text-slate-600 flex-shrink-0">{fmt(e.ts)}</div>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontSize: 12, fontWeight: 500 }}>{e.action}</Typography>
+                  <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>{e.user}</Typography>
+                </Box>
+                <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", flexShrink: 0 }}>{fmt(e.ts)}</Typography>
+              </Box>
             </motion.div>
           ))}
-        </div>
-      </div>
+        </Paper>
+      </Box>
     </motion.div>
   );
 }
@@ -2575,110 +2159,107 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
     addLog({ ts: Date.now(), user: session.name, action: `${u.active ? "Deactivated" : "Activated"} "${u.name}"`, type: "info" });
   };
 
+  const fld = (label, key, type = "text", opts = {}) => (
+    <TextField label={label} type={type} value={form[key] || ""}
+      onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+      fullWidth size="medium" sx={{ mb: 2 }}
+      InputProps={{ sx: { borderRadius: 2 } }}
+      {...opts}
+    />
+  );
+
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      className="flex flex-col flex-1 overflow-hidden">
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <Topbar title="User Management" sub={`${users.length} users · ${users.filter(u => u.active).length} active`}>
-        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search users…" className="w-44" />}
-        <Button size="sm" onClick={openAdd}
-          className="h-8 text-xs bg-sky-600 hover:bg-sky-700 border-0 text-white gap-1.5">
-          <Plus className="w-3.5 h-3.5" />{!isMobile && "Add User"}
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search users…" />}
+        <Button variant="contained" size="small" startIcon={<Ico n="plus" s={13} />} onClick={openAdd}>
+          {isMobile ? "" : "Add User"}
         </Button>
       </Topbar>
 
       {isMobile && (
-        <div className="p-3 border-b border-slate-800 flex-shrink-0" style={{ background: "var(--tp-surface)" }}>
-          <SearchBox value={search} onChange={setSearch} placeholder="Search users…" className="w-full" />
-        </div>
+        <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search users…" fullWidth />
+        </Box>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-2">
+      <Box sx={{ flex: 1, overflowY: "auto", p: isMobile ? 1.5 : 2 }}>
+        <Stack gap={isMobile ? 1 : 1.25}>
           {filtered.map((u, i) => (
             <motion.div key={u.id} custom={i} variants={cardVariants} initial="initial" animate="animate"
-              whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}
-              transition={{ type: "spring", stiffness: 360, damping: 28 }}>
-              <div className={cn(
-                "rounded-xl border p-4 transition-all",
-                u.active ? "border-slate-800" : "border-rose-500/20"
-              )} style={{ background: "var(--tp-card)", opacity: u.active ? 1 : 0.7 }}>
-                <div className={cn("flex gap-3", isMobile ? "flex-col" : "items-center")}>
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <Avatar className="w-11 h-11 flex-shrink-0 ring-2 ring-offset-2 ring-offset-slate-900"
-                      style={{ '--tw-ring-color': u.role === "admin" ? "rgba(56,189,248,0.4)" : "rgba(251,191,36,0.3)" }}>
-                      <AvatarFallback className="text-sm font-bold"
-                        style={{ background: u.role === "admin" ? "linear-gradient(135deg, #0c2a50, #0f3d6e)" : "linear-gradient(135deg, #1c1a0f, #2d2510)", color: u.role === "admin" ? "#38bdf8" : "#fbbf24" }}>
-                        {u.name?.[0]?.toUpperCase()}
-                      </AvatarFallback>
+              whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }} transition={{ type: "spring", stiffness: 360, damping: 28 }}>
+              <Paper elevation={0} sx={{ border: `1px solid ${u.active ? C.b1 : "#fecaca"}`, borderRadius: 3, p: isMobile ? 1.5 : 2,
+                opacity: u.active ? 1 : 0.72, transition: "opacity 0.2s, box-shadow 0.2s" }}>
+                <Stack direction={isMobile ? "column" : "row"} alignItems={isMobile ? "flex-start" : "center"} gap={1.5}>
+                  <Stack direction="row" alignItems="center" gap={1.5} sx={{ width: isMobile ? "100%" : undefined }}>
+                    <Avatar sx={{ width: 42, height: 42, background: u.role === "admin"
+                      ? "linear-gradient(135deg,#fb923c,#ea580c)"
+                      : "linear-gradient(135deg,#dbeafe,#bfdbfe)",
+                      color: u.role === "admin" ? "#fff" : "#1d4ed8",
+                      fontWeight: 700, fontSize: 16, flexShrink: 0,
+                      boxShadow: u.role === "admin" ? "0 3px 10px rgba(234,88,12,0.32)" : "0 2px 6px rgba(59,130,246,0.18)" }}>
+                      {u.name?.[0]?.toUpperCase()}
                     </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-100 text-sm">{u.name}</span>
-                        <Badge className={cn(
-                          "text-[9px] h-4 px-1.5 font-mono",
-                          u.role === "admin" ? "bg-sky-900/50 text-sky-400 border-sky-500/30" : "bg-amber-900/40 text-amber-400 border-amber-500/30"
-                        )}>
-                          {u.role === "admin" ? <ShieldCheck className="w-2.5 h-2.5 mr-1" /> : <User className="w-2.5 h-2.5 mr-1" />}
-                          {u.role}
-                        </Badge>
-                        <Badge className={cn(
-                          "text-[9px] h-4 px-1.5 font-mono",
-                          u.active ? "bg-emerald-900/50 text-emerald-400 border-emerald-500/30" : "bg-rose-900/50 text-rose-400 border-rose-500/30"
-                        )}>
-                          {u.active ? "active" : "inactive"}
-                        </Badge>
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Stack direction="row" alignItems="center" gap={0.75} flexWrap="wrap">
+                        <Typography fontWeight={700} sx={{ fontSize: 14 }}>{u.name}</Typography>
+                        <Chip label={u.role} size="small"
+                          sx={{ height: 20, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                            bgcolor: u.role === "admin" ? alpha("#ea580c",0.10) : C.amd,
+                            color: u.role === "admin" ? C.ac : C.am,
+                            border: `1px solid ${u.role === "admin" ? alpha("#ea580c",0.25) : "transparent"}` }} />
+                        <Chip label={u.active ? "active" : "inactive"} size="small"
+                          sx={{ height: 20, fontSize: 9, fontFamily: MONO, fontWeight: 700,
+                            bgcolor: u.active ? alpha(C.gr,0.10) : alpha(C.re,0.10),
+                            color: u.active ? C.gr : C.re,
+                            border: `1px solid ${u.active ? alpha(C.gr,0.25) : alpha(C.re,0.25)}` }} />
+                      </Stack>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled", display: "block" }}>
                         @{u.username}{u.email ? ` · ${u.email}` : ""}
-                      </div>
-                    </div>
+                      </Typography>
+                    </Box>
                     {isMobile && (
-                      <div className="flex gap-1 ml-auto">
-                        <button onClick={() => openEdit(u)}
-                          className="p-1.5 rounded-lg text-sky-400 hover:bg-sky-900/30 transition-colors">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        {u.id !== session.id && (
-                          <button onClick={() => setConfirm(u)}
-                            className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-900/30 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
+                        <IconButton size="small" onClick={() => openEdit(u)} sx={{ color: "primary.main", bgcolor: alpha("#ea580c",0.06) }}>
+                          <EditRounded sx={{ fontSize: 16 }} />
+                        </IconButton>
+                        {u.id !== session.id && <IconButton size="small" onClick={() => setConfirm(u)} sx={{ color: "error.main", bgcolor: alpha("#dc2626",0.06) }}>
+                          <DeleteRounded sx={{ fontSize: 16 }} />
+                        </IconButton>}
+                      </Stack>
                     )}
-                  </div>
-                  <div className={cn("flex items-center gap-3", isMobile ? "w-full" : "flex-shrink-0")}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-slate-600">Active</span>
-                      <Switch checked={u.active} onCheckedChange={() => toggle(u)} disabled={u.id === session.id} className="scale-75" />
-                    </div>
-                    {!isMobile && (
-                      <>
-                        <Button size="sm" variant="outline" onClick={() => openEdit(u)}
-                          className="h-7 text-xs border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 gap-1.5">
-                          <Pencil className="w-3 h-3" /> Edit
-                        </Button>
-                        {u.id !== session.id && (
-                          <Button size="sm" variant="outline" onClick={() => setConfirm(u)}
-                            className="h-7 text-xs border-rose-500/30 text-rose-400 hover:bg-rose-900/30 gap-1.5">
-                            <Trash2 className="w-3 h-3" /> Delete
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+                  </Stack>
+                  {!isMobile && (
+                    <Stack direction="row" alignItems="center" gap={1} sx={{ ml: "auto", flexShrink: 0 }}>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>Active</Typography>
+                      <Switch size="small" checked={u.active} onChange={() => toggle(u)} disabled={u.id === session.id} color="success" />
+                      <Button size="small" variant="outlined" startIcon={<EditRounded sx={{ fontSize: 14 }} />} onClick={() => openEdit(u)}
+                        sx={{ borderColor: C.b2, color: "text.secondary", "&:hover": { borderColor: C.ac, color: "primary.main" } }}>Edit</Button>
+                      {u.id !== session.id && (
+                        <Button size="small" variant="outlined" color="error" startIcon={<DeleteRounded sx={{ fontSize: 14 }} />} onClick={() => setConfirm(u)}
+                          sx={{ borderColor: "#fca5a5" }}>Delete</Button>
+                      )}
+                    </Stack>
+                  )}
+                  {isMobile && (
+                    <Stack direction="row" alignItems="center" gap={1} sx={{ width: "100%" }}>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.disabled" }}>Active</Typography>
+                      <Switch size="small" checked={u.active} onChange={() => toggle(u)} disabled={u.id === session.id} color="success" />
+                    </Stack>
+                  )}
+                </Stack>
+              </Paper>
             </motion.div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-slate-600">
-              <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <div className="font-mono text-sm">No users match.</div>
-            </div>
+            <Box sx={{ textAlign: "center", py: 8, color: "text.disabled" }}>
+              <PeopleRounded sx={{ fontSize: 40, mb: 1.5, opacity: 0.3 }} />
+              <Typography sx={{ fontFamily: MONO, fontSize: 13 }}>No users match.</Typography>
+            </Box>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Box>
 
       {/* Add/Edit Dialog */}
       <FormDialog
@@ -2688,30 +2269,23 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
         subtitle={modal === "add" ? "Create a new team member account" : undefined}
         actions={
           <>
-            <Button variant="outline" onClick={() => setModal(null)}
-              className="border-slate-700 text-slate-300 hover:bg-slate-800">Cancel</Button>
-            <Button onClick={save} className="bg-sky-600 hover:bg-sky-700 border-0 text-white">
-              {modal === "add" ? "Create User" : "Save Changes"}
-            </Button>
+            <Button variant="outlined" onClick={() => setModal(null)} sx={{ borderColor: C.b2, color: "text.secondary" }}>Cancel</Button>
+            <Button variant="contained" onClick={save}>{modal === "add" ? "Create User" : "Save Changes"}</Button>
           </>
         }
       >
-        <FormField label="Full Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} autoFocus />
-        <FormField label="Username" value={form.username} onChange={v => setForm(f => ({ ...f, username: v }))} />
-        <FormField label="Email (optional)" value={form.email || ""} onChange={v => setForm(f => ({ ...f, email: v }))} type="email" />
-        <FormField label="Password" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} type="password" />
-        <div className="mb-4">
-          <Label className="text-slate-300 text-xs font-medium mb-1.5 block">Role</Label>
-          <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-100 h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-              <SelectItem value="tester" className="hover:bg-slate-700 cursor-pointer">Tester</SelectItem>
-              <SelectItem value="admin" className="hover:bg-slate-700 cursor-pointer">Admin</SelectItem>
-            </SelectContent>
+        {fld("Full Name", "name", "text", { autoFocus: true })}
+        {fld("Username", "username")}
+        {fld("Email (optional)", "email", "email")}
+        {fld("Password", "password", "password")}
+        <FormControl fullWidth sx={{ mb: 2 }} size="medium">
+          <InputLabel>Role</InputLabel>
+          <Select value={form.role} label="Role" onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+            sx={{ borderRadius: 2 }}>
+            <MenuItem value="tester">Tester</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
           </Select>
-        </div>
+        </FormControl>
       </FormDialog>
 
       <ConfirmDialog
@@ -2727,8 +2301,6 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
 
 // ── App ────────────────────────────────────────────────────────────────────────────
 export default function App() {
-  useGlobalStyles();
-
   const [users, setUsers] = useState(null);
   const [modules, setModules] = useState(null);
   const [log, setLog] = useState([]);
@@ -2878,66 +2450,80 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [session]);
 
-  // Loading screen
+  // Loading
   if (!users || !modules) return (
-    <div className="h-dvh flex items-center justify-center flex-col gap-3" style={{ background: "var(--tp-bg)" }}>
-      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}>
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-          style={{ background: "linear-gradient(135deg, #0ea5e9, #6366f1)", boxShadow: "0 0 24px rgba(14,165,233,0.4)" }}>
-          <CheckSquare className="w-6 h-6 text-white" />
-        </div>
-      </motion.div>
-      <span className="text-[11px] font-mono text-slate-600 tracking-wider">Loading TestPro…</span>
-    </div>
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <Box sx={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default", flexDirection: "column", gap: 2 }}>
+        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}>
+          <Box sx={{ width: 44, height: 44, borderRadius: 2.5, background: "linear-gradient(135deg,#fb923c,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(234,88,12,.38)" }}>
+            <TaskAltRounded sx={{ fontSize: 24, color: "#fff" }} />
+          </Box>
+        </motion.div>
+        <Typography variant="body2" sx={{ fontFamily: MONO, color: "text.disabled" }}>Loading TestPro…</Typography>
+      </Box>
+    </ThemeProvider>
   );
 
   if (!session) return (
-    <LoginPage
-      users={users}
-      onLogin={u => {
-        setSession(u);
-        addLog({ ts: Date.now(), user: u.name, action: "Logged in", type: "info" });
-      }}
-    />
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <LoginPage users={users} onLogin={u => { setSession(u); addLog({ ts: Date.now(), user: u.name, action: "Logged in", type: "info" }); }} />
+    </ThemeProvider>
   );
 
   const modKeys = Object.keys(modules);
   const modIdx = selMod ? modKeys.indexOf(selMod) : -1;
 
   const mobileNavItems = [
-    { id: "dash", icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
-    { id: "report", icon: <BarChart3 className="w-5 h-5" />, label: "Report" },
-    ...(session.role === "admin"
-      ? [{ id: "users", icon: <Users className="w-5 h-5" />, label: "Users" }, { id: "audit", icon: <History className="w-5 h-5" />, label: "Audit" }]
-      : []),
-    { id: "_modules", icon: <Layers className="w-5 h-5" />, label: "Modules" },
+    { id: "dash", icon: "dash", label: "Dashboard" },
+    { id: "report", icon: "report", label: "Report" },
+    ...(session.role === "admin" ? [{ id: "users", icon: "users", label: "Users" }, { id: "audit", icon: "log", label: "Audit" }] : []),
+    { id: "_modules", icon: "layers", label: "Modules" },
   ];
 
   const currentMobileNavVal = view === "mod" ? "_modules" : view;
 
   return (
-    <TooltipProvider>
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
       <MobileMenuCtx.Provider value={() => setMobileDrawerOpen(true)}>
-        <div className="flex h-dvh overflow-hidden" style={{ background: "var(--tp-bg)" }}>
-          {/* Sidebar */}
-          <Sidebar
-            session={session} view={view} setView={setView} modules={modules}
-            selMod={selMod}
-            setSelMod={id => {
-              if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) {
-                toast("Finish the current test first", "error"); return;
-              }
-              setSelMod(id); setView("mod");
-            }}
-            collapsed={sideColl} setCollapsed={setSideColl}
-            locked={session.role !== "admin" && hasLock}
-            mobileOpen={mobileDrawerOpen} onMobileClose={() => setMobileDrawerOpen(false)}
-            onLogout={() => { addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" }); handleLogout(session); }}
-          />
+        <Box sx={{ display: "flex", height: "100vh", overflow: "hidden", bgcolor: "background.default", color: "text.primary" }}>
+          {/* Desktop Sidebar */}
+          {!isMobile && (
+            <Sidebar
+              session={session} view={view} setView={setView} modules={modules}
+              selMod={selMod}
+              setSelMod={id => {
+                if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
+                setSelMod(id); setView("mod");
+              }}
+              collapsed={sideColl} setCollapsed={setSideColl}
+              locked={session.role !== "admin" && hasLock}
+              onLogout={() => { addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" }); handleLogout(session); }}
+            />
+          )}
 
-          {/* Main content */}
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0"
-            style={{ paddingBottom: isMobile ? "calc(58px + env(safe-area-inset-bottom, 0px))" : 0 }}>
+          {/* Mobile Drawer */}
+          {isMobile && (
+            <Sidebar
+              session={session} view={view}
+              setView={v => { setView(v); setMobileDrawerOpen(false); }}
+              modules={modules} selMod={selMod}
+              setSelMod={id => {
+                if (session.role !== "admin" && hasLock && !(selMod === id && view === "mod")) { toast("Finish the current test first", "error"); return; }
+                setSelMod(id); setView("mod"); setMobileDrawerOpen(false);
+              }}
+              collapsed={false} setCollapsed={() => {}}
+              locked={session.role !== "admin" && hasLock}
+              mobileOpen={mobileDrawerOpen} onMobileClose={() => setMobileDrawerOpen(false)}
+              onLogout={() => { addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" }); handleLogout(session); }}
+            />
+          )}
+
+          {/* Main Content */}
+          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0,
+            pb: isMobile ? "calc(58px + env(safe-area-inset-bottom, 0px))" : 0 }}>
             <AnimatePresence mode="wait">
               {view === "dash" && (
                 <Dashboard key="dash" modules={modules} session={session}
@@ -2964,44 +2550,48 @@ export default function App() {
                 <AuditView key="audit" log={log} />
               )}
             </AnimatePresence>
-          </div>
+          </Box>
 
-          {/* Mobile bottom nav */}
+          {/* Mobile Bottom Navigation */}
           {isMobile && (
-            <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-800 pb-safe"
-              style={{ background: "rgba(11,17,32,0.96)", backdropFilter: "blur(24px)" }}>
-              <div className="flex items-center h-[58px]">
-                {mobileNavItems.map(item => {
-                  const isActive = currentMobileNavVal === item.id;
-                  return (
-                    <button key={item.id}
-                      onClick={() => {
-                        if (item.id === "_modules") { setMobileDrawerOpen(true); return; }
-                        if (session.role !== "admin" && hasLock && item.id !== view) { toast("Finish the current test first", "error"); return; }
-                        setView(item.id);
-                      }}
-                      className={cn(
-                        "flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-all",
-                        isActive ? "text-sky-400" : "text-slate-600"
-                      )}>
-                      <span className={isActive ? "text-sky-400" : "text-slate-600"}>{item.icon}</span>
-                      <span className={cn("text-[9px] font-mono", isActive ? "font-bold" : "")}>{item.label}</span>
-                    </button>
-                  );
-                })}
-                <button
+            <Paper elevation={0} sx={{
+              position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
+              bgcolor: "rgba(255,255,255,0.92)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+              borderTop: `1px solid rgba(245,222,206,0.7)`,
+              boxShadow: "0 -4px 24px rgba(234,88,12,0.07), 0 -1px 0 rgba(245,222,206,0.6)",
+              pb: "env(safe-area-inset-bottom, 0px)",
+            }}>
+              <BottomNavigation value={currentMobileNavVal} showLabels
+                sx={{ bgcolor: "transparent", height: 58 }}
+                onChange={(_, newVal) => {
+                  if (newVal === "_modules") { setMobileDrawerOpen(true); return; }
+                  if (session.role !== "admin" && hasLock && newVal !== view) { toast("Finish the current test first", "error"); return; }
+                  setView(newVal);
+                }}>
+                {mobileNavItems.map(item => (
+                  <BottomNavigationAction key={item.id} value={item.id} label={item.label}
+                    icon={<Ico n={item.icon} s={20} />}
+                    sx={{
+                      color: currentMobileNavVal === item.id ? "primary.main" : "text.disabled",
+                      fontFamily: MONO, fontSize: 10, minWidth: 0,
+                      "& .MuiBottomNavigationAction-label": { fontSize: "10px !important", fontFamily: MONO, fontWeight: currentMobileNavVal === item.id ? 700 : 400 },
+                      "&.Mui-selected": { color: "primary.main" },
+                    }}
+                  />
+                ))}
+                <BottomNavigationAction label="Logout" value="_logout"
+                  icon={<Ico n="logout" s={20} color={C.re} />}
                   onClick={() => { addLog({ ts: Date.now(), user: session.name, action: "Logged out", type: "info" }); handleLogout(session); }}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 py-2 text-rose-500 border-l border-slate-800 transition-colors hover:text-rose-400">
-                  <LogOut className="w-5 h-5" />
-                  <span className="text-[9px] font-mono">Logout</span>
-                </button>
-              </div>
-            </div>
+                  sx={{ color: "error.main", minWidth: 0, borderLeft: `1px solid ${C.b1}`,
+                    "& .MuiBottomNavigationAction-label": { fontSize: "10px !important", fontFamily: MONO, color: "error.main" } }}
+                />
+              </BottomNavigation>
+            </Paper>
           )}
 
           <ToastHost />
-        </div>
+        </Box>
       </MobileMenuCtx.Provider>
-    </TooltipProvider>
+    </ThemeProvider>
   );
 }
