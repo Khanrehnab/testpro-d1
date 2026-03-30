@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import React, {
   useState, useEffect, useRef, useCallback, useMemo, useContext, createContext,
 } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, BarChart3, Users, History, Check, X, LogOut,
@@ -12,26 +13,509 @@ import {
   TrendingUp, MoreHorizontal, Terminal, Zap, Filter,
 } from "lucide-react";
 
-// ── ShadCN Components ─────────────────────────────────────────────────────────
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+// ── Utilities ─────────────────────────────────────────────────────────────────────
+function cn(...classes) {
+  return classes.flat(Infinity).filter(v => v && typeof v === "string").join(" ");
+}
+
+// ── Button ────────────────────────────────────────────────────────────────────────
+const Button = React.forwardRef(function Button(
+  { children, className, variant = "default", size = "default", onClick, disabled, asChild, type = "button", ...props },
+  ref
+) {
+  const base =
+    "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50 cursor-pointer";
+  const variants = {
+    default: "bg-slate-600 text-white hover:bg-slate-700",
+    outline: "border border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800",
+    ghost: "hover:bg-slate-800 text-slate-200",
+    destructive: "bg-rose-600 text-white hover:bg-rose-700",
+    secondary: "bg-slate-700 text-slate-200 hover:bg-slate-600",
+    link: "text-sky-400 underline-offset-4 hover:underline p-0 h-auto",
+  };
+  const sizes = {
+    default: "h-9 px-4 py-2",
+    sm: "h-8 rounded-md px-3 text-xs",
+    lg: "h-10 rounded-md px-8",
+    icon: "h-9 w-9",
+  };
+  const cls = cn(base, variants[variant] ?? variants.default, sizes[size] ?? sizes.default, className);
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, { className: cls, onClick, disabled, ref, ...props });
+  }
+  return (
+    <button ref={ref} type={type} className={cls} onClick={onClick} disabled={disabled} {...props}>
+      {children}
+    </button>
+  );
+});
+
+// ── Input ─────────────────────────────────────────────────────────────────────────
+const Input = React.forwardRef(function Input({ className, type = "text", ...props }, ref) {
+  return (
+    <input
+      ref={ref}
+      type={type}
+      className={cn(
+        "flex h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1 text-sm text-slate-100 shadow-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  );
+});
+
+// ── Label ─────────────────────────────────────────────────────────────────────────
+function Label({ children, className, ...props }) {
+  return (
+    <label className={cn("text-sm font-medium leading-none", className)} {...props}>
+      {children}
+    </label>
+  );
+}
+
+// ── Badge ─────────────────────────────────────────────────────────────────────────
+function Badge({ children, className, ...props }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </span>
+  );
+}
+
+// ── Switch ────────────────────────────────────────────────────────────────────────
+function Switch({ checked, onCheckedChange, disabled, className }) {
+  return (
+    <button
+      role="switch"
+      type="button"
+      aria-checked={checked}
+      onClick={() => !disabled && onCheckedChange?.(!checked)}
+      disabled={disabled}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "bg-sky-500" : "bg-slate-700",
+        className
+      )}
+    >
+      <span
+        className={cn(
+          "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200",
+          checked ? "translate-x-4" : "translate-x-0"
+        )}
+      />
+    </button>
+  );
+}
+
+// ── Progress ──────────────────────────────────────────────────────────────────────
+function Progress({ value = 0, className }) {
+  return (
+    <div className={cn("relative h-2 w-full overflow-hidden rounded-full bg-slate-800", className)}>
+      <div
+        className="h-full bg-sky-500 transition-all duration-300"
+        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+      />
+    </div>
+  );
+}
+
+// ── Separator ─────────────────────────────────────────────────────────────────────
+function Separator({ className, orientation = "horizontal" }) {
+  return (
+    <div
+      className={cn(
+        "shrink-0 bg-slate-800",
+        orientation === "horizontal" ? "h-px w-full" : "h-full w-px",
+        className
+      )}
+    />
+  );
+}
+
+// ── Alert ─────────────────────────────────────────────────────────────────────────
+function Alert({ children, className }) {
+  return (
+    <div role="alert" className={cn("relative w-full rounded-lg border border-slate-700 p-4", className)}>
+      {children}
+    </div>
+  );
+}
+function AlertDescription({ children, className }) {
+  return <div className={cn("text-sm", className)}>{children}</div>;
+}
+
+// ── Avatar ────────────────────────────────────────────────────────────────────────
+function Avatar({ children, className, style }) {
+  return (
+    <div className={cn("relative flex shrink-0 overflow-hidden rounded-full", className)} style={style}>
+      {children}
+    </div>
+  );
+}
+function AvatarFallback({ children, className, style }) {
+  return (
+    <div
+      className={cn("flex h-full w-full items-center justify-center rounded-full bg-slate-800", className)}
+      style={style}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── Dialog ────────────────────────────────────────────────────────────────────────
+function Dialog({ open, onOpenChange, children }) {
+  if (!open) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-50">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={() => onOpenChange?.(false)}
+      />
+      <div className="relative h-full flex items-center justify-center p-4">
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
+}
+function DialogContent({ children, className }) {
+  return (
+    <div
+      className={cn(
+        "relative z-10 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-y-auto",
+        className
+      )}
+      onClick={e => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+function DialogHeader({ children, className }) {
+  return <div className={cn("flex flex-col gap-1.5 p-6 pb-3", className)}>{children}</div>;
+}
+function DialogTitle({ children, className }) {
+  return (
+    <h2 className={cn("text-lg font-semibold leading-none tracking-tight", className)}>
+      {children}
+    </h2>
+  );
+}
+function DialogDescription({ children, className }) {
+  return <p className={cn("text-sm text-slate-400 mt-1", className)}>{children}</p>;
+}
+function DialogFooter({ children, className }) {
+  return (
+    <div className={cn("flex flex-row justify-end gap-2 p-6 pt-4", className)}>
+      {children}
+    </div>
+  );
+}
+
+// ── DropdownMenu ──────────────────────────────────────────────────────────────────
+const DropdownMenuCtx = createContext(null);
+function DropdownMenu({ children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <DropdownMenuCtx.Provider value={{ open, setOpen }}>
+      <div className="relative inline-block">{children}</div>
+    </DropdownMenuCtx.Provider>
+  );
+}
+function DropdownMenuTrigger({ children, asChild }) {
+  const { setOpen } = useContext(DropdownMenuCtx);
+  const toggle = e => { e.stopPropagation(); setOpen(v => !v); };
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, { onClick: toggle });
+  }
+  return <div onClick={toggle}>{children}</div>;
+}
+function DropdownMenuContent({ children, align = "start", className }) {
+  const { open, setOpen } = useContext(DropdownMenuCtx);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const t = setTimeout(() => document.addEventListener("click", close), 0);
+    return () => { clearTimeout(t); document.removeEventListener("click", close); };
+  }, [open, setOpen]);
+  if (!open) return null;
+  return (
+    <div
+      className={cn(
+        "absolute z-50 mt-1 min-w-[8rem] overflow-hidden rounded-md border shadow-lg",
+        align === "end" ? "right-0" : "left-0",
+        className
+      )}
+      onClick={e => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+function DropdownMenuItem({ children, onClick, className }) {
+  const { setOpen } = useContext(DropdownMenuCtx);
+  return (
+    <div
+      className={cn(
+        "flex cursor-pointer select-none items-center px-3 py-2 text-sm outline-none transition-colors",
+        className
+      )}
+      onClick={e => { onClick?.(e); setOpen(false); }}
+    >
+      {children}
+    </div>
+  );
+}
+function DropdownMenuSeparator({ className }) {
+  return <div className={cn("h-px my-1 bg-slate-700", className)} />;
+}
+
+// ── Select ────────────────────────────────────────────────────────────────────────
+const SelectCtx = createContext(null);
+function Select({ children, value, onValueChange }) {
+  const [open, setOpen] = useState(false);
+  const [labels, setLabels] = useState({});
+  return (
+    <SelectCtx.Provider value={{ value, onValueChange, open, setOpen, labels, setLabels }}>
+      <div className="relative">{children}</div>
+    </SelectCtx.Provider>
+  );
+}
+function SelectTrigger({ children, className }) {
+  const { open, setOpen } = useContext(SelectCtx);
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+      className={cn(
+        "flex w-full items-center justify-between px-3 py-2 text-sm rounded-md border transition-colors focus:outline-none",
+        className
+      )}
+    >
+      {children}
+      <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-2" />
+    </button>
+  );
+}
+function SelectValue({ placeholder }) {
+  const { value, labels } = useContext(SelectCtx);
+  return <span>{labels[value] ?? value ?? placeholder ?? ""}</span>;
+}
+function SelectContent({ children, className }) {
+  const { open, setOpen } = useContext(SelectCtx);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const t = setTimeout(() => document.addEventListener("click", close), 0);
+    return () => { clearTimeout(t); document.removeEventListener("click", close); };
+  }, [open, setOpen]);
+  if (!open) return null;
+  return (
+    <div
+      className={cn("absolute z-50 mt-1 w-full overflow-hidden rounded-md border shadow-lg", className)}
+      onClick={e => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+function SelectItem({ children, value, className }) {
+  const { onValueChange, setOpen, value: current, setLabels } = useContext(SelectCtx);
+  useEffect(() => {
+    if (typeof children === "string") {
+      setLabels(prev => ({ ...prev, [value]: children }));
+    }
+  }, [value, children]); // eslint-disable-line
+  return (
+    <div
+      className={cn(
+        "relative flex cursor-pointer select-none items-center px-3 py-2 text-sm outline-none transition-colors",
+        current === value ? "font-semibold" : "",
+        className
+      )}
+      onClick={() => { onValueChange(value); setOpen(false); }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────────
+const TooltipProvider = ({ children }) => children;
+const TooltipCtx = createContext({ open: false, setOpen: () => {} });
+function Tooltip({ children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <TooltipCtx.Provider value={{ open, setOpen }}>
+      <span style={{ position: "relative", display: "inline-flex" }}>
+        {children}
+      </span>
+    </TooltipCtx.Provider>
+  );
+}
+function TooltipTrigger({ children, asChild }) {
+  const { setOpen } = useContext(TooltipCtx);
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, {
+      onMouseEnter: (e) => { setOpen(true); children.props.onMouseEnter?.(e); },
+      onMouseLeave: (e) => { setOpen(false); children.props.onMouseLeave?.(e); },
+    });
+  }
+  return (
+    <span onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      {children}
+    </span>
+  );
+}
+function TooltipContent({ children, side = "top", className }) {
+  const { open } = useContext(TooltipCtx);
+  if (!open) return null;
+  const pos = {
+    top: "bottom-full left-1/2 -translate-x-1/2 mb-1",
+    bottom: "top-full left-1/2 -translate-x-1/2 mt-1",
+    right: "left-full top-1/2 -translate-y-1/2 ml-1",
+    left: "right-full top-1/2 -translate-y-1/2 mr-1",
+  };
+  return (
+    <div
+      className={cn(
+        "absolute z-50 px-2 py-1 text-xs rounded-md shadow-md whitespace-nowrap pointer-events-none",
+        pos[side] ?? pos.top,
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── Sheet ─────────────────────────────────────────────────────────────────────────
+function Sheet({ open, onOpenChange, children }) {
+  if (!open) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-50">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => onOpenChange?.(false)}
+      />
+      {children}
+    </div>,
+    document.body
+  );
+}
+function SheetContent({ children, side = "left", className }) {
+  return (
+    <div
+      className={cn(
+        "absolute top-0 bottom-0 z-50 overflow-hidden",
+        side === "left" ? "left-0" : "right-0",
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── Collapsible ───────────────────────────────────────────────────────────────────
+const CollapsibleCtx = createContext({ open: false, setOpen: () => {} });
+function Collapsible({ children, open, onOpenChange }) {
+  return (
+    <CollapsibleCtx.Provider value={{ open: !!open, setOpen: onOpenChange ?? (() => {}) }}>
+      {children}
+    </CollapsibleCtx.Provider>
+  );
+}
+function CollapsibleTrigger({ children, asChild }) {
+  const { open, setOpen } = useContext(CollapsibleCtx);
+  const toggle = () => setOpen(!open);
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, { onClick: toggle });
+  }
+  return <div onClick={toggle}>{children}</div>;
+}
+function CollapsibleContent({ children }) {
+  const { open } = useContext(CollapsibleCtx);
+  if (!open) return null;
+  return <>{children}</>;
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────────
+function Table({ children, className }) {
+  return (
+    <div className="w-full overflow-auto">
+      <table className={cn("w-full caption-bottom text-sm", className)}>{children}</table>
+    </div>
+  );
+}
+function TableHeader({ children, className }) {
+  return <thead className={cn("[&_tr]:border-b", className)}>{children}</thead>;
+}
+function TableBody({ children, className }) {
+  return <tbody className={cn("[&_tr:last-child]:border-0", className)}>{children}</tbody>;
+}
+function TableRow({ children, className }) {
+  return (
+    <tr
+      className={cn(
+        "border-b transition-colors hover:bg-slate-800/30",
+        className
+      )}
+    >
+      {children}
+    </tr>
+  );
+}
+function TableHead({ children, className }) {
+  return (
+    <th
+      className={cn(
+        "h-10 px-2 text-left align-middle font-medium text-slate-400",
+        className
+      )}
+    >
+      {children}
+    </th>
+  );
+}
+function TableCell({ children, className, colSpan, style }) {
+  return (
+    <td className={cn("p-2 align-middle", className)} colSpan={colSpan} style={style}>
+      {children}
+    </td>
+  );
+}
+
+// ── ScrollArea ────────────────────────────────────────────────────────────────────
+function ScrollArea({ children, className }) {
+  return (
+    <div className={cn("relative overflow-auto", className)}>
+      {children}
+    </div>
+  );
+}
+
+// ── Textarea ──────────────────────────────────────────────────────────────────────
+const Textarea = React.forwardRef(function Textarea({ className, ...props }, ref) {
+  return (
+    <textarea
+      ref={ref}
+      className={cn(
+        "flex min-h-[60px] w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  );
+});
 
 // ── Storage ─────────────────────────────────────────────────────────────────────
 const store = {
