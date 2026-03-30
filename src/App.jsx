@@ -1156,37 +1156,86 @@ function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) 
   };
 
   const exportPDF = () => {
-    const testRows = mod.tests.map(t => {
-      const rs = t.steps.filter(s => !s.isDivider);
-      const tp = rs.filter(s => s.status === "pass").length;
-      const tf = rs.filter(s => s.status === "fail").length;
-      const pct = rs.length ? Math.round((tp / rs.length) * 100) : 0;
-      const col = tf > 0 ? "#dc2626" : tp === rs.length && rs.length > 0 ? "#16a34a" : "#9ca3af";
-      return `<tr><td>${t.serialNo || ""}</td><td>${t.name}</td><td style="color:#16a34a;font-weight:700">${tp}</td><td style="color:#dc2626;font-weight:700">${tf}</td><td style="color:#d97706">${rs.length - tp - tf}</td><td style="color:${col};font-weight:800">${pct}%</td></tr>`;
+    const testsHtml = mod.tests.map(t => {
+      const real = t.steps.filter(s => !s.isDivider);
+      const tp = real.filter(s => s.status === "pass").length;
+      const tf = real.filter(s => s.status === "fail").length;
+      const tpend = real.length - tp - tf;
+      const pct = real.length ? Math.round((tp / real.length) * 100) : 0;
+      const hdrCol = tf > 0 ? "#dc2626" : tp === real.length && real.length > 0 ? "#16a34a" : "#d97706";
+
+      const stepsHtml = t.steps.map(s => {
+        if (s.isDivider) {
+          return `<tr class="div-row"><td colspan="5">${s.action || ""}</td></tr>`;
+        }
+        const sc = s.status === "pass" ? "#16a34a" : s.status === "fail" ? "#dc2626" : "#d97706";
+        const esc = v => (v || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        return `<tr>
+          <td class="mono" style="color:#9ca3af;width:44px">${s.serialNo ?? ""}</td>
+          <td style="white-space:pre-wrap;word-break:break-word">${esc(s.action)}</td>
+          <td style="white-space:pre-wrap;word-break:break-word;color:#57534e">${esc(s.result)}</td>
+          <td style="white-space:pre-wrap;word-break:break-word;color:#78716c">${esc(s.remarks)}</td>
+          <td class="mono" style="color:${sc};font-weight:700;text-transform:uppercase;font-size:10px;text-align:center">${s.status || "pending"}</td>
+        </tr>`;
+      }).join("");
+
+      return `<div class="test-block">
+        <div class="test-hdr">
+          <span class="t-num" style="color:${hdrCol}">#${t.serialNo ?? ""}</span>
+          <span class="t-name">${t.name || ""}</span>
+          <span class="t-stats">
+            <span style="color:#16a34a">&#10003;&nbsp;${tp}</span>
+            <span style="color:#dc2626">&#10007;&nbsp;${tf}</span>
+            <span style="color:#d97706">&#9679;&nbsp;${tpend}</span>
+            <span style="color:${hdrCol};font-weight:800">${pct}%</span>
+          </span>
+        </div>
+        ${t.description ? `<p class="t-desc">${t.description}</p>` : ""}
+        <table class="steps-tbl">
+          <thead><tr><th>#</th><th>Action</th><th>Expected Result</th><th>Remarks</th><th>Status</th></tr></thead>
+          <tbody>${stepsHtml}</tbody>
+        </table>
+      </div>`;
     }).join("");
+
     const html = `<!DOCTYPE html><html><head><title>${mod.name}</title><style>
-      body{font-family:'Segoe UI',sans-serif;padding:28px;color:#1c0f07;background:#fff}
-      h1{font-size:22px;font-weight:800;margin:0 0 4px}p.sub{font-size:12px;color:#9ca3af;margin:0 0 20px}
-      .stats{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+      *{box-sizing:border-box}
+      body{font-family:'Segoe UI',sans-serif;padding:28px;color:#1c0f07;background:#fff;font-size:13px}
+      h1{font-size:22px;font-weight:800;margin:0 0 4px}
+      p.sub{font-size:12px;color:#9ca3af;margin:0 0 20px}
+      .stats{display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap}
       .stat{background:#f9f9f9;border-radius:10px;padding:14px 20px;min-width:100px;text-align:center;border:1px solid #eee}
-      .stat .v{font-size:28px;font-weight:800}.stat .l{font-size:11px;color:#9ca3af;margin-top:2px;text-transform:uppercase;letter-spacing:1px}
-      table{width:100%;border-collapse:collapse}
-      th{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;padding:8px 10px;border-bottom:2px solid #f0f0f0;text-align:left}
-      td{padding:8px 10px;border-bottom:1px solid #f9f9f9;font-size:13px}tr:hover td{background:#fafafa}
+      .stat .v{font-size:26px;font-weight:800}
+      .stat .l{font-size:10px;color:#9ca3af;margin-top:2px;text-transform:uppercase;letter-spacing:1px}
+      .test-block{margin-bottom:28px;border:1px solid #f0f0f0;border-radius:10px;overflow:hidden;page-break-inside:avoid}
+      .test-hdr{display:flex;align-items:center;gap:12px;padding:11px 16px;background:#fafafa;border-bottom:1px solid #f0f0f0;flex-wrap:wrap}
+      .t-num{font-family:monospace;font-size:11px;font-weight:700;background:#f0f0f0;padding:2px 8px;border-radius:4px}
+      .t-name{font-weight:700;font-size:14px;flex:1;min-width:0}
+      .t-stats{display:flex;gap:10px;font-family:monospace;font-size:12px;flex-shrink:0}
+      .t-desc{font-size:12px;color:#6b7280;margin:8px 16px 0}
+      .steps-tbl{width:100%;border-collapse:collapse}
+      .steps-tbl th{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;padding:7px 12px;border-bottom:2px solid #f0f0f0;text-align:left;background:#fefefe}
+      .steps-tbl td{padding:8px 12px;border-bottom:1px solid #f9f9f9;vertical-align:top;font-size:12px}
+      .steps-tbl tr:last-child td{border-bottom:none}
+      .div-row td{font-family:monospace;font-size:10px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1.5px;padding:6px 12px;background:#fff7ed;border-bottom:1px solid #fde8d0}
+      .mono{font-family:'JetBrains Mono','Fira Code',monospace}
+      @media print{.test-block{page-break-inside:avoid}body{padding:16px}}
     </style></head><body>
-      <h1>${mod.name}</h1><p class="sub">Generated ${new Date().toLocaleString()} · ${mod.tests.length} tests · ${total} steps</p>
+      <h1>${mod.name}</h1>
+      <p class="sub">Generated ${new Date().toLocaleString()} &middot; ${mod.tests.length} tests &middot; ${total} steps</p>
       <div class="stats">
-        <div class="stat"><div class="v" style="color:#ea580c">${total}</div><div class="l">Total</div></div>
+        <div class="stat"><div class="v" style="color:#ea580c">${total}</div><div class="l">Total Steps</div></div>
         <div class="stat"><div class="v" style="color:#16a34a">${pass}</div><div class="l">Passed</div></div>
         <div class="stat"><div class="v" style="color:#dc2626">${fail}</div><div class="l">Failed</div></div>
         <div class="stat"><div class="v" style="color:#d97706">${pending}</div><div class="l">Pending</div></div>
         <div class="stat"><div class="v" style="color:#1c0f07">${total ? Math.round((pass/total)*100) : 0}%</div><div class="l">Pass Rate</div></div>
       </div>
-      <table><thead><tr><th>#</th><th>Test</th><th>Pass</th><th>Fail</th><th>Pending</th><th>Rate</th></tr></thead><tbody>${testRows}</tbody></table>
+      ${testsHtml}
     </body></html>`;
     const w = window.open("", "_blank"); w.document.write(html); w.document.close();
     w.focus(); setTimeout(() => w.print(), 500); toast("PDF ready", "info");
-  };
+  }
+;
 
   const statCards = [
     { label: "Total Steps", value: total, color: "#ea580c", bg: "#fff7ed", border: "rgba(234,88,12,0.15)" },
