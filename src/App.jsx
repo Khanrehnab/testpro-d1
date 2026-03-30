@@ -425,9 +425,8 @@ const MONO = "'JetBrains Mono', 'Fira Code', monospace";
 function useIsMobile(breakpoint = 768) {
   const [mobile, setMobile] = useState(() => window.innerWidth < breakpoint);
   useEffect(() => {
-    let t;
-    const handler = () => { clearTimeout(t); t = setTimeout(() => setMobile(window.innerWidth < breakpoint), 120); };
-    window.addEventListener("resize", handler, { passive: true });
+    const handler = () => setMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, [breakpoint]);
   return mobile;
@@ -485,11 +484,11 @@ const ICO_MAP = {
   admin:  AdminPanelSettingsRounded,
   task:   TaskAltRounded,
 };
-const Ico = React.memo(function Ico({ n, s = 15, color = "currentColor" }) {
+function Ico({ n, s = 15, color = "currentColor" }) {
   const MuiIcon = ICO_MAP[n];
   if (MuiIcon) return <MuiIcon sx={{ fontSize: s, color, flexShrink: 0, display: "block" }} />;
   return <span style={{ width: s, height: s, flexShrink: 0, display: "inline-block" }} />;
-});
+}
 
 // ── Toast (MUI Snackbar) ──────────────────────────────────────────────────────────
 function useToast() {
@@ -560,7 +559,7 @@ function SearchBox({ value, onChange, placeholder = "Search…", width = 200, fu
 }
 
 // ── Shared: Topbar ────────────────────────────────────────────────────────────────
-const Topbar = React.memo(function Topbar({ title, sub, children }) {
+function Topbar({ title, sub, children }) {
   const isMobile = useIsMobile();
   const onMenuClick = useContext(MobileMenuCtx);
   return (
@@ -593,10 +592,10 @@ const Topbar = React.memo(function Topbar({ title, sub, children }) {
       </Toolbar>
     </AppBar>
   );
-});
+}
 
 // ── Shared: Progress Bar ──────────────────────────────────────────────────────────
-const PBar = React.memo(function PBar({ pct, fail }) {
+function PBar({ pct, fail }) {
   return (
     <LinearProgress
       variant="determinate" value={pct}
@@ -610,10 +609,10 @@ const PBar = React.memo(function PBar({ pct, fail }) {
       }}
     />
   );
-});
+}
 
 // ── Shared: ExportMenu ────────────────────────────────────────────────────────────
-const ExportMenu = React.memo(function ExportMenu({ onCSV, onPDF }) {
+function ExportMenu({ onCSV, onPDF }) {
   const [anchor, setAnchor] = useState(null);
   return (
     <>
@@ -638,7 +637,7 @@ const ExportMenu = React.memo(function ExportMenu({ onCSV, onPDF }) {
       </Menu>
     </>
   );
-});
+}
 
 // ── Shared: Confirm Dialog ────────────────────────────────────────────────────────
 function ConfirmDialog({ open, title, description, onConfirm, onCancel, confirmLabel = "Delete", confirmColor = "error" }) {
@@ -1043,7 +1042,7 @@ function buildArcPath(cx, cy, r, start, end) {
 }
 
 // ── Donut Chart ───────────────────────────────────────────────────────────────────
-const DonutChart = React.memo(function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 }) {
+function DonutChart({ pass = 0, fail = 0, pending = 0, size = 160, stroke = 20 }) {
   const raw = pass + fail + pending;
   const cx = size / 2, cy = size / 2, r = (size - stroke) / 2 - 2;
   const pct = raw > 0 ? Math.round((pass / raw) * 100) : 0;
@@ -1095,10 +1094,10 @@ const DonutChart = React.memo(function DonutChart({ pass = 0, fail = 0, pending 
       </Stack>
     </Box>
   );
-});
+}
 
 // ── Test Bar Chart ─────────────────────────────────────────────────────────────────
-const TestBarChart = React.memo(function TestBarChart({ tests }) {
+function TestBarChart({ tests }) {
   const isMobile = useIsMobile();
   return (
     <Stack spacing={1.5}>
@@ -1133,7 +1132,7 @@ const TestBarChart = React.memo(function TestBarChart({ tests }) {
       })}
     </Stack>
   );
-});
+}
 
 // ── Module Dashboard (shared by Dashboard + ReportView) ───────────────────────────
 function ModuleDashboard({ mod, onBack, onExecute, toast, showExecute = true }) {
@@ -1492,7 +1491,7 @@ function Dashboard({ modules, session, onSelect, toast }) {
 
 
 // ── Divider Row ───────────────────────────────────────────────────────────────────
-const DividerRow = React.memo(function DividerRow({ label }) {
+function DividerRow({ label }) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 0.85,
       background: "linear-gradient(90deg,#fff7ed 0%,#fef9f5 60%,rgba(255,255,255,0) 100%)",
@@ -1504,10 +1503,10 @@ const DividerRow = React.memo(function DividerRow({ label }) {
       <Box sx={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${C.b2} 0%, transparent 100%)` }} />
     </Box>
   );
-});
+}
 
 // ── Step Row ──────────────────────────────────────────────────────────────────────
-const StepRow = React.memo(function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef }) {
+function StepRow({ step, idx, onChange, onStatusToggle, isActive, onActivate, rowRef }) {
   const isMobile = useIsMobile();
   const rowBg = step.status === "fail" ? "#fff5f5" : step.status === "pass" ? "#f0fdf4" : isActive ? "#fff7ed" : "transparent";
 
@@ -1540,7 +1539,7 @@ const StepRow = React.memo(function StepRow({ step, idx, onChange, onStatusToggl
 
   if (isMobile) {
     return (
-      <motion.div ref={rowRef} onClick={() => onActivate(idx)} layout
+      <motion.div ref={rowRef} onClick={onActivate} layout
         style={{ borderBottom: `1px solid ${C.b1}`, background: rowBg, padding: "10px 12px",
           outline: isActive ? `2px solid ${C.ac}` : "none", outlineOffset: -2 }}>
         <Stack direction="row" alignItems="center" gap={1} mb={1}>
@@ -1580,7 +1579,7 @@ const StepRow = React.memo(function StepRow({ step, idx, onChange, onStatusToggl
   );
 
   return (
-    <motion.div ref={rowRef} onClick={() => onActivate(idx)} layout
+    <motion.div ref={rowRef} onClick={onActivate} layout
       style={{ display: "grid", gridTemplateColumns: "50px 1fr 1fr 180px 110px",
         borderBottom: `1px solid ${C.b1}`, background: rowBg,
         outline: isActive ? `2px solid ${C.ac}` : "none", outlineOffset: -2, cursor: "default" }}>
@@ -1606,26 +1605,19 @@ const StepRow = React.memo(function StepRow({ step, idx, onChange, onStatusToggl
       </Box>
     </motion.div>
   );
-});
+}
 
 // ── Test Detail ────────────────────────────────────────────────────────────────────
 function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog, toast, onBack, onFinish, modIdx, modTotal, onNav, navLocked }) {
   const isMobile = useIsMobile();
   const [steps, setSteps] = useState(test.steps);
-  stepsRef.current = steps;
-  const [searchRaw, setSearchRaw] = useState("");
   const [search, setSearch] = useState("");
-  useEffect(() => { const t = setTimeout(() => setSearch(searchRaw), 200); return () => clearTimeout(t); }, [searchRaw]);
   const [fStat, setFStat] = useState("all");
   const [activeIdx, setActiveIdx] = useState(0);
   const rowRefs = useRef({});
   const tableRef = useRef();
   const localCommitRef = useRef(false);
   const stepsTimerRef = useRef(null);
-  const stepsRef = useRef(null);
-  const commitRef = useRef(null);
-  const stepsRef = useRef(null);
-  const commitRef = useRef(null);
   const latestStepsRef = useRef(test.steps);
 
   useEffect(() => {
@@ -1680,29 +1672,28 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
         }
     }, 400);
   }, [mod, test, testIdx, allModules, saveMods]);
-  commitRef.current = commit;
-  commitRef.current = commit;
 
-  const setField = useCallback((i, f, v) => {
-    const ns = [...stepsRef.current]; ns[i] = { ...ns[i], [f]: v };
-    stepsRef.current = ns; setSteps(ns); commitRef.current(ns, ns[i].id);
-  }, []);
+  const setField = (i, f, v) => { const ns = [...steps]; ns[i] = { ...ns[i], [f]: v }; setSteps(ns); commit(ns, ns[i].id); };
 
-  const setStatusToggle = useCallback((i, status) => {
-    const ns = [...stepsRef.current];
-    const newStatus = ns[i].status === status ? "pending" : status;
-    ns[i] = { ...ns[i], status: newStatus };
-    stepsRef.current = ns; setSteps(ns); commitRef.current(ns, ns[i].id);
+  const setStatusToggle = (i, status) => {
+    const ns = [...steps]; const newStatus = ns[i].status === status ? "pending" : status;
+    ns[i] = { ...ns[i], status: newStatus }; setSteps(ns); commit(ns, ns[i].id);
     if (newStatus !== "pending") {
       addLog({ ts: Date.now(), user: session.name, action: `${mod.name} › ${test.name} · Step ${ns[i].serialNo} → ${newStatus.toUpperCase()}`, type: newStatus });
     }
     if (newStatus !== "pending") {
-      const nextP = ns.slice(i + 1).find(s => !s.isDivider && s.status === "pending");
-      if (nextP) setActiveIdx(ns.indexOf(nextP));
-      else { const fp = ns.find(s => !s.isDivider && s.status === "pending"); if (fp) setActiveIdx(ns.indexOf(fp)); }
+      const updVisible = ns.map((s, idx) => ({ ...s, _i: idx })).filter(s => {
+        if (s.isDivider) return false;
+        if (fStat !== "all" && s.status !== fStat) return false;
+        if (search) { const q = search.toLowerCase(); return (s.action||"").toLowerCase().includes(q)||(s.result||"").toLowerCase().includes(q)||(s.remarks||"").toLowerCase().includes(q)||String(s.serialNo).includes(q); }
+        return true;
+      });
+      const curPos = updVisible.findIndex(s => s._i === i);
+      const nextPending = updVisible.slice(curPos + 1).find(s => s.status === "pending");
+      if (nextPending) setActiveIdx(nextPending._i);
+      else { const fp = updVisible.find(s => s.status === "pending"); if (fp) setActiveIdx(fp._i); }
     }
-  }, [addLog, session.name, mod.name, test.name]);
-  const handleActivate = useCallback((idx) => setActiveIdx(idx), []);;
+  };
 
   const exportCSV = () => {
     const rows = [["Serial No", "Action", "Result", "Remarks", "Status"]];
@@ -1749,19 +1740,12 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
   const pending = realSteps.filter(s => s.status === "pending").length;
   const pct = realSteps.length ? Math.round((pass / realSteps.length) * 100) : 0;
 
-  const visible = useMemo(() =>
-    steps.map((s, i) => ({ ...s, _i: i })).filter(s => {
-      if (s.isDivider) return true;
-      if (fStat !== "all" && s.status !== fStat) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return (s.action||"").toLowerCase().includes(q)
-            || (s.result||"").toLowerCase().includes(q)
-            || (s.remarks||"").toLowerCase().includes(q)
-            || String(s.serialNo).includes(q);
-      }
-      return true;
-    }), [steps, fStat, search]);
+  const visible = steps.map((s, i) => ({ ...s, _i: i })).filter(s => {
+    if (s.isDivider) return true;
+    if (fStat !== "all" && s.status !== fStat) return false;
+    if (search) { const q = search.toLowerCase(); return (s.action||"").toLowerCase().includes(q)||(s.result||"").toLowerCase().includes(q)||(s.remarks||"").toLowerCase().includes(q)||String(s.serialNo).includes(q); }
+    return true;
+  });
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
@@ -1845,7 +1829,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
               }}
             />
           ))}
-          <SearchBox value={searchRaw} onChange={setSearchRaw} placeholder="Search steps…" width={isMobile ? "100%" : 170} fullWidth={isMobile} />
+          <SearchBox value={search} onChange={setSearch} placeholder="Search steps…" width={isMobile ? "100%" : 170} fullWidth={isMobile} />
         </Stack>
       </Box>
 
@@ -1870,7 +1854,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
           )}
           {visible.map(s => s.isDivider ? <DividerRow key={s.id} label={s.action} /> : (
             <StepRow key={s.id} step={s} idx={s._i} onChange={setField} onStatusToggle={setStatusToggle}
-              isActive={activeIdx === s._i} onActivate={handleActivate}
+              isActive={activeIdx === s._i} onActivate={() => setActiveIdx(s._i)}
               rowRef={el => { rowRefs.current[s._i] = el; }}
             />
           ))}
@@ -1884,11 +1868,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
 function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, onLockChange, modIdx, modTotal }) {
   const isMobile = useIsMobile();
   const [selTestIdx, setSelTestIdx] = useState(null);
-  const [searchRaw, setSearchRaw] = useState("");
-  const [searchRaw, setSearchRaw] = useState("");
   const [search, setSearch] = useState("");
-  useEffect(() => { const t = setTimeout(() => setSearch(searchRaw), 200); return () => clearTimeout(t); }, [searchRaw]);
-  useEffect(() => { const t = setTimeout(() => setSearch(searchRaw), 200); return () => clearTimeout(t); }, [searchRaw]);
   const [locks, setLocks] = useState({});
   const activeTestIdRef = useRef(null);
   const selTestIdxRef = useRef(null);
@@ -1977,7 +1957,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
         title={mod.name}
         sub={`${mod.tests.length} tests · ${mod.tests.flatMap(t => t.steps).filter(s => s.status === "pass").length} passed`}
       >
-        {!isMobile && <SearchBox value={searchRaw} onChange={setSearchRaw} placeholder="Search tests…" width={190} />}
+        {!isMobile && <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" width={190} />}
         {!isMobile && modIdx !== undefined && (
           <Stack direction="row" alignItems="center" gap={0.5}>
             <IconButton size="small" onClick={() => onNav?.(-1)} disabled={modIdx === 0 || uiLocked}><Ico n="chevL" s={14} /></IconButton>
@@ -1989,7 +1969,7 @@ function ModuleView({ mod, allModules, session, saveMods, addLog, toast, onNav, 
 
       {isMobile && (
         <Box sx={{ p: 1.5, borderBottom: `1px solid ${C.b1}`, bgcolor: "background.paper", flexShrink: 0 }}>
-          <SearchBox value={searchRaw} onChange={setSearchRaw} placeholder="Search tests…" fullWidth />
+          <SearchBox value={search} onChange={setSearch} placeholder="Search tests…" fullWidth />
         </Box>
       )}
 
@@ -2530,7 +2510,7 @@ function UsersPanel({ users, session, saveUsers, addLog, toast }) {
 }
 
 // ── Loading Spinner ──────────────────────────────────────────────────────────────
-const LoadingSpinner = React.memo(function LoadingSpinner({ size = 56 }) {
+function LoadingSpinner({ size = 56 }) {
   const [progress, setProgress] = useState(10);
   useEffect(() => {
     const t = setInterval(() => {
@@ -2580,7 +2560,7 @@ const LoadingSpinner = React.memo(function LoadingSpinner({ size = 56 }) {
       </Box>
     </Box>
   );
-});
+}
 
 // ── App ────────────────────────────────────────────────────────────────────────────
 export default function App() {
