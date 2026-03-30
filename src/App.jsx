@@ -132,6 +132,13 @@ const store = {
       if (error) console.error("Delete all steps error:", error);
     }
   },
+  async updateStepRemarksStatus(step) {
+    if (!step || step.isDivider) return;
+    const { error } = await supabase.from("steps")
+      .update({ remarks: step.remarks ?? "", status: step.status ?? "pending" })
+      .eq("id", step.id);
+    if (error) console.error("updateStepRemarksStatus error:", error);
+  },
   async saveModules(modulesMap) {
     const modules = Object.values(modulesMap);
     const allTests = modules.flatMap(m => m.tests.map(t => ({ ...t, module_id: m.id })));
@@ -674,10 +681,13 @@ function LoginPage({ users, onLogin }) {
   const go = () => {
     if (!u.trim() || !p) { setErr("Please enter your username and password."); return; }
     setLoading(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const found = users.find(x => x.username === u.trim() && x.password === p && x.active);
-      if (found) { onLogin(found); }
-      else { setErr("Invalid credentials or account inactive."); setLoading(false); }
+      if (found) {
+        // Set session-level GUC so RLS policies can read the role for this connection.
+        await supabase.rpc("set_app_role", { p_role: found.role }).catch(() => {});
+        onLogin(found);
+      } else { setErr("Invalid credentials or account inactive."); setLoading(false); }
     }, 150);
   };
 
@@ -1333,7 +1343,7 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     if (stepsTimerRef.current) { clearTimeout(stepsTimerRef.current); stepsTimerRef.current = null; }
   }, [test.id]); // eslint-disable-line
 
-  const commit = useCallback((newSteps) => {
+  const commit = useCallback((newSteps, changedStepId = null) => {
     localCommitRef.current = true;
     const updTest = { ...test, steps: newSteps };
     const updTests = mod.tests.map((t, i) => i === testIdx ? updTest : t);
@@ -1341,18 +1351,29 @@ function TestDetail({ mod, test, testIdx, allModules, session, saveMods, addLog,
     latestStepsRef.current = newSteps;
     if (stepsTimerRef.current) clearTimeout(stepsTimerRef.current);
     stepsTimerRef.current = setTimeout(() => {
-      store.saveSteps(test.id, mod.id, latestStepsRef.current, {
-        moduleName: mod.name, serialNo: test.serialNo ?? test.serial_no ?? 0,
-        name: test.name, description: test.description ?? "",
-      }).catch(e => console.error("saveSteps error:", e));
+      if (isAdmin) {
+        store.saveSteps(test.id, mod.id, latestStepsRef.current, {
+          moduleName: mod.name, serialNo: test.serialNo ?? test.serial_no ?? 0,
+          name: test.name, description: test.description ?? "",
+        }).catch(e => console.error("saveSteps error:", e));
+      } else {
+        // Tester: only persist the remarks/status of the one step that changed.
+        const changedStep = changedStepId
+          ? latestStepsRef.current.find(s => s.id === changedStepId)
+          : null;
+        if (changedStep && !changedStep.isDivider) {
+          store.updateStepRemarksStatus(changedStep)
+            .catch(e => console.error("updateStepRemarksStatus error:", e));
+        }
+      }
     }, 400);
-  }, [mod, test, testIdx, allModules, saveMods]);
+  }, [mod, test, testIdx, allModules, saveMods, isAdmin]);
 
-  const setField = (i, f, v) => { const ns = [...steps]; ns[i] = { ...ns[i], [f]: v }; setSteps(ns); commit(ns); };
+  const setField = (i, f, v) => { const ns = [...steps]; ns[i] = { ...ns[i], [f]: v }; setSteps(ns); commit(ns, ns[i].id); };
 
   const setStatusToggle = (i, status) => {
     const ns = [...steps]; const newStatus = ns[i].status === status ? "pending" : status;
-    ns[i] = { ...ns[i], status: newStatus }; setSteps(ns); commit(ns);
+    ns[i] = { ...ns[i], status: newStatus }; setSteps(ns); commit(ns, ns[i].id);
     if (newStatus !== "pending") {
       addLog({ ts: Date.now(), user: session.name, action: `${mod.name} › ${test.name} · Step ${ns[i].serialNo} → ${newStatus.toUpperCase()}`, type: newStatus });
     }
